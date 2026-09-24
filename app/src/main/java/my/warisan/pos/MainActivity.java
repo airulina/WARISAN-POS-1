@@ -40,7 +40,17 @@ public class MainActivity extends Activity {
   @Override public void onCreate(Bundle b){super.onCreate(b);if(b!=null){int[] saved=b.getIntArray("cart");if(saved!=null&&saved.length==7)System.arraycopy(saved,0,qty,0,7);}draw();}
   @Override protected void onSaveInstanceState(Bundle b){b.putIntArray("cart",qty);super.onSaveInstanceState(b);}
   void draw(){
-    LinearLayout screen=col();screen.setBackgroundColor(cream);setContentView(screen);
+    LinearLayout screen=col();screen.setBackgroundColor(cream);
+    getWindow().setStatusBarColor(cream);
+    getWindow().setNavigationBarColor(green);
+    getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR);
+    if(Build.VERSION.SDK_INT>=35){
+      screen.setOnApplyWindowInsetsListener((view,insets)->{
+        view.setPadding(0,insets.getSystemWindowInsetTop(),0,insets.getSystemWindowInsetBottom());
+        return insets;
+      });
+    }
+    setContentView(screen);
     ScrollView scroll=new ScrollView(this);screen.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
     body=col();body.setPadding(dp(17),dp(15),dp(17),dp(25));scroll.addView(body);
     LinearLayout header=row();add(header,chip("W",gold,Color.WHITE),45,45);
