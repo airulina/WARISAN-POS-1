@@ -1,4 +1,1 @@
-plugins { id 'com.android.application' }
-android { namespace 'my.warisan.pos'; compileSdk 35
- defaultConfig { applicationId 'my.warisan.pos'; minSdk 23; targetSdk 35; versionCode 8; versionName '3.4' }
-}
+plugins { id 'com.android.application' version '8.7.3' apply false }
