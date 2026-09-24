@@ -315,37 +315,49 @@ public class MainActivity extends Activity {
   void editPhone(){EditText input=new EditText(this);input.setSingleLine(true);input.setInputType(android.text.InputType.TYPE_CLASS_PHONE);input.setText(getPreferences(0).getString("receipt_phone",""));input.setHint("Contoh: 012-345 6789");
     new AlertDialog.Builder(this).setTitle("No. telefon pada resit").setView(input).setPositiveButton("Simpan",(d,w)->{getPreferences(0).edit().putString("receipt_phone",input.getText().toString().trim()).apply();message("No. telefon resit disimpan");}).setNegativeButton("Batal",null).show();}
   void pay(){if(sum()==0){Toast.makeText(this,"Tambah menu dahulu",Toast.LENGTH_SHORT).show();return;}for(int i=0;i<qty.length;i++)if(!unlimited(i)&&qty[i]>stock(i)){message("Stok "+names[i]+" tidak cukup. Semak pesanan.");draw();return;}final int due=sum();
-    new AlertDialog.Builder(this).setTitle("Bayaran "+money(due)).setItems(new String[]{"Tunai","QR / DuitNow"},(dialog,index)->{if(index==0)confirm("Tunai",due);else showPaymentQr(due);}).setNegativeButton("Batal",null).show();}
+    new AlertDialog.Builder(this).setTitle("Bayaran "+money(due)).setItems(new String[]{"Tunai","QR / DuitNow"},(dialog,index)->{if(index==0)cashPayment(due);else showPaymentQr(due);}).setNegativeButton("Batal",null).show();}
+  int cashCents(EditText input){try{return new java.math.BigDecimal(input.getText().toString().trim()).movePointRight(2).intValueExact();}catch(Exception e){return -1;}}
+  void cashPayment(int due){LinearLayout form=col();form.setPadding(dp(20),dp(3),dp(20),0);
+    add(form,text("JUMLAH BELIAN  "+money(due),16,blue,true),-1,-2);gap(form,10);
+    EditText received=new EditText(this);received.setSingleLine(true);received.setInputType(android.text.InputType.TYPE_CLASS_NUMBER|android.text.InputType.TYPE_NUMBER_FLAG_DECIMAL);received.setHint("Duit pelanggan beri · contoh 50.00");add(form,received,-1,-2);gap(form,10);
+    TextView change=text("Masukkan jumlah tunai diterima",17,muted,true);add(form,change,-1,-2);
+    AlertDialog dialog=new AlertDialog.Builder(this).setTitle("Bayaran tunai").setView(form).setPositiveButton("Semak bayaran",null).setNegativeButton("Batal",null).create();
+    dialog.setOnShowListener(v->{Button next=dialog.getButton(AlertDialog.BUTTON_POSITIVE);next.setEnabled(false);
+      received.addTextChangedListener(new android.text.TextWatcher(){public void beforeTextChanged(CharSequence s,int start,int count,int after){}public void onTextChanged(CharSequence s,int start,int before,int count){int tendered=cashCents(received);boolean enough=tendered>=due;next.setEnabled(enough);change.setText(enough?"BAKI PULANGAN  "+money(tendered-due):tendered<0?"Masukkan jumlah tunai diterima":"Tunai belum cukup · kurang "+money(due-tendered));change.setTextColor(enough?blue:muted);}public void afterTextChanged(android.text.Editable value){}});
+      next.setOnClickListener(view->{int tendered=cashCents(received);if(tendered<due){message("Tunai diterima tidak mencukupi");return;}dialog.dismiss();confirm("Tunai",due,tendered);});});dialog.show();}
   void showPaymentQr(int due){ScrollView scroll=new ScrollView(this);scroll.setFillViewport(false);ImageView image=new ImageView(this);image.setImageResource(R.drawable.qr_frozen_ld);image.setAdjustViewBounds(true);image.setScaleType(ImageView.ScaleType.FIT_CENTER);scroll.addView(image,new ScrollView.LayoutParams(-1,-2));
     new AlertDialog.Builder(this).setTitle("QR DuitNow · Frozen LD").setMessage("Jumlah: "+money(due)+"\nTunjukkan QR ini kepada pelanggan. Sahkan selepas bayaran diterima.").setView(scroll)
       .setPositiveButton("Semak bayaran",(d,w)->confirm("QR / DuitNow",due)).setNegativeButton("Batal",null).show();}
   String line(String left,String right){int spaces=Math.max(1,32-left.length()-right.length());return left+String.format(Locale.US,"%"+spaces+"s","")+right+"\n";}
-  String receipt(String method,int due,int order){StringBuilder b=new StringBuilder();
+  String receipt(String method,int due,int order,int tendered){StringBuilder b=new StringBuilder();
     b.append("          WARISAN FROZEN\n");
     String phone=getPreferences(0).getString("receipt_phone","");if(!phone.isEmpty())b.append("       Tel: ").append(phone).append("\n");
     String email=getPreferences(0).getString("receipt_email","");if(!email.isEmpty())b.append(email).append("\n");
     b.append("--------------------------------\n").append(line("No. resit",String.format(Locale.US,"#%04d",order)))
       .append(line("Tarikh",new SimpleDateFormat("dd/MM/yy HH:mm",Locale.US).format(new Date()))).append("--------------------------------\n");
     for(int i=0;i<qty.length;i++)if(qty[i]>0){b.append(names[i]).append("\n");b.append(line("  "+qty[i]+" x "+money(prices[i]),money(qty[i]*prices[i])));}
-    return b.append("--------------------------------\n").append(line("JUMLAH",money(due))).append(line("BAYAR",method))
+    b.append("--------------------------------\n").append(line("JUMLAH",money(due))).append(line("BAYAR",method));
+    if("Tunai".equals(method))b.append(line("TUNAI DITERIMA",money(tendered))).append(line("BAKI PULANGAN",money(tendered-due)));
+    return b
       .append("================================\n       TERIMA KASIH!\n   Sila datang lagi.\n\n\n").toString();}
-  void confirm(String method,int due){new AlertDialog.Builder(this).setTitle("Sahkan bayaran").setMessage(method+" · "+money(due)+"\n\nPastikan bayaran sudah diterima sebelum simpan.")
+  void confirm(String method,int due){confirm(method,due,due);}
+  void confirm(String method,int due,int tendered){new AlertDialog.Builder(this).setTitle("Sahkan bayaran").setMessage(method+" · "+money(due)+("Tunai".equals(method)?"\nTunai diterima: "+money(tendered)+"\nBaki pulangan: "+money(tendered-due):"")+"\n\nPastikan bayaran sudah diterima sebelum simpan.")
     .setPositiveButton("Bayaran diterima",(d,w)->{
       int order=getPreferences(0).getInt("orders_"+date(),0)+1;
       int[] purchased=Arrays.copyOf(qty,qty.length);
-      String printed=receipt(method,due,order);
+      String printed=receipt(method,due,order,tendered);
       getPreferences(0).edit().putInt("sales_"+date(),getPreferences(0).getInt("sales_"+date(),0)+due).putInt("orders_"+date(),order).apply();
       try{JSONObject sale=new JSONObject();sale.put("time",timestamp());JSONArray soldItems=new JSONArray();for(int amount:purchased)soldItems.put(amount);sale.put("qty",soldItems);appendEntry("stock_sales",sale);}catch(JSONException ignored){}
       playPaymentSound();
       Arrays.fill(qty,0);draw();
-      previewReceipt(printed,purchased,method,due,order);
+      previewReceipt(printed,purchased,method,due,order,tendered);
     }).setNegativeButton("Kembali",null).show();}
   void receiptRule(LinearLayout sheet){View rule=new View(this);rule.setBackgroundColor(0xffe5e7e2);LinearLayout.LayoutParams lp=params(-1,1);lp.setMargins(0,dp(13),0,dp(13));sheet.addView(rule,lp);}
   void receiptRow(LinearLayout sheet,String label,String value,boolean highlight){
     LinearLayout r=row();TextView left=text(label,highlight?17:13,highlight?blue:muted,highlight);TextView right=text(value,highlight?20:13,highlight?blue:ink,true);
     r.addView(left,new LinearLayout.LayoutParams(0,-2,1));add(r,right,-2,-2);add(sheet,r,-1,-2);
   }
-  void previewReceipt(String printed,int[] purchased,String method,int due,int order){
+  void previewReceipt(String printed,int[] purchased,String method,int due,int order,int tendered){
     ScrollView scroll=new ScrollView(this);
     LinearLayout sheet=col();sheet.setPadding(dp(18),dp(12),dp(18),dp(14));sheet.setBackgroundColor(Color.WHITE);scroll.addView(sheet);
     ImageView logo=new ImageView(this);logo.setImageResource(R.drawable.warisan_logo);logo.setScaleType(ImageView.ScaleType.FIT_CENTER);
@@ -361,7 +373,7 @@ public class MainActivity extends Activity {
     for(int i=0;i<purchased.length;i++)if(purchased[i]>0){receiptRow(sheet,names[i],money(prices[i]*purchased[i]),false);
       TextView details=text(purchased[i]+" × "+money(prices[i]),11,muted,false);add(sheet,details,-1,-2);gap(sheet,10);}
     receiptRule(sheet);receiptRow(sheet,"JUMLAH",money(due),true);gap(sheet,8);
-    receiptRow(sheet,"Kaedah bayaran",method,false);receiptRule(sheet);
+    receiptRow(sheet,"Kaedah bayaran",method,false);if("Tunai".equals(method)){gap(sheet,6);receiptRow(sheet,"Tunai diterima",money(tendered),false);gap(sheet,6);receiptRow(sheet,"BAKI PULANGAN",money(tendered-due),true);}receiptRule(sheet);
     TextView thanks=text("Terima kasih! Sila datang lagi.",12,muted,false);thanks.setGravity(Gravity.CENTER);add(sheet,thanks,-1,-2);
     new AlertDialog.Builder(this).setTitle("Semak resit").setView(scroll)
       .setPositiveButton("Cetak resit",(dialog,button)->print(printed))
