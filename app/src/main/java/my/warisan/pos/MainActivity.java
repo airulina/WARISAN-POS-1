@@ -35,7 +35,7 @@ public class MainActivity extends Activity {
   static final int REQUEST_BLUETOOTH=42, EXPORT_CSV=43, EXPORT_PDF=44, PICK_IMAGE=45;
   int exportYear;
   int activePage=0, imageItem=-1;
-  String selectedMonth;
+  String selectedMonth,selectedDay,rangeStart;
   int[] cachedStock;
   final UUID printerUuid=UUID.fromString("00001101-0000-1000-8000-00805F9B34FB");
   String pendingReceipt;
@@ -71,8 +71,8 @@ public class MainActivity extends Activity {
   TextView chip(String s,int back,int fore){TextView t=text(s,13,fore,true);t.setGravity(Gravity.CENTER);t.setBackground(shape(back,11));t.setPadding(dp(8),dp(5),dp(8),dp(5));return t;}
   void loadMenu(){JSONArray custom=entries("custom_menu");int size=7+custom.length();names=Arrays.copyOf(names,size);icons=Arrays.copyOf(icons,size);prices=Arrays.copyOf(prices,size);qty=Arrays.copyOf(qty,size);
     for(int i=7;i<size;i++){JSONObject item=custom.optJSONObject(i-7);names[i]=item==null?"Menu":item.optString("name","Menu");icons[i]="🍽";prices[i]=item==null?0:item.optInt("price");}}
-  @Override public void onCreate(Bundle b){super.onCreate(b);loadMenu();selectedMonth=date().substring(0,7);if(b!=null){int[] saved=b.getIntArray("cart");if(saved!=null)System.arraycopy(saved,0,qty,0,Math.min(saved.length,qty.length));activePage=b.getInt("page",0);selectedMonth=b.getString("selectedMonth",selectedMonth);}draw();}
-  @Override protected void onSaveInstanceState(Bundle b){b.putIntArray("cart",qty);b.putInt("page",activePage);b.putString("selectedMonth",selectedMonth);super.onSaveInstanceState(b);}
+  @Override public void onCreate(Bundle b){super.onCreate(b);loadMenu();selectedDay=date();selectedMonth=selectedDay.substring(0,7);rangeStart=selectedDay;if(b!=null){int[] saved=b.getIntArray("cart");if(saved!=null)System.arraycopy(saved,0,qty,0,Math.min(saved.length,qty.length));activePage=b.getInt("page",0);selectedDay=b.getString("selectedDay",selectedDay);selectedMonth=selectedDay.substring(0,7);rangeStart=b.getString("rangeStart",rangeStart);}draw();}
+  @Override protected void onSaveInstanceState(Bundle b){b.putIntArray("cart",qty);b.putInt("page",activePage);b.putString("selectedDay",selectedDay);b.putString("rangeStart",rangeStart);super.onSaveInstanceState(b);}
   void draw(){
     cachedStock=null;
     LinearLayout screen=col();screen.setBackgroundColor(cream);
@@ -141,16 +141,16 @@ public class MainActivity extends Activity {
         add(body,card,-1,-2);gap(body,12);
       }
       action("Lihat ringkasan stok masuk / keluar",()->stockBalance());
-    }else if(activePage==2){heading("Graf jualan","Pilih bulan untuk lihat jualan harian dan item terjual.");
-      action("Bulan: "+monthLabel(selectedMonth)+"   ▼",()->chooseMonth());
+    }else if(activePage==2){heading("Graf jualan","Pilih tarikh untuk lihat rekod jualan harian.");
+      action("Tarikh: "+selectedDay+"   ▼",()->chooseSalesDay());
       int days=daysInMonth(selectedMonth);int[] totals=new int[days];String[] labels=new String[days];
-      int orders=0;for(int i=0;i<days;i++){String key=selectedMonth+String.format(Locale.US,"-%02d",i+1);totals[i]=getPreferences(0).getInt("sales_"+key,0);orders+=getPreferences(0).getInt("orders_"+key,0);labels[i]=(i+1==1||(i+1)%5==0)?""+(i+1):"";}
-      LinearLayout summary=row();metric(summary,"JUALAN BULAN",money(monthTotal(selectedMonth)),blue,null);metric(summary,"PESANAN BULAN",""+orders,gold,null);add(body,summary,-1,-2);gap(body,12);
+      for(int i=0;i<days;i++){String key=selectedMonth+String.format(Locale.US,"-%02d",i+1);totals[i]=getPreferences(0).getInt("sales_"+key,0);labels[i]=(i+1==1||(i+1)%5==0)?""+(i+1):"";}
+      LinearLayout summary=row();metric(summary,"JUALAN HARI",money(getPreferences(0).getInt("sales_"+selectedDay,0)),blue,null);metric(summary,"PESANAN HARI",""+getPreferences(0).getInt("orders_"+selectedDay,0),gold,null);add(body,summary,-1,-2);gap(body,12);
       LinearLayout chartCard=col();chartCard.setPadding(dp(12),dp(14),dp(12),dp(8));chartCard.setBackground(shape(surface,14));add(chartCard,text("JUALAN HARIAN · "+monthLabel(selectedMonth),12,ink,true),-1,-2);add(chartCard,new SalesChart(totals,labels),-1,190);add(body,chartCard,-1,-2);gap(body,17);
-      int[] sold=monthSold(selectedMonth);
-      add(body,text("ITEM TERJUAL PADA "+selectedMonth,13,muted,true),-1,-2);gap(body,10);
+      int[] sold=soldBetween(selectedDay,selectedDay);
+      add(body,text("ITEM TERJUAL PADA "+selectedDay,13,muted,true),-1,-2);gap(body,10);
       for(int i=0;i<names.length;i+=2){LinearLayout pair=row();metric(pair,names[i],sold[i]+(i<3?" cucuk":i==4?" hidangan":" unit"),sold[i]>0?blue:muted,null);if(i+1<names.length){int j=i+1;metric(pair,names[j],sold[j]+(j<3?" cucuk":j==4?" hidangan":" unit"),sold[j]>0?blue:muted,null);}add(body,pair,-1,-2);gap(body,7);}
-      action("Pecahan jualan setiap bulan",()->monthly());action("Muat turun laporan Excel / PDF",()->exportMenu());
+      action("Pecahan jualan · total ikut tarikh",()->chooseRangeStart());action("Muat turun laporan Excel / PDF",()->exportMenu());
     }else if(activePage==3){heading("Duit masuk / keluar","Catatan bulanan dan wang jualan.");String month=date().substring(0,7);int[] cash=cashTotals(month);int sale=monthTotal(month);
       LinearLayout top=row();metric(top,"JUALAN POS",money(sale),blue,null);metric(top,"DUIT MASUK",money(cash[0]),blue,null);add(body,top,-1,-2);gap(body,8);
       LinearLayout bottom=row();metric(bottom,"DUIT KELUAR",money(cash[1]),ink,null);metric(bottom,"BAKI KIRAAN",money(sale+cash[0]-cash[1]),gold,null);add(body,bottom,-1,-2);gap(body,16);
@@ -180,6 +180,23 @@ public class MainActivity extends Activity {
     for(int i=11;i>=0;i--){final String month=keys[i];LinearLayout row=row();row.setPadding(dp(10),dp(8),dp(10),dp(8));row.setBackground(shape(i%2==0?0xfff7f7f2:Color.WHITE,9));TextView name=text(labels[i],14,ink,true);row.addView(name,new LinearLayout.LayoutParams(0,dp(37),1));add(row,text(money(totals[i])+"  ›",14,blue,true),-2,-2);add(panel,row,-1,-2);row.setOnClickListener(v->{selectedMonth=month;draw();monthDetail(month);});}
     new AlertDialog.Builder(this).setTitle("Rekod jualan bulanan").setView(scroll).setPositiveButton("Tutup",null).setNeutralButton("Eksport",(d,w)->exportMenu()).show();}
   String monthLabel(String key){try{Date parsed=new SimpleDateFormat("yyyy-MM",Locale.US).parse(key);return new SimpleDateFormat("MMMM yyyy",new Locale("ms","MY")).format(parsed);}catch(Exception e){return key;}}
+  Calendar calendarDay(String value){Calendar c=Calendar.getInstance();try{SimpleDateFormat f=new SimpleDateFormat("yyyy-MM-dd",Locale.US);f.setLenient(false);c.setTime(f.parse(value));}catch(Exception ignored){}return c;}
+  interface DaySelected{void accept(String value);}
+  void pickDay(String title,String initial,DaySelected chosen){Calendar c=calendarDay(initial);DatePickerDialog picker=new DatePickerDialog(this,(view,year,month,day)->chosen.accept(String.format(Locale.US,"%04d-%02d-%02d",year,month+1,day)),c.get(Calendar.YEAR),c.get(Calendar.MONTH),c.get(Calendar.DAY_OF_MONTH));picker.setTitle(title);picker.getDatePicker().setMaxDate(System.currentTimeMillis());picker.show();}
+  void chooseSalesDay(){pickDay("Pilih tarikh jualan",selectedDay,value->{selectedDay=value;selectedMonth=value.substring(0,7);draw();});}
+  String firstSaleDay(){String first=date();for(String key:getPreferences(0).getAll().keySet())if(key.matches("sales_\\d{4}-\\d{2}-\\d{2}")){String day=key.substring(6);if(day.compareTo(first)<0)first=day;}return first;}
+  void chooseRangeStart(){pickDay("Dari tarikh (hingga hari ini)",rangeStart.equals(date())?firstSaleDay():rangeStart,value->{rangeStart=value;rangeSales(value);});}
+  int[] soldBetween(String start,String end){int[] sold=new int[names.length];JSONArray records=entries("stock_sales");for(int i=0;i<records.length();i++){JSONObject record=records.optJSONObject(i);if(record==null)continue;String day=entryDay(record);if(day.compareTo(start)<0||day.compareTo(end)>0)continue;JSONArray q=record.optJSONArray("qty");if(q!=null)for(int n=0;n<sold.length;n++)sold[n]+=q.optInt(n);}return sold;}
+  void rangeSales(String start){String end=date();Calendar cursor=calendarDay(start),last=calendarDay(end);if(cursor.after(last)){message("Tarikh mula tidak boleh selepas hari ini");return;}
+    int sales=0,orders=0;ArrayList<String> days=new ArrayList<>();StringBuilder detail=new StringBuilder();SimpleDateFormat format=new SimpleDateFormat("yyyy-MM-dd",Locale.US);
+    while(!cursor.after(last)){String day=format.format(cursor.getTime());int amount=getPreferences(0).getInt("sales_"+day,0),count=getPreferences(0).getInt("orders_"+day,0);sales+=amount;orders+=count;if(amount!=0||count!=0){days.add(day);detail.append(day).append("  ·  ").append(money(amount)).append("  (").append(count).append(" pesanan)\n");}cursor.add(Calendar.DAY_OF_MONTH,1);}
+    int[] sold=soldBetween(start,end);ScrollView scroll=new ScrollView(this);LinearLayout panel=col();panel.setPadding(dp(18),dp(12),dp(18),dp(14));scroll.addView(panel);
+    add(panel,text("DARI "+start+" HINGGA "+end,12,muted,true),-1,-2);gap(panel,9);
+    LinearLayout metrics=row();metric(metrics,"TOTAL JUALAN",money(sales),blue,null);metric(metrics,"TOTAL PESANAN",""+orders,gold,null);add(panel,metrics,-1,-2);gap(panel,15);
+    add(panel,text("JUMLAH ITEM TERJUAL",13,ink,true),-1,-2);gap(panel,8);
+    for(int i=0;i<names.length;i++){TextView item=text(names[i]+"  ·  "+sold[i]+(i<3?" cucuk":i==4?" hidangan":" unit"),13,ink,false);item.setPadding(dp(10),dp(10),dp(10),dp(10));item.setBackground(shape(surface,9));add(panel,item,-1,-2);gap(panel,5);}
+    gap(panel,11);add(panel,text("REKOD HARIAN",13,ink,true),-1,-2);gap(panel,8);add(panel,text(detail.length()==0?"Belum ada jualan untuk tempoh ini.":detail.toString(),12,ink,false),-1,-2);
+    new AlertDialog.Builder(this).setTitle("Pecahan jualan · total").setView(scroll).setPositiveButton("Tutup",null).setNeutralButton("Tukar tarikh",(d,w)->chooseRangeStart()).show();}
   int daysInMonth(String key){try{Calendar c=Calendar.getInstance();c.setTime(new SimpleDateFormat("yyyy-MM-dd",Locale.US).parse(key+"-01"));return c.getActualMaximum(Calendar.DAY_OF_MONTH);}catch(Exception e){return 31;}}
   void chooseMonth(){Calendar now=Calendar.getInstance();String[] labels=new String[12],keys=new String[12];
     for(int i=0;i<12;i++){Calendar c=(Calendar)now.clone();c.add(Calendar.MONTH,-i);keys[i]=new SimpleDateFormat("yyyy-MM",Locale.US).format(c.getTime());labels[i]=monthLabel(keys[i]);}
