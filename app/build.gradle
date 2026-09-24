@@ -1,4 +1,4 @@
 plugins { id 'com.android.application' }
 android { namespace 'my.warisan.pos'; compileSdk 35
- defaultConfig { applicationId 'my.warisan.pos'; minSdk 23; targetSdk 35; versionCode 13; versionName '3.9' }
+ defaultConfig { applicationId 'my.warisan.pos'; minSdk 23; targetSdk 35; versionCode 14; versionName '3.10' }
 }
