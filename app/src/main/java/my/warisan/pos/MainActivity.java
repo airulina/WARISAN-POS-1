@@ -12,6 +12,7 @@ import android.graphics.Typeface;
 import android.graphics.Canvas;
 import android.graphics.Paint;
 import android.graphics.pdf.PdfDocument;
+import android.media.MediaPlayer;
 import android.graphics.drawable.GradientDrawable;
 import android.content.Intent;
 import android.net.Uri;
@@ -284,7 +285,7 @@ public class MainActivity extends Activity {
     new AlertDialog.Builder(this).setTitle("Bayaran "+money(due)).setItems(new String[]{"Tunai","QR / DuitNow"},(dialog,index)->{if(index==0)confirm("Tunai",due);else showPaymentQr(due);}).setNegativeButton("Batal",null).show();}
   void showPaymentQr(int due){ScrollView scroll=new ScrollView(this);scroll.setFillViewport(false);ImageView image=new ImageView(this);image.setImageResource(R.drawable.qr_frozen_ld);image.setAdjustViewBounds(true);image.setScaleType(ImageView.ScaleType.FIT_CENTER);scroll.addView(image,new ScrollView.LayoutParams(-1,-2));
     new AlertDialog.Builder(this).setTitle("QR DuitNow · Frozen LD").setMessage("Jumlah: "+money(due)+"\nTunjukkan QR ini kepada pelanggan. Sahkan selepas bayaran diterima.").setView(scroll)
-      .setPositiveButton("Bayaran diterima",(d,w)->confirm("QR / DuitNow",due)).setNegativeButton("Batal",null).show();}
+      .setPositiveButton("Semak bayaran",(d,w)->confirm("QR / DuitNow",due)).setNegativeButton("Batal",null).show();}
   String line(String left,String right){int spaces=Math.max(1,32-left.length()-right.length());return left+String.format(Locale.US,"%"+spaces+"s","")+right+"\n";}
   String receipt(String method,int due,int order){StringBuilder b=new StringBuilder();
     b.append("          WARISAN FROZEN\n");
@@ -302,6 +303,7 @@ public class MainActivity extends Activity {
       String printed=receipt(method,due,order);
       getPreferences(0).edit().putInt("sales_"+date(),getPreferences(0).getInt("sales_"+date(),0)+due).putInt("orders_"+date(),order).apply();
       try{JSONObject sale=new JSONObject();sale.put("time",timestamp());JSONArray soldItems=new JSONArray();for(int amount:purchased)soldItems.put(amount);sale.put("qty",soldItems);appendEntry("stock_sales",sale);}catch(JSONException ignored){}
+      playPaymentSound();
       Arrays.fill(qty,0);draw();
       previewReceipt(printed,purchased,method,due,order);
     }).setNegativeButton("Kembali",null).show();}
@@ -355,6 +357,7 @@ public class MainActivity extends Activity {
     if(request==REQUEST_BLUETOOTH&&results.length>0&&results[0]==PackageManager.PERMISSION_GRANTED)choosePrinter();
   }
   void message(String s){Toast.makeText(this,s,Toast.LENGTH_LONG).show();}
+  void playPaymentSound(){try{MediaPlayer player=MediaPlayer.create(this,R.raw.payment_chime);if(player==null)return;player.setVolume(.85f,.85f);player.setOnCompletionListener(MediaPlayer::release);player.setOnErrorListener((mp,what,extra)->{mp.release();return true;});player.start();}catch(Exception ignored){}}
   void printLogo(OutputStream out)throws Exception{
     Bitmap source=BitmapFactory.decodeResource(getResources(),R.drawable.warisan_logo);
     if(source==null)return;
