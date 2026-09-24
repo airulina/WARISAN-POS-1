@@ -6,6 +6,8 @@ import android.bluetooth.*;
 import android.content.pm.PackageManager;
 import android.Manifest;
 import android.graphics.Color;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.view.*;
@@ -53,7 +55,7 @@ public class MainActivity extends Activity {
     setContentView(screen);
     ScrollView scroll=new ScrollView(this);screen.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
     body=col();body.setPadding(dp(17),dp(15),dp(17),dp(25));scroll.addView(body);
-    LinearLayout header=row();add(header,chip("W",gold,Color.WHITE),45,45);
+    LinearLayout header=row();ImageView logo=new ImageView(this);logo.setImageResource(R.drawable.warisan_logo);logo.setScaleType(ImageView.ScaleType.FIT_CENTER);add(header,logo,49,49);
     LinearLayout heading=col();heading.setPadding(dp(10),0,0,0);add(heading,text("WARISAN POS",21,green,true),-1,-2);add(heading,text("KIOS WARISAN  ·  SISTEM JUALAN",10,muted,true),-1,-2);header.addView(heading,new LinearLayout.LayoutParams(0,-2,1));
     TextView history=chip("REKOD",green,Color.WHITE);history.setOnClickListener(v->history());add(header,history,-2,-2);
     TextView printer=chip("🖨",0xffeee8d9,green);LinearLayout.LayoutParams printerLp=params(41,41);printerLp.leftMargin=dp(5);header.addView(printer,printerLp);printer.setOnClickListener(v->choosePrinter());
@@ -86,22 +88,38 @@ public class MainActivity extends Activity {
     for(int i=0;i<7;i++)if(qty[i]>0){final int id=i;LinearLayout r=row();r.addView(text(names[i]+" × "+qty[i],14,ink,true),new LinearLayout.LayoutParams(0,dp(39),1));add(r,text(money(qty[i]*prices[i]),13,green,true),-2,-2);TextView minus=chip("−",0xfff5eee1,green);LinearLayout.LayoutParams m=params(32,30);m.leftMargin=dp(8);r.addView(minus,m);minus.setOnClickListener(v->{qty[id]--;draw();});add(basket,r,-1,-2);}
   }
   void today(){today.setText(money(getPreferences(0).getInt("sales_"+date(),0)));}
-  void history(){new AlertDialog.Builder(this).setTitle("Rekod hari ini · "+date()).setMessage("Jualan: "+money(getPreferences(0).getInt("sales_"+date(),0))+"\nPesanan selesai: "+getPreferences(0).getInt("orders_"+date(),0)+"\n\nRekod disimpan pada telefon ini.").setPositiveButton("Tutup",null).show();}
+  void history(){new AlertDialog.Builder(this).setTitle("Rekod hari ini · "+date()).setMessage("Jualan: "+money(getPreferences(0).getInt("sales_"+date(),0))+"\nPesanan selesai: "+getPreferences(0).getInt("orders_"+date(),0)+"\n\nRekod disimpan pada telefon ini.").setPositiveButton("Tutup",null).setNeutralButton("No. telefon resit",(d,w)->editPhone()).show();}
+  void editPhone(){EditText input=new EditText(this);input.setSingleLine(true);input.setInputType(android.text.InputType.TYPE_CLASS_PHONE);input.setText(getPreferences(0).getString("receipt_phone",""));input.setHint("Contoh: 012-345 6789");
+    new AlertDialog.Builder(this).setTitle("No. telefon pada resit").setView(input).setPositiveButton("Simpan",(d,w)->{getPreferences(0).edit().putString("receipt_phone",input.getText().toString().trim()).apply();message("No. telefon resit disimpan");}).setNegativeButton("Batal",null).show();}
   void pay(){if(sum()==0){Toast.makeText(this,"Tambah menu dahulu",Toast.LENGTH_SHORT).show();return;}final int due=sum();
     new AlertDialog.Builder(this).setTitle("Bayaran "+money(due)).setItems(new String[]{"Tunai","QR / DuitNow"},(dialog,index)->confirm(index==0?"Tunai":"QR / DuitNow",due)).setNegativeButton("Batal",null).show();}
+  String line(String left,String right){int spaces=Math.max(1,32-left.length()-right.length());return left+String.format(Locale.US,"%"+spaces+"s","")+right+"\n";}
   String receipt(String method,int due,int order){StringBuilder b=new StringBuilder();
-    b.append("WARISAN POS\nKIOS WARISAN\n").append(new SimpleDateFormat("dd/MM/yyyy HH:mm",Locale.US).format(new Date())).append("  #").append(order).append("\n--------------------------------\n");
-    for(int i=0;i<7;i++)if(qty[i]>0)b.append(names[i]).append(" x").append(qty[i]).append("  ").append(money(qty[i]*prices[i])).append("\n");
-    return b.append("--------------------------------\nJUMLAH  ").append(money(due)).append("\nBAYARAN  ").append(method).append("\nTERIMA KASIH\n\n\n").toString();}
+    b.append("          WARISAN FROZEN\n");
+    String phone=getPreferences(0).getString("receipt_phone","");if(!phone.isEmpty())b.append("       Tel: ").append(phone).append("\n");
+    b.append("--------------------------------\n").append(line("No. resit",String.format(Locale.US,"#%04d",order)))
+      .append(line("Tarikh",new SimpleDateFormat("dd/MM/yy HH:mm",Locale.US).format(new Date()))).append("--------------------------------\n");
+    for(int i=0;i<7;i++)if(qty[i]>0){b.append(names[i]).append("\n");b.append(line("  "+qty[i]+" x "+money(prices[i]),money(qty[i]*prices[i])));}
+    return b.append("--------------------------------\n").append(line("JUMLAH",money(due))).append(line("BAYAR",method))
+      .append("================================\n       TERIMA KASIH!\n   Sila datang lagi.\n\n\n").toString();}
   void confirm(String method,int due){new AlertDialog.Builder(this).setTitle("Sahkan bayaran").setMessage(method+" · "+money(due)+"\n\nPastikan bayaran sudah diterima sebelum simpan.")
     .setPositiveButton("Bayaran diterima",(d,w)->{
       int order=getPreferences(0).getInt("orders_"+date(),0)+1;
       String printed=receipt(method,due,order);
       getPreferences(0).edit().putInt("sales_"+date(),getPreferences(0).getInt("sales_"+date(),0)+due).putInt("orders_"+date(),order).apply();
       Arrays.fill(qty,0);draw();
-      new AlertDialog.Builder(this).setTitle("Pesanan selesai ✓").setMessage(money(due)+" diterima melalui "+method+".")
-        .setPositiveButton("Cetak resit",(dialog,button)->print(printed)).setNegativeButton("Pesanan baharu",null).show();
+      previewReceipt(printed);
     }).setNegativeButton("Kembali",null).show();}
+  void previewReceipt(String printed){
+    ScrollView scroll=new ScrollView(this);
+    LinearLayout sheet=col();sheet.setPadding(dp(16),dp(12),dp(16),dp(12));sheet.setBackgroundColor(Color.WHITE);scroll.addView(sheet);
+    ImageView logo=new ImageView(this);logo.setImageResource(R.drawable.warisan_logo);logo.setScaleType(ImageView.ScaleType.FIT_CENTER);
+    LinearLayout.LayoutParams lp=params(-1,95);sheet.addView(logo,lp);
+    TextView details=text(printed,13,ink,false);details.setTypeface(Typeface.MONOSPACE);details.setTextIsSelectable(true);add(sheet,details,-1,-2);
+    new AlertDialog.Builder(this).setTitle("Resit bayaran · Semak dahulu").setView(scroll)
+      .setPositiveButton("Cetak resit",(dialog,button)->print(printed))
+      .setNegativeButton("Tutup",null).show();
+  }
   void choosePrinter(){
     if(android.os.Build.VERSION.SDK_INT>=31&&checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT)!=PackageManager.PERMISSION_GRANTED){
       requestPermissions(new String[]{Manifest.permission.BLUETOOTH_CONNECT},REQUEST_BLUETOOTH);return;
@@ -125,6 +143,28 @@ public class MainActivity extends Activity {
     if(request==REQUEST_BLUETOOTH&&results.length>0&&results[0]==PackageManager.PERMISSION_GRANTED)choosePrinter();
   }
   void message(String s){Toast.makeText(this,s,Toast.LENGTH_LONG).show();}
+  void printLogo(OutputStream out)throws Exception{
+    Bitmap source=BitmapFactory.decodeResource(getResources(),R.drawable.warisan_logo);
+    if(source==null)return;
+    int side=Math.min(source.getHeight(),source.getWidth());
+    Bitmap square=Bitmap.createBitmap(source,(source.getWidth()-side)/2,0,side,side);
+    Bitmap image=Bitmap.createScaledBitmap(square,192,192,true);
+    out.write(new byte[]{27,97,1}); // pusatkan logo
+    out.write(new byte[]{29,118,48,0,24,0,(byte)192,0}); // ESC/POS 192 x 192
+    int[][] dither={{0,8,2,10},{12,4,14,6},{3,11,1,9},{15,7,13,5}};
+    for(int y=0;y<192;y++)for(int bx=0;bx<24;bx++){
+      int bits=0;
+      for(int bit=0;bit<8;bit++){
+        int x=bx*8+bit,c=image.getPixel(x,y);
+        int gray=(Color.red(c)*30+Color.green(c)*59+Color.blue(c)*11)/100;
+        int dx=x-96,dy=y-96;
+        if(dx*dx+dy*dy<90*90&&gray<115+dither[y%4][x%4]*6)bits|=128>>bit;
+      }
+      out.write(bits);
+    }
+    out.write(new byte[]{10,27,97,0});
+    image.recycle();square.recycle();source.recycle();
+  }
   void print(String receipt){
     String address=getPreferences(0).getString("printer","");
     if(address.isEmpty()){pendingReceipt=receipt;new AlertDialog.Builder(this).setTitle("Printer belum dipilih").setMessage("Pair printer dalam tetapan Bluetooth telefon, kemudian pilih ikon printer di atas.").setPositiveButton("Pilih printer",(d,w)->choosePrinter()).setNegativeButton("Tutup",null).show();return;}
@@ -135,7 +175,7 @@ public class MainActivity extends Activity {
         if(adapter==null||!adapter.isEnabled())throw new Exception("Bluetooth belum dihidupkan");
         socket=adapter.getRemoteDevice(address).createRfcommSocketToServiceRecord(printerUuid);
         socket.connect();OutputStream out=socket.getOutputStream();
-        out.write(new byte[]{27,64});out.write(receipt.getBytes(StandardCharsets.US_ASCII));out.write(new byte[]{10,10,10});out.flush();
+        out.write(new byte[]{27,64});printLogo(out);out.write(receipt.getBytes(StandardCharsets.US_ASCII));out.write(new byte[]{10,10,10});out.flush();
         runOnUiThread(()->message("Resit berjaya dihantar"));
       }catch(Exception e){String error=e.getMessage();runOnUiThread(()->new AlertDialog.Builder(this).setTitle("Cetakan gagal").setMessage(error==null?"Semak printer dan cuba lagi.":error).setPositiveButton("OK",null).show());}
       finally{if(socket!=null)try{socket.close();}catch(Exception ignored){}}
