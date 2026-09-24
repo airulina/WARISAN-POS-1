@@ -29,7 +29,7 @@ public class MainActivity extends Activity {
   String[] names={"Sate Ayam","Sate Daging","Sate Kambing","Nasi Impit","Extra Kuah Kacang","Laksa Utara","Kuih Siput"};
   String[] icons={"🍢","🥩","🍢","🍚","🥣","🍜","🥨"};
   int[] prices={160,180,200,60,100,700,500}, qty=new int[7];
-  final int blue=Color.rgb(24,58,104), ink=Color.rgb(19,24,34), gold=Color.rgb(204,154,55), cream=Color.rgb(246,247,250), muted=Color.rgb(96,105,121);
+  final int blue=Color.rgb(24,58,104), ink=Color.rgb(19,24,34), gold=Color.rgb(204,154,55), cream=Color.rgb(197,207,222), surface=Color.rgb(231,237,245), muted=Color.rgb(75,87,105);
   LinearLayout body,basket; TextView total,today,items; Button payButton;
   static final int REQUEST_BLUETOOTH=42, EXPORT_CSV=43, EXPORT_PDF=44, PICK_IMAGE=45;
   int exportYear;
@@ -97,13 +97,13 @@ public class MainActivity extends Activity {
     add(body,text("Tekan + untuk tambah pesanan",12,muted,false),-1,-2);gap(body,13);
     for(int i=0;i<names.length;i+=2){LinearLayout pair=row();pair.setGravity(Gravity.TOP);product(pair,i);if(i+1<names.length)product(pair,i+1);add(body,pair,-1,-2);gap(body,9);}
     gap(body,10);add(body,text("Pesanan semasa",20,ink,true),-1,-2);gap(body,10);
-    basket=col();basket.setPadding(dp(13),dp(10),dp(13),dp(10));basket.setBackground(shape(Color.WHITE,15));add(body,basket,-1,-2);
-    LinearLayout footer=row();footer.setPadding(dp(17),dp(9),dp(17),dp(10));footer.setBackgroundColor(Color.WHITE);
+    basket=col();basket.setPadding(dp(13),dp(10),dp(13),dp(10));basket.setBackground(shape(surface,15));add(body,basket,-1,-2);
+    LinearLayout footer=row();footer.setPadding(dp(17),dp(9),dp(17),dp(10));footer.setBackgroundColor(surface);
     LinearLayout amount=col();add(amount,text("JUMLAH",11,muted,true),-1,-2);total=text("RM 0.00",22,blue,true);add(amount,total,-1,-2);footer.addView(amount,new LinearLayout.LayoutParams(0,-2,1));
     payButton=new Button(this);payButton.setAllCaps(false);payButton.setText("Bayar  →");payButton.setTextColor(Color.WHITE);payButton.setTextSize(16);payButton.setBackground(shape(blue,12));payButton.setOnClickListener(v->pay());add(footer,payButton,140,51);add(screen,footer,-1,-2);refresh();addNavigation(screen);
   }
   void product(LinearLayout pair,int id){
-    LinearLayout card=col();card.setPadding(dp(11),dp(11),dp(11),dp(11));card.setBackground(shape(Color.WHITE,15));
+    LinearLayout card=col();card.setPadding(dp(11),dp(11),dp(11),dp(11));card.setBackground(shape(surface,15));
     String photo=getPreferences(0).getString("menu_image_"+id,"");
     if(!photo.isEmpty()){ImageView photoView=new ImageView(this);try{loadMenuPhoto(photoView,photo);photoView.setScaleType(ImageView.ScaleType.CENTER_CROP);add(card,photoView,66,66);}catch(Exception e){add(card,chip(icons[id],0xfffff3db,blue),42,42);}}
     else{TextView icon=chip(icons[id],0xfffff3db,blue);icon.setTextSize(22);add(card,icon,42,42);}gap(card,9);
@@ -125,10 +125,12 @@ public class MainActivity extends Activity {
   void addNavigation(LinearLayout screen){LinearLayout nav=row();nav.setBackgroundColor(ink);nav.setPadding(dp(4),dp(5),dp(4),dp(6));String[] labels={"MENU","STOK","GRAF","DUIT","SETTING"};
     for(int i=0;i<labels.length;i++){final int page=i;TextView tab=text(labels[i],11,i==activePage?ink:Color.WHITE,true);tab.setGravity(Gravity.CENTER);tab.setBackground(shape(i==activePage?gold:blue,9));LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(0,dp(47),1);p.setMargins(dp(2),0,dp(2),0);nav.addView(tab,p);tab.setOnClickListener(v->{activePage=page;draw();});}add(screen,nav,-1,-2);}
   void heading(String title,String subtitle){add(body,text(title,24,blue,true),-1,-2);add(body,text(subtitle,12,muted,false),-1,-2);gap(body,18);}
-  void action(String label,Runnable callback){TextView button=text(label+"   ›",15,blue,true);button.setPadding(dp(16),dp(14),dp(14),dp(14));button.setBackground(shape(Color.WHITE,12));add(body,button,-1,-2);gap(body,9);button.setOnClickListener(v->callback.run());}
+  void action(String label,Runnable callback){TextView button=text(label+"   ›",15,blue,true);button.setPadding(dp(16),dp(14),dp(14),dp(14));button.setBackground(shape(surface,12));add(body,button,-1,-2);gap(body,9);button.setOnClickListener(v->callback.run());}
+  void metric(LinearLayout row,String title,String value,int highlight,Runnable tap){LinearLayout card=col();card.setPadding(dp(12),dp(12),dp(9),dp(12));card.setBackground(shape(surface,13));TextView name=text(title,11,muted,true);name.setMaxLines(2);add(card,name,-1,-2);gap(card,8);TextView figure=text(value,value.startsWith("RM")?16:20,highlight,true);figure.setMaxLines(1);figure.setEllipsize(android.text.TextUtils.TruncateAt.END);add(card,figure,-1,-2);LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(0,dp(94),1);p.setMargins(dp(3),0,dp(3),0);row.addView(card,p);if(tap!=null)card.setOnClickListener(v->tap.run());}
+  int[] cashTotals(String month){int[] totals=new int[2];JSONArray entries=entries("cash_entries");for(int i=0;i<entries.length();i++){JSONObject e=entries.optJSONObject(i);if(e==null||!month.equals(e.optString("month")))continue;int amount=e.optInt("amount");if(amount>=0)totals[0]+=amount;else totals[1]-=amount;}return totals;}
   void drawPage(){if(activePage==1){heading("Stok & restock","Baki semalam dibawa sebagai stok awal hari ini.");
       for(int i=0;i<names.length;i++){final int id=i;if(unlimited(id)){action(names[id]+" · kuah ikut liter (tiada had unit)",()->message("Kuah kacang sentiasa boleh dijual."));continue;}
-        int[] s=stockToday(id);LinearLayout card=col();card.setPadding(dp(14),dp(13),dp(14),dp(13));card.setBackground(shape(Color.WHITE,15));
+        int[] s=stockToday(id);LinearLayout card=col();card.setPadding(dp(14),dp(13),dp(14),dp(13));card.setBackground(shape(surface,15));
         add(card,text(names[id],17,ink,true),-1,-2);gap(card,9);
         LinearLayout upper=row();stockTile(upper,"STOK AWAL",""+s[0]);stockTile(upper,"RESTOCK","+"+s[1]);add(card,upper,-1,-2);gap(card,5);
         LinearLayout lower=row();stockTile(lower,"TERJUAL","−"+s[2]);stockTile(lower,"BAKI",""+s[3]);add(card,lower,-1,-2);gap(card,10);
@@ -141,15 +143,20 @@ public class MainActivity extends Activity {
     }else if(activePage==2){heading("Graf jualan","Pilih bulan untuk lihat jualan harian dan item terjual.");
       action("Bulan: "+monthLabel(selectedMonth)+"   ▼",()->chooseMonth());
       int days=daysInMonth(selectedMonth);int[] totals=new int[days];String[] labels=new String[days];
-      for(int i=0;i<days;i++){totals[i]=getPreferences(0).getInt("sales_"+selectedMonth+String.format(Locale.US,"-%02d",i+1),0);labels[i]=(i+1==1||(i+1)%5==0)?""+(i+1):"";}
-      add(body,text("Jualan "+monthLabel(selectedMonth)+" · "+money(monthTotal(selectedMonth)),18,blue,true),-1,-2);add(body,new SalesChart(totals,labels),-1,190);gap(body,16);
-      int[] sold=monthSold(selectedMonth);int max=1;for(int v:sold)max=Math.max(max,v);
+      int orders=0;for(int i=0;i<days;i++){String key=selectedMonth+String.format(Locale.US,"-%02d",i+1);totals[i]=getPreferences(0).getInt("sales_"+key,0);orders+=getPreferences(0).getInt("orders_"+key,0);labels[i]=(i+1==1||(i+1)%5==0)?""+(i+1):"";}
+      LinearLayout summary=row();metric(summary,"JUALAN BULAN",money(monthTotal(selectedMonth)),blue,null);metric(summary,"PESANAN BULAN",""+orders,gold,null);add(body,summary,-1,-2);gap(body,12);
+      LinearLayout chartCard=col();chartCard.setPadding(dp(12),dp(14),dp(12),dp(8));chartCard.setBackground(shape(surface,14));add(chartCard,text("JUALAN HARIAN · "+monthLabel(selectedMonth),12,ink,true),-1,-2);add(chartCard,new SalesChart(totals,labels),-1,190);add(body,chartCard,-1,-2);gap(body,17);
+      int[] sold=monthSold(selectedMonth);
       add(body,text("ITEM TERJUAL PADA "+selectedMonth,13,muted,true),-1,-2);gap(body,10);
-      for(int i=0;i<names.length;i++){add(body,text(names[i]+"   ·   "+sold[i]+(i<3?" cucuk":i==4?" hidangan":" unit"),14,ink,true),-1,-2);ProgressBar bar=new ProgressBar(this,null,android.R.attr.progressBarStyleHorizontal);bar.setMax(max);bar.setProgress(sold[i]);add(body,bar,-1,13);gap(body,11);}
+      for(int i=0;i<names.length;i+=2){LinearLayout pair=row();metric(pair,names[i],sold[i]+(i<3?" cucuk":i==4?" hidangan":" unit"),sold[i]>0?blue:muted,null);if(i+1<names.length){int j=i+1;metric(pair,names[j],sold[j]+(j<3?" cucuk":j==4?" hidangan":" unit"),sold[j]>0?blue:muted,null);}add(body,pair,-1,-2);gap(body,7);}
       action("Pecahan jualan setiap bulan",()->monthly());action("Muat turun laporan Excel / PDF",()->exportMenu());
-    }else if(activePage==3){heading("Duit masuk / keluar","Catat duit luar daripada bayaran jualan.");action("+ Catat duit masuk",()->cashEntry(true));action("− Catat duit keluar",()->cashEntry(false));action("Lihat catatan bulan ini",()->cashHistory());
+    }else if(activePage==3){heading("Duit masuk / keluar","Catatan bulanan dan wang jualan.");String month=date().substring(0,7);int[] cash=cashTotals(month);int sale=monthTotal(month);
+      LinearLayout top=row();metric(top,"JUALAN POS",money(sale),blue,null);metric(top,"DUIT MASUK",money(cash[0]),blue,null);add(body,top,-1,-2);gap(body,8);
+      LinearLayout bottom=row();metric(bottom,"DUIT KELUAR",money(cash[1]),ink,null);metric(bottom,"BAKI KIRAAN",money(sale+cash[0]-cash[1]),gold,null);add(body,bottom,-1,-2);gap(body,16);
+      LinearLayout controls=row();metric(controls,"+ CATAT","Masuk",blue,()->cashEntry(true));metric(controls,"− CATAT","Keluar",ink,()->cashEntry(false));add(body,controls,-1,-2);gap(body,12);
+      action("Lihat catatan bulan ini",()->cashHistory());add(body,text("Baki kiraan = jualan POS + duit masuk − duit keluar.",11,muted,false),-1,-2);
     }else if(activePage==4){heading("Setting","Tetapan kedai dan aplikasi.");action("Pilih printer Bluetooth",()->choosePrinter());action("No. telefon pada resit",()->editPhone());action("Alamat Gmail pada resit",()->editEmail());action("+ Tambah menu & harga",()->addMenu());action("Upload gambar menu",()->pickMenuImage());action("Reset stok sahaja",()->resetData(false));action("Reset semua data",()->resetData(true));}}
-  void stockTile(LinearLayout row,String title,String value){LinearLayout box=col();box.setPadding(dp(10),dp(8),dp(7),dp(8));box.setBackground(shape(0xfff1f4f9,10));add(box,text(title,10,muted,true),-1,-2);add(box,text(value,21,"BAKI".equals(title)?blue:ink,true),-1,-2);LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(0,-2,1);p.setMargins(dp(2),0,dp(2),0);row.addView(box,p);}
+  void stockTile(LinearLayout row,String title,String value){LinearLayout box=col();box.setPadding(dp(10),dp(8),dp(7),dp(8));box.setBackground(shape(0xffd5dfec,10));add(box,text(title,10,muted,true),-1,-2);add(box,text(value,21,"BAKI".equals(title)?blue:ink,true),-1,-2);LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(0,-2,1);p.setMargins(dp(2),0,dp(2),0);row.addView(box,p);}
   void stockEntryItem(int id){stockEntryItem(id,false);}
   void stockEntryItem(int id,boolean opening){if(unlimited(id)){message("Kuah kacang diurus mengikut liter, tanpa had stok unit.");return;}if(opening&&hasOpeningStock(id)){message("Stok awal sudah direkod. Gunakan Restock untuk tambah.");return;}
     EditText input=new EditText(this);input.setInputType(android.text.InputType.TYPE_CLASS_NUMBER);input.setHint("Bilangan unit / cucuk");int before=stock(id);
@@ -249,7 +256,10 @@ public class MainActivity extends Activity {
   void editPhone(){EditText input=new EditText(this);input.setSingleLine(true);input.setInputType(android.text.InputType.TYPE_CLASS_PHONE);input.setText(getPreferences(0).getString("receipt_phone",""));input.setHint("Contoh: 012-345 6789");
     new AlertDialog.Builder(this).setTitle("No. telefon pada resit").setView(input).setPositiveButton("Simpan",(d,w)->{getPreferences(0).edit().putString("receipt_phone",input.getText().toString().trim()).apply();message("No. telefon resit disimpan");}).setNegativeButton("Batal",null).show();}
   void pay(){if(sum()==0){Toast.makeText(this,"Tambah menu dahulu",Toast.LENGTH_SHORT).show();return;}for(int i=0;i<qty.length;i++)if(!unlimited(i)&&qty[i]>stock(i)){message("Stok "+names[i]+" tidak cukup. Semak pesanan.");draw();return;}final int due=sum();
-    new AlertDialog.Builder(this).setTitle("Bayaran "+money(due)).setItems(new String[]{"Tunai","QR / DuitNow"},(dialog,index)->confirm(index==0?"Tunai":"QR / DuitNow",due)).setNegativeButton("Batal",null).show();}
+    new AlertDialog.Builder(this).setTitle("Bayaran "+money(due)).setItems(new String[]{"Tunai","QR / DuitNow"},(dialog,index)->{if(index==0)confirm("Tunai",due);else showPaymentQr(due);}).setNegativeButton("Batal",null).show();}
+  void showPaymentQr(int due){ScrollView scroll=new ScrollView(this);scroll.setFillViewport(false);ImageView image=new ImageView(this);image.setImageResource(R.drawable.qr_frozen_ld);image.setAdjustViewBounds(true);image.setScaleType(ImageView.ScaleType.FIT_CENTER);scroll.addView(image,new ScrollView.LayoutParams(-1,-2));
+    new AlertDialog.Builder(this).setTitle("QR DuitNow · Frozen LD").setMessage("Jumlah: "+money(due)+"\nTunjukkan QR ini kepada pelanggan. Sahkan selepas bayaran diterima.").setView(scroll)
+      .setPositiveButton("Bayaran diterima",(d,w)->confirm("QR / DuitNow",due)).setNegativeButton("Batal",null).show();}
   String line(String left,String right){int spaces=Math.max(1,32-left.length()-right.length());return left+String.format(Locale.US,"%"+spaces+"s","")+right+"\n";}
   String receipt(String method,int due,int order){StringBuilder b=new StringBuilder();
     b.append("          WARISAN FROZEN\n");
