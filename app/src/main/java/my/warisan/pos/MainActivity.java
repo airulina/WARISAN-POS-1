@@ -240,17 +240,42 @@ public class MainActivity extends Activity {
       for(int day=1;day<=31;day++){String dayKey=key+String.format(Locale.US,"-%02d",day);int sale=getPreferences(0).getInt("sales_"+dayKey,0),orders=getPreferences(0).getInt("orders_"+dayKey,0);if(sale==0&&orders==0)continue;monthSales+=sale;monthOrders+=orders;b.append(year).append(',').append(month).append(',').append(dayKey).append(',').append(orders).append(',').append(String.format(Locale.US,"%.2f",sale/100.0)).append("\r\n");}
       b.append(year).append(',').append(month).append(",JUMLAH BULAN,").append(monthOrders).append(',').append(String.format(Locale.US,"%.2f",monthSales/100.0)).append("\r\n");annual+=monthSales;}
     b.append(year).append(",,JUMLAH SETAHUN,,").append(String.format(Locale.US,"%.2f",annual/100.0)).append("\r\n");out.write(b.toString().getBytes(StandardCharsets.UTF_8));}
-  void writePdf(OutputStream out,int year)throws IOException{PdfDocument pdf=new PdfDocument();try{int pageNumber=0,y=0;PdfDocument.Page page=null;Canvas canvas=null;Paint p=new Paint(3);p.setTypeface(Typeface.create(Typeface.MONOSPACE,Typeface.NORMAL));p.setTextSize(11);int annual=0;
-      for(int month=1;month<=12;month++){String key=String.format(Locale.US,"%04d-%02d",year,month);int monthly=monthTotal(key);
-        if(page==null||y>745){if(page!=null)pdf.finishPage(page);page=pdf.startPage(new PdfDocument.PageInfo.Builder(595,842,++pageNumber).create());canvas=page.getCanvas();canvas.drawColor(Color.WHITE);p.setColor(blue);p.setTypeface(Typeface.DEFAULT_BOLD);p.setTextSize(18);canvas.drawText("WARISAN POS  |  REKOD JUALAN "+year,35,42,p);p.setTypeface(Typeface.MONOSPACE);p.setTextSize(11);p.setColor(ink);y=75;}
-        p.setTypeface(Typeface.DEFAULT_BOLD);canvas.drawText("BULAN "+key+"    "+money(monthly),35,y,p);p.setTypeface(Typeface.MONOSPACE);y+=19;annual+=monthly;
-        for(int day=1;day<=31;day++){String dayKey=key+String.format(Locale.US,"-%02d",day);int sale=getPreferences(0).getInt("sales_"+dayKey,0),orders=getPreferences(0).getInt("orders_"+dayKey,0);if(sale==0&&orders==0)continue;
-          if(y>765){pdf.finishPage(page);page=pdf.startPage(new PdfDocument.PageInfo.Builder(595,842,++pageNumber).create());canvas=page.getCanvas();canvas.drawColor(Color.WHITE);y=50;}
-          canvas.drawText(dayKey+"     "+String.format(Locale.US,"%3d pesanan     ",orders)+money(sale),45,y,p);y+=16;}
-        y+=11;
+  String pdfAxis(int cents){return cents>=100000?String.format(Locale.US,"RM %.1fk",cents/100000.0):money(cents);}
+  void pdfChart(Canvas c,Paint p,int[] values,int x,int top,int width,int height,boolean daily){
+    int max=1;for(int value:values)max=Math.max(max,value);float left=x+77,right=x+width-18,upper=top+23,bottom=top+height-35;
+    p.setTextSize(9);p.setTypeface(Typeface.DEFAULT);p.setStrokeWidth(1);
+    for(int i=0;i<=2;i++){float y=upper+(bottom-upper)*i/2f;p.setColor(0xffdce3ed);c.drawLine(left,y,right,y,p);p.setColor(muted);c.drawText(pdfAxis(max*(2-i)/2),x,y+3,p);}
+    float lastX=0,lastY=0;String[] months={"Jan","Feb","Mac","Apr","Mei","Jun","Jul","Ogo","Sep","Okt","Nov","Dis"};
+    for(int i=0;i<values.length;i++){float px=left+(right-left)*i/Math.max(1,values.length-1),py=bottom-(bottom-upper)*values[i]/max;
+      if(i>0){p.setColor(blue);p.setStrokeWidth(2.6f);c.drawLine(lastX,lastY,px,py,p);}p.setColor(gold);c.drawCircle(px,py,3.7f,p);
+      if(!daily||i==0||(i+1)%5==0||i==values.length-1){p.setColor(muted);p.setTextSize(9);p.setTextAlign(Paint.Align.CENTER);c.drawText(daily?String.valueOf(i+1):months[i],px,bottom+19,p);p.setTextAlign(Paint.Align.LEFT);}
+      lastX=px;lastY=py;
+    }
+  }
+  void writePdf(OutputStream out,int year)throws IOException{PdfDocument pdf=new PdfDocument();try{Paint p=new Paint(3);int[] months=new int[12];int annual=0;
+      for(int i=0;i<12;i++){months[i]=monthTotal(String.format(Locale.US,"%04d-%02d",year,i+1));annual+=months[i];}
+      PdfDocument.Page cover=pdf.startPage(new PdfDocument.PageInfo.Builder(595,842,1).create());Canvas c=cover.getCanvas();c.drawColor(Color.WHITE);
+      p.setColor(blue);p.setTypeface(Typeface.DEFAULT_BOLD);p.setTextSize(23);c.drawText("WARISAN POS",34,52,p);
+      p.setColor(muted);p.setTextSize(12);p.setTypeface(Typeface.DEFAULT);c.drawText("LAPORAN JUALAN TAHUN "+year,34,76,p);
+      p.setColor(blue);c.drawRoundRect(34,97,561,158,11,11,p);p.setColor(Color.WHITE);p.setTextSize(12);c.drawText("JUMLAH JUALAN SETAHUN",50,120,p);p.setTypeface(Typeface.DEFAULT_BOLD);p.setTextSize(23);c.drawText(money(annual),50,148,p);
+      p.setColor(ink);p.setTextSize(15);c.drawText("Trend jualan bulanan",34,195,p);pdfChart(c,p,months,34,205,527,245,false);
+      p.setTextSize(12);p.setTypeface(Typeface.DEFAULT_BOLD);p.setColor(blue);c.drawText("PECAHAN 12 BULAN",34,485,p);
+      String[] namesMonth={"Januari","Februari","Mac","April","Mei","Jun","Julai","Ogos","September","Oktober","November","Disember"};
+      for(int i=0;i<12;i++){int column=i/6,row=i%6;float x=34+column*267,y=517+row*41;p.setColor(i%2==0?0xffedf1f6:0xfff8f9fb);c.drawRoundRect(x,y-18,x+252,y+13,6,6,p);p.setColor(ink);p.setTextSize(11);p.setTypeface(Typeface.DEFAULT);c.drawText(namesMonth[i],x+10,y+2,p);p.setColor(blue);p.setTypeface(Typeface.DEFAULT_BOLD);c.drawText(money(months[i]),x+115,y+2,p);}
+      pdf.finishPage(cover);
+      int pageNo=1;
+      for(int month=1;month<=12;month++){String key=String.format(Locale.US,"%04d-%02d",year,month);int[] daily=new int[daysInMonth(key)];int[] orders=new int[daily.length],count=0;
+        for(int day=0;day<daily.length;day++){String dateKey=key+String.format(Locale.US,"-%02d",day+1);daily[day]=getPreferences(0).getInt("sales_"+dateKey,0);orders[day]=getPreferences(0).getInt("orders_"+dateKey,0);count+=orders[day];}
+        if(months[month-1]==0&&count==0)continue;
+        PdfDocument.Page page=pdf.startPage(new PdfDocument.PageInfo.Builder(595,842,++pageNo).create());c=page.getCanvas();c.drawColor(Color.WHITE);
+        p.setColor(blue);p.setTypeface(Typeface.DEFAULT_BOLD);p.setTextSize(20);c.drawText("WARISAN POS  |  "+namesMonth[month-1]+" "+year,34,48,p);
+        p.setColor(ink);p.setTextSize(13);c.drawText("Jualan: "+money(months[month-1])+"     Pesanan: "+count,34,77,p);
+        p.setColor(blue);p.setTextSize(14);c.drawText("Trend jualan harian",34,112,p);pdfChart(c,p,daily,34,123,527,205,true);
+        p.setColor(blue);p.setTypeface(Typeface.DEFAULT_BOLD);p.setTextSize(11);c.drawText("TARIKH",40,361,p);c.drawText("PESANAN",300,361,p);c.drawText("JUALAN",434,361,p);
+        int y=379;for(int day=0;day<daily.length;day++){if(daily[day]==0&&orders[day]==0)continue;
+          p.setColor(day%2==0?0xffedf1f6:Color.WHITE);c.drawRect(34,y-12,560,y+5,p);p.setColor(ink);p.setTypeface(Typeface.DEFAULT);p.setTextSize(10);c.drawText(String.format(Locale.US,"%02d/%02d/%04d",day+1,month,year),40,y,p);c.drawText(String.valueOf(orders[day]),300,y,p);c.drawText(money(daily[day]),434,y,p);y+=14;}
+        p.setColor(muted);p.setTextSize(9);c.drawText("Jumlah harian dan carta berdasarkan bayaran yang telah direkod.",34,816,p);pdf.finishPage(page);
       }
-      if(page!=null){if(y>770){pdf.finishPage(page);page=pdf.startPage(new PdfDocument.PageInfo.Builder(595,842,++pageNumber).create());canvas=page.getCanvas();canvas.drawColor(Color.WHITE);y=50;}
-        p.setTypeface(Typeface.DEFAULT_BOLD);p.setTextSize(15);p.setColor(blue);canvas.drawText("JUMLAH SETAHUN: "+money(annual),35,y+12,p);pdf.finishPage(page);}
       pdf.writeTo(out);
     }finally{pdf.close();}}
   void editPhone(){EditText input=new EditText(this);input.setSingleLine(true);input.setInputType(android.text.InputType.TYPE_CLASS_PHONE);input.setText(getPreferences(0).getString("receipt_phone",""));input.setHint("Contoh: 012-345 6789");
