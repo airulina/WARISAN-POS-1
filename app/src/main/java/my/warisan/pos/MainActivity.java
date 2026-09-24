@@ -53,7 +53,7 @@ public class MainActivity extends Activity {
     setContentView(screen);
     ScrollView scroll=new ScrollView(this);screen.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
     body=col();body.setPadding(dp(17),dp(15),dp(17),dp(25));scroll.addView(body);
-    LinearLayout header=row();ImageView logo=new ImageView(this);logo.setImageResource(R.drawable.warisan_logo);logo.setScaleType(ImageView.ScaleType.FIT_CENTER);add(header,logo,76,49);
+    LinearLayout header=row();add(header,chip("W",gold,Color.WHITE),45,45);
     LinearLayout heading=col();heading.setPadding(dp(10),0,0,0);add(heading,text("WARISAN POS",21,green,true),-1,-2);add(heading,text("KIOS WARISAN  ·  SISTEM JUALAN",10,muted,true),-1,-2);header.addView(heading,new LinearLayout.LayoutParams(0,-2,1));
     TextView history=chip("REKOD",green,Color.WHITE);history.setOnClickListener(v->history());add(header,history,-2,-2);
     TextView printer=chip("🖨",0xffeee8d9,green);LinearLayout.LayoutParams printerLp=params(41,41);printerLp.leftMargin=dp(5);header.addView(printer,printerLp);printer.setOnClickListener(v->choosePrinter());
