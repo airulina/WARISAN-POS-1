@@ -88,7 +88,7 @@ public class MainActivity extends Activity {
   void today(){today.setText(money(getPreferences(0).getInt("sales_"+date(),0)));}
   void history(){new AlertDialog.Builder(this).setTitle("Rekod hari ini · "+date()).setMessage("Jualan: "+money(getPreferences(0).getInt("sales_"+date(),0))+"\nPesanan selesai: "+getPreferences(0).getInt("orders_"+date(),0)+"\n\nRekod disimpan pada telefon ini.").setPositiveButton("Tutup",null).show();}
   void pay(){if(sum()==0){Toast.makeText(this,"Tambah menu dahulu",Toast.LENGTH_SHORT).show();return;}final int due=sum();
-    new AlertDialog.Builder(this).setTitle("Bayaran "+money(due)).setMessage("Pilih cara pelanggan membayar").setItems(new String[]{"Tunai","QR / DuitNow"},(dialog,index)->confirm(index==0?"Tunai":"QR / DuitNow",due)).setNegativeButton("Batal",null).show();}
+    new AlertDialog.Builder(this).setTitle("Bayaran "+money(due)).setItems(new String[]{"Tunai","QR / DuitNow"},(dialog,index)->confirm(index==0?"Tunai":"QR / DuitNow",due)).setNegativeButton("Batal",null).show();}
   String receipt(String method,int due,int order){StringBuilder b=new StringBuilder();
     b.append("WARISAN POS\nKIOS WARISAN\n").append(new SimpleDateFormat("dd/MM/yyyy HH:mm",Locale.US).format(new Date())).append("  #").append(order).append("\n--------------------------------\n");
     for(int i=0;i<7;i++)if(qty[i]>0)b.append(names[i]).append(" x").append(qty[i]).append("  ").append(money(qty[i]*prices[i])).append("\n");
