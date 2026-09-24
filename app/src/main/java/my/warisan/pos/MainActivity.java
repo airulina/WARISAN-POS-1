@@ -9,12 +9,18 @@ import android.graphics.Color;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.Typeface;
+import android.graphics.Canvas;
+import android.graphics.Paint;
+import android.graphics.pdf.PdfDocument;
 import android.graphics.drawable.GradientDrawable;
+import android.content.Intent;
+import android.net.Uri;
 import android.view.*;
 import android.widget.*;
 import java.text.SimpleDateFormat;
 import java.util.*;
 import java.io.OutputStream;
+import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import org.json.*;
 
@@ -24,7 +30,8 @@ public class MainActivity extends Activity {
   final int[] prices={160,180,200,60,100,700,500}, qty=new int[7];
   final int green=Color.rgb(21,57,46), ink=Color.rgb(32,49,43), gold=Color.rgb(189,137,47), cream=Color.rgb(249,247,240), muted=Color.rgb(105,113,104);
   LinearLayout body,basket; TextView total,today,items; Button payButton;
-  static final int REQUEST_BLUETOOTH=42;
+  static final int REQUEST_BLUETOOTH=42, EXPORT_CSV=43, EXPORT_PDF=44;
+  int exportYear;
   final UUID printerUuid=UUID.fromString("00001101-0000-1000-8000-00805F9B34FB");
   String pendingReceipt;
   int dp(int x){return (int)(x*getResources().getDisplayMetrics().density+.5f);}
@@ -32,6 +39,11 @@ public class MainActivity extends Activity {
   String date(){return new SimpleDateFormat("yyyy-MM-dd",Locale.US).format(new Date());}
   int sum(){int n=0;for(int i=0;i<7;i++)n+=qty[i]*prices[i];return n;}
   int count(){int n=0;for(int q:qty)n+=q;return n;}
+  int stock(int id){int added=0,sold=0;JSONArray in=entries("stock_entries"),out=entries("stock_sales");
+    for(int n=0;n<in.length();n++){JSONObject e=in.optJSONObject(n);if(e!=null&&e.optInt("item",-1)==id)added+=e.optInt("qty");}
+    for(int n=0;n<out.length();n++){JSONObject e=out.optJSONObject(n);if(e!=null){JSONArray q=e.optJSONArray("qty");if(q!=null)sold+=q.optInt(id);}}
+    return Math.max(0,added-sold);}
+  void stockLimit(int id,int amount){int available=stock(id)-qty[id];if(available<=0){message(names[id]+" habis. Masukkan stok dahulu.");return;}qty[id]+=Math.min(amount,available);draw();}
   GradientDrawable shape(int color,int radius){GradientDrawable d=new GradientDrawable();d.setColor(color);d.setCornerRadius(dp(radius));return d;}
   TextView text(String s,int size,int color,boolean bold){TextView t=new TextView(this);t.setText(s);t.setTextSize(size);t.setTextColor(color);if(bold)t.setTypeface(null,Typeface.BOLD);t.setGravity(Gravity.CENTER_VERTICAL);return t;}
   LinearLayout col(){LinearLayout l=new LinearLayout(this);l.setOrientation(1);return l;}
@@ -76,12 +88,14 @@ public class MainActivity extends Activity {
     LinearLayout card=col();card.setPadding(dp(11),dp(11),dp(11),dp(11));card.setBackground(shape(Color.WHITE,15));
     TextView icon=chip(icons[id],0xfffbf2de,green);icon.setTextSize(22);add(card,icon,42,42);gap(card,9);
     TextView name=text(names[id],15,ink,true);name.setMinHeight(dp(40));add(card,name,-1,-2);
-    add(card,text(money(prices[id]),15,gold,true),-1,-2);gap(card,10);
+    add(card,text(money(prices[id]),15,gold,true),-1,-2);
+    int available=stock(id);TextView stockLabel=text("Stok: "+available+(available==0?" · HABIS":""),12,available==0?0xffb54743:green,true);add(card,stockLabel,-1,-2);gap(card,10);
     LinearLayout controls=row();TextView minus=chip("−",0xffedf1ea,green),number=text(""+qty[id],15,ink,true),plus=chip("+",green,Color.WHITE);number.setGravity(Gravity.CENTER);
     controls.addView(minus,new LinearLayout.LayoutParams(0,dp(35),1));controls.addView(number,new LinearLayout.LayoutParams(0,dp(35),1));controls.addView(plus,new LinearLayout.LayoutParams(0,dp(35),1));add(card,controls,-1,-2);
-    minus.setOnClickListener(v->{qty[id]=Math.max(0,qty[id]-1);number.setText(""+qty[id]);refresh();});
-    plus.setOnClickListener(v->{qty[id]++;number.setText(""+qty[id]);refresh();});
-    if(id<3){gap(card,8);LinearLayout presets=row();for(int n:new int[]{10,20,30}){TextView p=chip("+"+n,0xfffbf2de,green);LinearLayout.LayoutParams pp=new LinearLayout.LayoutParams(0,dp(30),1);pp.setMargins(dp(1),0,dp(1),0);presets.addView(p,pp);p.setOnClickListener(v->{qty[id]+=n;number.setText(""+qty[id]);refresh();});}add(card,presets,-1,-2);}
+    minus.setOnClickListener(v->{qty[id]=Math.max(0,qty[id]-1);draw();});
+    plus.setAlpha(available<=qty[id]?.35f:1f);plus.setEnabled(available>qty[id]);
+    plus.setOnClickListener(v->stockLimit(id,1));
+    if(id<3){gap(card,8);LinearLayout presets=row();for(int n:new int[]{10,20,30}){TextView p=chip("+"+n,0xfffbf2de,green);p.setEnabled(available>qty[id]);p.setAlpha(available<=qty[id]?.35f:1f);LinearLayout.LayoutParams pp=new LinearLayout.LayoutParams(0,dp(30),1);pp.setMargins(dp(1),0,dp(1),0);presets.addView(p,pp);p.setOnClickListener(v->stockLimit(id,n));}add(card,presets,-1,-2);}
     LinearLayout.LayoutParams cp=new LinearLayout.LayoutParams(0,-2,1);cp.setMargins(dp(2),0,dp(2),0);pair.addView(card,cp);
   }
   void refresh(){items.setText(count()+" item");total.setText(money(sum()));payButton.setAlpha(sum()==0?.55f:1f);basket.removeAllViews();
@@ -89,13 +103,24 @@ public class MainActivity extends Activity {
     for(int i=0;i<7;i++)if(qty[i]>0){final int id=i;LinearLayout r=row();r.addView(text(names[i]+" × "+qty[i],14,ink,true),new LinearLayout.LayoutParams(0,dp(39),1));add(r,text(money(qty[i]*prices[i]),13,green,true),-2,-2);TextView minus=chip("−",0xfff5eee1,green);LinearLayout.LayoutParams m=params(32,30);m.leftMargin=dp(8);r.addView(minus,m);minus.setOnClickListener(v->{qty[id]--;draw();});add(basket,r,-1,-2);}
   }
   void today(){today.setText(money(getPreferences(0).getInt("sales_"+date(),0)));}
-  void history(){new AlertDialog.Builder(this).setTitle("Rekod & operasi").setItems(new String[]{"Jualan hari ini","Jualan bulanan (12 bulan)","Stok awal / tambah stok","Baki stok","Duit masuk / keluar","No. telefon resit"},(d,which)->{
+  void history(){new AlertDialog.Builder(this).setTitle("Rekod & operasi").setItems(new String[]{"Jualan hari ini","Graf & jualan bulanan","Buka jualan / tambah stok","Baki stok","Duit masuk / keluar","Eksport rekod Excel / PDF","No. telefon resit","Tetapan & reset data"},(d,which)->{
     if(which==0)new AlertDialog.Builder(this).setTitle("Rekod hari ini · "+date()).setMessage("Jualan: "+money(getPreferences(0).getInt("sales_"+date(),0))+"\nPesanan selesai: "+getPreferences(0).getInt("orders_"+date(),0)).setPositiveButton("Tutup",null).show();
-    else if(which==1)monthly();else if(which==2)stockEntry();else if(which==3)stockBalance();else if(which==4)cashBook();else editPhone();
+    else if(which==1)monthly();else if(which==2)stockEntry();else if(which==3)stockBalance();else if(which==4)cashBook();else if(which==5)exportMenu();else if(which==6)editPhone();else settings();
   }).show();}
-  void monthly(){Calendar now=Calendar.getInstance();String[] labels=new String[12];String[] keys=new String[12];
-    for(int i=0;i<12;i++){Calendar c=(Calendar)now.clone();c.add(Calendar.MONTH,-i);keys[i]=new SimpleDateFormat("yyyy-MM",Locale.US).format(c.getTime());labels[i]=new SimpleDateFormat("MMMM yyyy",new Locale("ms","MY")).format(c.getTime())+"  ·  "+money(monthTotal(keys[i]));}
-    new AlertDialog.Builder(this).setTitle("Jualan 12 bulan terakhir").setItems(labels,(d,i)->monthDetail(keys[i])).setPositiveButton("Tutup",null).show();}
+  void monthly(){Calendar now=Calendar.getInstance();String[] labels=new String[12],keys=new String[12];int[] totals=new int[12];int yearTotal=0;
+    for(int i=0;i<12;i++){Calendar c=(Calendar)now.clone();c.add(Calendar.MONTH,i-11);keys[i]=new SimpleDateFormat("yyyy-MM",Locale.US).format(c.getTime());totals[i]=monthTotal(keys[i]);yearTotal+=totals[i];labels[i]=new SimpleDateFormat("MMM yy",new Locale("ms","MY")).format(c.getTime());}
+    ScrollView scroll=new ScrollView(this);LinearLayout panel=col();panel.setPadding(dp(16),dp(10),dp(16),dp(12));scroll.addView(panel);
+    add(panel,text("JUMLAH 12 BULAN",12,muted,true),-1,-2);add(panel,text(money(yearTotal),28,green,true),-1,-2);gap(panel,12);
+    add(panel,new SalesChart(totals,labels),-1,210);gap(panel,10);
+    for(int i=11;i>=0;i--){final String month=keys[i];LinearLayout row=row();row.setPadding(dp(10),dp(8),dp(10),dp(8));row.setBackground(shape(i%2==0?0xfff7f7f2:Color.WHITE,9));TextView name=text(labels[i],14,ink,true);row.addView(name,new LinearLayout.LayoutParams(0,dp(37),1));add(row,text(money(totals[i])+"  ›",14,green,true),-2,-2);add(panel,row,-1,-2);row.setOnClickListener(v->monthDetail(month));}
+    new AlertDialog.Builder(this).setTitle("Rekod jualan bulanan").setView(scroll).setPositiveButton("Tutup",null).setNeutralButton("Eksport",(d,w)->exportMenu()).show();}
+  class SalesChart extends View {final int[] values;final String[] labels;final Paint paint=new Paint(3);
+    SalesChart(int[] v,String[] l){super(MainActivity.this);values=v;labels=l;}
+    @Override protected void onDraw(Canvas canvas){super.onDraw(canvas);float w=getWidth(),h=getHeight(),left=dp(7),right=w-dp(7),top=dp(12),bottom=h-dp(31);int max=1;for(int v:values)max=Math.max(max,v);float step=(right-left)/12f;
+      paint.setColor(0xffe3e8e2);paint.setStrokeWidth(dp(1));for(int line=0;line<4;line++){float y=top+(bottom-top)*line/3f;canvas.drawLine(left,y,right,y,paint);}
+      for(int i=0;i<12;i++){float x=left+step*(i+.5f),height=(bottom-top)*values[i]/max;paint.setColor(i==11?gold:green);canvas.drawRoundRect(x-step*.34f,bottom-height,x+step*.34f,bottom,dp(3),dp(3),paint);paint.setColor(muted);paint.setTextSize(dp(9));paint.setTextAlign(Paint.Align.CENTER);canvas.drawText(labels[i].substring(0,Math.min(3,labels[i].length())),x,h-dp(12),paint);}
+    }
+  }
   int monthTotal(String month){int total=0;for(int day=1;day<=31;day++)total+=getPreferences(0).getInt("sales_"+month+String.format(Locale.US,"-%02d",day),0);return total;}
   void monthDetail(String month){StringBuilder detail=new StringBuilder();int orders=0;for(int day=1;day<=31;day++){String key=month+String.format(Locale.US,"-%02d",day);int amount=getPreferences(0).getInt("sales_"+key,0);orders+=getPreferences(0).getInt("orders_"+key,0);if(amount!=0)detail.append(key).append("  ·  ").append(money(amount)).append("\n");}
     new AlertDialog.Builder(this).setTitle(month).setMessage("Jumlah: "+money(monthTotal(month))+"\nPesanan: "+orders+"\n\n"+(detail.length()==0?"Tiada jualan direkod.":detail.toString())).setPositiveButton("Tutup",null).show();}
@@ -105,7 +130,7 @@ public class MainActivity extends Activity {
   void stockEntry(){String[] options=new String[names.length+1];options[0]="Lihat baki stok";System.arraycopy(names,0,options,1,names.length);
     new AlertDialog.Builder(this).setTitle("Stok · pilih menu").setItems(options,(d,selection)->{if(selection==0){stockBalance();return;}int id=selection-1;
       EditText input=new EditText(this);input.setInputType(android.text.InputType.TYPE_CLASS_NUMBER);input.setHint("Bilangan unit / cucuk");
-      new AlertDialog.Builder(this).setTitle("Tambah stok: "+names[id]).setView(input).setPositiveButton("Simpan",(dialog,w)->{try{int value=Integer.parseInt(input.getText().toString().trim());if(value<=0||value>100000)throw new NumberFormatException();JSONObject record=new JSONObject();record.put("time",timestamp());record.put("item",id);record.put("qty",value);appendEntry("stock_entries",record);message("Stok ditambah: "+value+" · "+names[id]);}catch(Exception e){message("Masukkan bilangan stok yang sah");}}).setNegativeButton("Batal",null).show();
+      new AlertDialog.Builder(this).setTitle("Tambah stok: "+names[id]).setView(input).setPositiveButton("Simpan",(dialog,w)->{try{int value=Integer.parseInt(input.getText().toString().trim());if(value<=0||value>100000)throw new NumberFormatException();JSONObject record=new JSONObject();record.put("time",timestamp());record.put("item",id);record.put("qty",value);appendEntry("stock_entries",record);draw();message("Stok ditambah: "+value+" · "+names[id]);}catch(Exception e){message("Masukkan bilangan stok yang sah");}}).setNegativeButton("Batal",null).show();
     }).setNegativeButton("Tutup",null).show();}
   int[] soldQty(){int[] sold=new int[names.length];JSONArray list=entries("stock_sales");for(int i=0;i<list.length();i++){JSONObject record=list.optJSONObject(i);if(record==null)continue;JSONArray q=record.optJSONArray("qty");if(q!=null)for(int j=0;j<sold.length;j++)sold[j]+=q.optInt(j); }return sold;}
   void stockBalance(){int[] added=new int[names.length],sold=soldQty();JSONArray list=entries("stock_entries");for(int i=0;i<list.length();i++){JSONObject entry=list.optJSONObject(i);if(entry!=null){int id=entry.optInt("item",-1);if(id>=0&&id<added.length)added[id]+=entry.optInt("qty");}}
@@ -116,9 +141,48 @@ public class MainActivity extends Activity {
     new AlertDialog.Builder(this).setTitle(incoming?"Catat duit masuk":"Catat duit keluar").setView(form).setPositiveButton("Simpan",(d,w)->{try{java.math.BigDecimal rm=new java.math.BigDecimal(amount.getText().toString().trim());int cents=rm.movePointRight(2).intValueExact();if(cents<=0)throw new Exception();JSONObject entry=new JSONObject();entry.put("time",timestamp());entry.put("month",date().substring(0,7));entry.put("amount",incoming?cents:-cents);entry.put("note",note.getText().toString().trim());appendEntry("cash_entries",entry);message("Catatan disimpan");}catch(Exception e){message("Masukkan jumlah RM yang sah");}}).setNegativeButton("Batal",null).show();}
   void cashHistory(){String month=date().substring(0,7);JSONArray list=entries("cash_entries");int incoming=0,outgoing=0;StringBuilder b=new StringBuilder();for(int i=0;i<list.length();i++){JSONObject entry=list.optJSONObject(i);if(entry==null||!month.equals(entry.optString("month")))continue;int value=entry.optInt("amount");if(value>0)incoming+=value;else outgoing-=value;b.append(entry.optString("time")).append(value>0?"  MASUK ":"  KELUAR ").append(money(Math.abs(value))).append("\n").append(entry.optString("note")).append("\n\n");}
     new AlertDialog.Builder(this).setTitle("Duit masuk / keluar · "+month).setMessage("Masuk: "+money(incoming)+"\nKeluar: "+money(outgoing)+"\nBaki catatan: "+money(incoming-outgoing)+"\n\n"+(b.length()==0?"Belum ada catatan.":b.toString())+"\nJualan POS direkod berasingan.").setPositiveButton("Tutup",null).show();}
+  void settings(){new AlertDialog.Builder(this).setTitle("Tetapan data").setItems(new String[]{"No. telefon resit","Reset stok sahaja","Reset semua data (jualan, stok, duit & tetapan)"},(d,i)->{if(i==0)editPhone();else resetData(i==2);}).show();}
+  void resetData(boolean all){String label=all?"SEMUA data jualan, stok, duit dan tetapan":"stok dan baki stok";
+    new AlertDialog.Builder(this).setTitle("Padam "+label+"?").setMessage(all?"Rekod tidak boleh dipulihkan selepas dipadam. Eksport rekod sebelum teruskan.":"Rekod jualan, duit, nombor telefon dan printer masih disimpan. Stok akan kembali 0.")
+      .setPositiveButton("Teruskan",(d,w)->new AlertDialog.Builder(this).setTitle("Sahkan reset").setMessage("Anda pasti mahu padam "+label+"?")
+        .setPositiveButton("Ya, padam",(dd,ww)->{if(all)getPreferences(0).edit().clear().commit();else getPreferences(0).edit().remove("stock_entries").remove("stock_sales").commit();Arrays.fill(qty,0);draw();message("Reset selesai");})
+        .setNegativeButton("Batal",null).show()).setNegativeButton("Batal",null).show();}
+  void exportMenu(){int current=Calendar.getInstance().get(Calendar.YEAR);String[] years=new String[2];years[0]="Tahun "+current;years[1]="Tahun "+(current-1);
+    new AlertDialog.Builder(this).setTitle("Eksport rekod jualan").setItems(years,(d,i)->{exportYear=current-i;
+      new AlertDialog.Builder(this).setTitle("Tahun "+exportYear).setItems(new String[]{"Excel (CSV)","PDF"},(dialog,kind)->{
+        Intent intent=new Intent(Intent.ACTION_CREATE_DOCUMENT);intent.addCategory(Intent.CATEGORY_OPENABLE);
+        intent.setType(kind==0?"text/csv":"application/pdf");intent.putExtra(Intent.EXTRA_TITLE,"WarisanPOS-Jualan-"+exportYear+(kind==0?".csv":".pdf"));
+        try{startActivityForResult(intent,kind==0?EXPORT_CSV:EXPORT_PDF);}catch(Exception e){message("Telefon tidak boleh membuka pilihan simpan fail");}
+      }).show();}).show();}
+  @Override protected void onActivityResult(int request,int result,Intent data){super.onActivityResult(request,result,data);
+    if(result!=RESULT_OK||data==null||data.getData()==null)return;Uri uri=data.getData();
+    try(OutputStream out=getContentResolver().openOutputStream(uri)){
+      if(out==null)throw new IOException("Gagal membuka fail");
+      if(request==EXPORT_CSV)writeCsv(out,exportYear);else if(request==EXPORT_PDF)writePdf(out,exportYear);else return;
+      message("Rekod "+exportYear+" berjaya disimpan");
+    }catch(Exception e){new AlertDialog.Builder(this).setTitle("Eksport gagal").setMessage(e.getMessage()).setPositiveButton("OK",null).show();}
+  }
+  void writeCsv(OutputStream out,int year)throws IOException{StringBuilder b=new StringBuilder("\uFEFFTahun,Bulan,Tarikh,Bilangan pesanan,Jualan (RM)\r\n");int annual=0;
+    for(int month=1;month<=12;month++){String key=String.format(Locale.US,"%04d-%02d",year,month);int monthSales=0,monthOrders=0;
+      for(int day=1;day<=31;day++){String dayKey=key+String.format(Locale.US,"-%02d",day);int sale=getPreferences(0).getInt("sales_"+dayKey,0),orders=getPreferences(0).getInt("orders_"+dayKey,0);if(sale==0&&orders==0)continue;monthSales+=sale;monthOrders+=orders;b.append(year).append(',').append(month).append(',').append(dayKey).append(',').append(orders).append(',').append(String.format(Locale.US,"%.2f",sale/100.0)).append("\r\n");}
+      b.append(year).append(',').append(month).append(",JUMLAH BULAN,").append(monthOrders).append(',').append(String.format(Locale.US,"%.2f",monthSales/100.0)).append("\r\n");annual+=monthSales;}
+    b.append(year).append(",,JUMLAH SETAHUN,,").append(String.format(Locale.US,"%.2f",annual/100.0)).append("\r\n");out.write(b.toString().getBytes(StandardCharsets.UTF_8));}
+  void writePdf(OutputStream out,int year)throws IOException{PdfDocument pdf=new PdfDocument();try{int pageNumber=0,y=0;PdfDocument.Page page=null;Canvas canvas=null;Paint p=new Paint(3);p.setTypeface(Typeface.create(Typeface.MONOSPACE,Typeface.NORMAL));p.setTextSize(11);int annual=0;
+      for(int month=1;month<=12;month++){String key=String.format(Locale.US,"%04d-%02d",year,month);int monthly=monthTotal(key);
+        if(page==null||y>745){if(page!=null)pdf.finishPage(page);page=pdf.startPage(new PdfDocument.PageInfo.Builder(595,842,++pageNumber).create());canvas=page.getCanvas();canvas.drawColor(Color.WHITE);p.setColor(green);p.setTypeface(Typeface.DEFAULT_BOLD);p.setTextSize(18);canvas.drawText("WARISAN POS  |  REKOD JUALAN "+year,35,42,p);p.setTypeface(Typeface.MONOSPACE);p.setTextSize(11);p.setColor(ink);y=75;}
+        p.setTypeface(Typeface.DEFAULT_BOLD);canvas.drawText("BULAN "+key+"    "+money(monthly),35,y,p);p.setTypeface(Typeface.MONOSPACE);y+=19;annual+=monthly;
+        for(int day=1;day<=31;day++){String dayKey=key+String.format(Locale.US,"-%02d",day);int sale=getPreferences(0).getInt("sales_"+dayKey,0),orders=getPreferences(0).getInt("orders_"+dayKey,0);if(sale==0&&orders==0)continue;
+          if(y>765){pdf.finishPage(page);page=pdf.startPage(new PdfDocument.PageInfo.Builder(595,842,++pageNumber).create());canvas=page.getCanvas();canvas.drawColor(Color.WHITE);y=50;}
+          canvas.drawText(dayKey+"     "+String.format(Locale.US,"%3d pesanan     ",orders)+money(sale),45,y,p);y+=16;}
+        y+=11;
+      }
+      if(page!=null){if(y>770){pdf.finishPage(page);page=pdf.startPage(new PdfDocument.PageInfo.Builder(595,842,++pageNumber).create());canvas=page.getCanvas();canvas.drawColor(Color.WHITE);y=50;}
+        p.setTypeface(Typeface.DEFAULT_BOLD);p.setTextSize(15);p.setColor(green);canvas.drawText("JUMLAH SETAHUN: "+money(annual),35,y+12,p);pdf.finishPage(page);}
+      pdf.writeTo(out);
+    }finally{pdf.close();}}
   void editPhone(){EditText input=new EditText(this);input.setSingleLine(true);input.setInputType(android.text.InputType.TYPE_CLASS_PHONE);input.setText(getPreferences(0).getString("receipt_phone",""));input.setHint("Contoh: 012-345 6789");
     new AlertDialog.Builder(this).setTitle("No. telefon pada resit").setView(input).setPositiveButton("Simpan",(d,w)->{getPreferences(0).edit().putString("receipt_phone",input.getText().toString().trim()).apply();message("No. telefon resit disimpan");}).setNegativeButton("Batal",null).show();}
-  void pay(){if(sum()==0){Toast.makeText(this,"Tambah menu dahulu",Toast.LENGTH_SHORT).show();return;}final int due=sum();
+  void pay(){if(sum()==0){Toast.makeText(this,"Tambah menu dahulu",Toast.LENGTH_SHORT).show();return;}for(int i=0;i<qty.length;i++)if(qty[i]>stock(i)){message("Stok "+names[i]+" tidak cukup. Semak pesanan.");draw();return;}final int due=sum();
     new AlertDialog.Builder(this).setTitle("Bayaran "+money(due)).setItems(new String[]{"Tunai","QR / DuitNow"},(dialog,index)->confirm(index==0?"Tunai":"QR / DuitNow",due)).setNegativeButton("Batal",null).show();}
   String line(String left,String right){int spaces=Math.max(1,32-left.length()-right.length());return left+String.format(Locale.US,"%"+spaces+"s","")+right+"\n";}
   String receipt(String method,int due,int order){StringBuilder b=new StringBuilder();
