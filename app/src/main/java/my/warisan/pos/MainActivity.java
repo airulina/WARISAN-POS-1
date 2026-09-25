@@ -206,7 +206,7 @@ if(user == null){
         firebaseAuth.signOut();
         googleSignInClient.signOut().addOnCompleteListener(task -> draw());
     });
-}action("Pilih printer Bluetooth",()->choosePrinter());action("No. telefon pada resit",()->editPhone());action("Alamat Gmail pada resit",()->editEmail());action("Edit harga jualan & harga mentah",()->chooseMenuPrice());action("+ Tambah menu & harga",()->addMenu());action("Upload gambar menu",()->pickMenuImage());action("Backup semua data",()->backupPicker(false));action("☁️ Sync data ke Google",()->syncToCloud());action("Pulihkan backup",()->backupPicker(true));action("Pulihkan salinan sebelum update / pulih",()->recoverInternal());action("Reset stok sahaja",()->resetData(false));action("Reset semua data",()->resetData(true));}}
+}action("Pilih printer Bluetooth",()->choosePrinter());action("No. telefon pada resit",()->editPhone());action("Alamat Gmail pada resit",()->editEmail());action("Edit harga jualan & harga mentah",()->chooseMenuPrice());action("+ Tambah menu & harga",()->addMenu());action("Upload gambar menu",()->pickMenuImage());action("Backup semua data",()->backupPicker(false));action("☁️ Sync data ke Google",()->syncToCloud());action("Pulihkan dari Google",()->restoreFromCloud());action("Pulihkan salinan sebelum update / pulih",()->recoverInternal());action("Reset stok sahaja",()->resetData(false));action("Reset semua data",()->resetData(true));}}
   void stockTile(LinearLayout row,String title,String value){LinearLayout box=col();box.setPadding(dp(10),dp(8),dp(7),dp(8));box.setBackground(shape(0xffd5dfec,10));add(box,text(title,10,muted,true),-1,-2);add(box,text(value,21,"BAKI".equals(title)?blue:ink,true),-1,-2);LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(0,-2,1);p.setMargins(dp(2),0,dp(2),0);row.addView(box,p);}
   void stockEntryItem(int id){stockEntryItem(id,false);}
   void stockEntryItem(int id,boolean opening){if(unlimited(id)){message("Kuah kacang diurus mengikut liter, tanpa had stok unit.");return;}if(opening&&hasOpeningStock(id)){message("Stok awal sudah direkod. Gunakan Restock untuk tambah.");return;}
@@ -601,6 +601,42 @@ if(user == null){
     cloudSyncBusy=false;
     message("Sync gagal: "+e.getMessage());
   }
+  }void restoreFromCloud(){
+    FirebaseUser user=firebaseAuth.getCurrentUser();
+
+    if(user==null){
+        message("Sila sambungkan akaun Google dahulu");
+        return;
+    }
+
+    firestore.collection("users")
+        .document(user.getUid())
+        .collection("warisanpos")
+        .document("current")
+        .get()
+        .addOnSuccessListener(doc->{
+            if(!doc.exists()){
+                message("Backup Google belum ada");
+                return;
+            }
+
+            String backup=doc.getString("backup");
+
+            if(backup==null || backup.trim().isEmpty()){
+                message("Backup Google kosong");
+                return;
+            }
+
+            try{
+                JSONObject data=new JSONObject(backup);
+                restoreBackup(data);
+            }catch(Exception e){
+                message("Gagal pulihkan backup: "+e.getMessage());
+            }
+        })
+        .addOnFailureListener(e->
+            message("Gagal ambil backup: "+e.getMessage())
+        );
   }
   void readBackup(Uri uri){try(InputStream in=getContentResolver().openInputStream(uri)){if(in==null)throw new IOException();java.io.ByteArrayOutputStream out=new java.io.ByteArrayOutputStream();byte[] bytes=new byte[8192];int n;while((n=in.read(bytes))!=-1){if(out.size()+n>32*1024*1024)throw new IOException("Fail terlalu besar");out.write(bytes,0,n);}JSONObject root=new JSONObject(new String(out.toByteArray(),StandardCharsets.UTF_8));if(!"my.warisan.pos".equals(root.getString("app"))||root.getInt("format")!=1)throw new IOException("Format backup tidak serasi");JSONObject data=root.getJSONObject("preferences");validateBackup(data);new AlertDialog.Builder(this).setTitle("Pulihkan backup?").setMessage("Backup: "+root.optString("created")+"\nData semasa akan digantikan dengan backup ini. Salinan sebelum pulih disimpan dalam telefon. Gambar menu mungkin perlu dipilih semula jika berpindah telefon.").setPositiveButton("Pulihkan",(d,w)->restoreBackup(data)).setNegativeButton("Batal",null).show();}catch(Exception e){message("Backup tidak sah. Data semasa tidak diubah.");}}
   void validateBackup(JSONObject data)throws Exception{Iterator<String> keys=data.keys();while(keys.hasNext()){String key=keys.next();JSONObject e=data.getJSONObject(key);String type=e.getString("type");Object value=e.get("value");if(type.equals("int"))new java.math.BigDecimal(value.toString()).intValueExact();else if(type.equals("long"))new java.math.BigDecimal(value.toString()).longValueExact();else if(type.equals("float")){float f=Float.parseFloat(value.toString());if(Float.isInfinite(f)||Float.isNaN(f))throw new Exception();}else if(type.equals("boolean")){if(!(value instanceof Boolean))throw new Exception();}else if(type.equals("set")){JSONArray a=e.getJSONArray("value");for(int i=0;i<a.length();i++)if(!(a.get(i) instanceof String))throw new Exception();}else if(type.equals("string")){if(!(value instanceof String))throw new Exception();}else throw new Exception();
