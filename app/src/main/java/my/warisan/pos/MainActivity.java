@@ -184,7 +184,7 @@ googleSignInClient = GoogleSignIn.getClient(this, gso);snapshotBeforeUpdate();lo
       LinearLayout loss=row();metric(loss,"STOK ROSAK",money(damageTotal(month)),0xffb54743,()->damageHistory());add(body,loss,-1,-2);gap(body,12);
       add(body,text("Masuk termasuk jualan POS • Keluar termasuk restock",11,muted,false),-1,-2);
       add(body,text("Stok rosak: kerugian nilai stok, bukan bayaran baru",11,ink,true),-1,-2);
-      CashChart cashChart=new CashChart(month);add(body,cashChart,-1,240);gap(body,8);
+      CashDonutChart cashChart=new CashDonutChart(month);add(body,cashChart,-1,270);gap(body,8);
       action("Pecahan harian graf",()->cashDaily(month));
       LinearLayout controls=row();metric(controls,"+ CATAT","Masuk",blue,()->cashEntry(true));metric(controls,"− CATAT","Keluar",ink,()->cashEntry(false));add(body,controls,-1,-2);gap(body,12);
       action("Lihat catatan bulan dipilih",()->cashHistory());add(body,text("Baki bulan = jualan POS + duit masuk − duit keluar. Stok rosak mengurangkan baki dan nilai stok; kos restock tidak ditolak dua kali. Baki bulan bukan untung bersih.",11,muted,false),-1,-2);
@@ -556,13 +556,49 @@ if(user == null){
   int[][] cashSeries(String month){int days=daysInMonth(month);int[][] values=new int[3][days];for(int d=0;d<days;d++)values[0][d]=getPreferences(0).getInt("sales_"+month+String.format(Locale.US,"-%02d",d+1),0);
     for(String key:new String[]{"cash_entries","stock_damage"}){JSONArray list=entries(key);for(int i=0;i<list.length();i++){JSONObject e=list.optJSONObject(i);if(e==null)continue;String day=entryDay(e);if(!day.startsWith(month+"-"))continue;try{int d=Integer.parseInt(day.substring(8,10))-1;if(d<0||d>=days)continue;if(key.equals("stock_damage"))values[2][d]+=e.optInt("cost");else{int n=e.optInt("amount");values[n>=0?0:1][d]+=Math.abs(n);}}catch(Exception ignored){}}}return values;}
   void cashDaily(String month){int[][] v=cashSeries(month);StringBuilder b=new StringBuilder();for(int d=0;d<v[0].length;d++)if(v[0][d]!=0||v[1][d]!=0||v[2][d]!=0)b.append(d+1).append(" ").append(monthLabel(month)).append("\nMasuk ").append(money(v[0][d])).append(" · Keluar ").append(money(v[1][d])).append("\nRosak ").append(money(v[2][d])).append(" · Baki ").append(money(v[0][d]-v[1][d])).append("\n\n");new AlertDialog.Builder(this).setTitle("Pecahan harian").setMessage(b.length()==0?"Belum ada rekod.":b.toString()).setPositiveButton("Tutup",null).show();}
-  class CashChart extends View {final int[][] values;final Paint p=new Paint(3);final int[] colors={0xff218364,0xffbd473e,0xffb17916};
-    CashChart(String month){super(MainActivity.this);values=cashSeries(month);setContentDescription("Graf harian duit masuk, duit keluar dan stok rosak. Nilai tepat tersedia dalam Pecahan harian graf.");}
-    @Override protected void onDraw(Canvas c){super.onDraw(c);float left=dp(61),right=getWidth()-dp(12),top=dp(35),bottom=getHeight()-dp(30);int max=100;for(int[] line:values)for(int v:line)max=Math.max(max,v);
-      p.setTypeface(Typeface.DEFAULT);p.setTextSize(dp(9));p.setTextAlign(Paint.Align.LEFT);String[] labels={"Masuk","Keluar","Rosak"};for(int k=0;k<3;k++){p.setColor(colors[k]);c.drawText(labels[k],left+k*(right-left)/3,dp(19),p);}
-      for(int i=0;i<=4;i++){float y=bottom-(bottom-top)*i/4;p.setColor(0xffb4c0d0);p.setStrokeWidth(dp(1));c.drawLine(left,y,right,y,p);p.setColor(muted);p.setTextAlign(Paint.Align.RIGHT);c.drawText(String.format(Locale.US,"%.0f",max/100.0*i/4),left-dp(5),y+dp(3),p);}p.setTextAlign(Paint.Align.LEFT);c.drawText("RM",dp(4),top-dp(8),p);
-      for(int k=0;k<3;k++){p.setColor(colors[k]);p.setStrokeWidth(dp(2));for(int i=0;i<values[k].length;i++){float x=left+(right-left)*i/(values[k].length-1),y=bottom-(bottom-top)*values[k][i]/max;if(i>0){float prevX=left+(right-left)*(i-1)/(values[k].length-1),prevY=bottom-(bottom-top)*values[k][i-1]/max;c.drawLine(prevX,prevY,x,y,p);}if(values[k][i]>0)c.drawCircle(x,y,dp(3),p);}}
-      p.setColor(muted);p.setTextAlign(Paint.Align.CENTER);for(int d=1;d<=values[0].length;d++)if(d==1||d%5==0||d==values[0].length)c.drawText(""+d,left+(right-left)*(d-1)/(values[0].length-1),bottom+dp(18),p);
+  class CashDonutChart extends View {
+    final int[] totals=new int[3];
+    final Paint p=new Paint(Paint.ANTI_ALIAS_FLAG);
+    final int[] colors={0xff218364,0xffbd473e,0xffb17916};
+    final String[] labels={"Masuk","Keluar","Rosak"};
+
+    CashDonutChart(String month){
+      super(MainActivity.this);
+      int[][] v=cashSeries(month);
+      for(int k=0;k<3;k++)for(int n:v[k])totals[k]+=Math.abs(n);
+      setContentDescription("Graf bulat duit masuk, duit keluar dan stok rosak. Nilai tepat tersedia dalam Pecahan harian graf.");
+    }
+
+    @Override protected void onDraw(Canvas c){
+      super.onDraw(c);
+      float w=getWidth(),h=getHeight();
+      float cx=w*.50f,cy=dp(118),outer=dp(78),stroke=dp(27);
+      float sum=totals[0]+totals[1]+totals[2];
+
+      p.setStyle(Paint.Style.STROKE);p.setStrokeWidth(stroke);p.setStrokeCap(Paint.Cap.BUTT);
+      android.graphics.RectF oval=new android.graphics.RectF(cx-outer,cy-outer,cx+outer,cy+outer);
+      if(sum<=0){
+        p.setColor(0xffd8dee8);c.drawArc(oval,-90,360,false,p);
+      }else{
+        float angle=-90f;
+        for(int k=0;k<3;k++){
+          if(totals[k]<=0)continue;
+          float sweep=360f*totals[k]/sum;
+          p.setColor(colors[k]);c.drawArc(oval,angle,sweep,false,p);angle+=sweep;
+        }
+      }
+
+      p.setStyle(Paint.Style.FILL);p.setTextAlign(Paint.Align.CENTER);p.setTypeface(Typeface.DEFAULT_BOLD);
+      p.setColor(ink);p.setTextSize(dp(12));c.drawText("ALIRAN DUIT",cx,cy-dp(5),p);
+      p.setTypeface(Typeface.DEFAULT);p.setColor(muted);p.setTextSize(dp(10));c.drawText("bulan dipilih",cx,cy+dp(13),p);
+
+      float y=h-dp(35);float slot=w/3f;
+      for(int k=0;k<3;k++){
+        float x=slot*k+slot/2f;
+        p.setColor(colors[k]);c.drawCircle(x-dp(30),y-dp(9),dp(4),p);
+        p.setTextAlign(Paint.Align.LEFT);p.setTypeface(Typeface.DEFAULT_BOLD);p.setTextSize(dp(10));c.drawText(labels[k],x-dp(21),y-dp(5),p);
+        p.setColor(ink);p.setTypeface(Typeface.DEFAULT);p.setTextSize(dp(10));c.drawText(money(totals[k]),x-dp(30),y+dp(13),p);
+      }
     }
   }
   void backupPicker(boolean restore){Intent intent=new Intent(restore?Intent.ACTION_OPEN_DOCUMENT:Intent.ACTION_CREATE_DOCUMENT);intent.addCategory(Intent.CATEGORY_OPENABLE);intent.setType(restore?"*/*":"application/json");if(!restore)intent.putExtra(Intent.EXTRA_TITLE,"WarisanPOS-Backup-"+date()+".json");try{startActivityForResult(intent,restore?IMPORT_BACKUP:EXPORT_BACKUP);}catch(Exception e){message("Pilihan fail tidak dapat dibuka");}}
