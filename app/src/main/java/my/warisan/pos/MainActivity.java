@@ -629,7 +629,10 @@ if(user == null){
 
             try{
                 JSONObject data=new JSONObject(backup);
-                restoreBackup(data);
+data.remove("app");
+data.remove("version");
+data.remove("createdAt");
+restoreBackup(data);
             }catch(Exception e){
                 message("Gagal pulihkan backup: "+e.getMessage());
             }
