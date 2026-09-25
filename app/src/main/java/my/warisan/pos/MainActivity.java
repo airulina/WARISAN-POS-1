@@ -191,12 +191,10 @@ googleSignInClient = GoogleSignIn.getClient(this, gso);snapshotBeforeUpdate();lo
     }else if(activePage==4){
       heading("Setting","WarisanPOS 3.15 · Tetapan kedai dan data.");
       action("👤  Account",()->{activePage=5;draw();});
-      action("Pilih printer Bluetooth",()->choosePrinter());
-      action("No. telefon pada resit",()->editPhone());
-      action("Alamat Gmail pada resit",()->editEmail());
+      action("🧾  Bill / Resit",()->{activePage=7;draw();});
       action("🍽  Pengurusan Menu",()->{activePage=6;draw();});
-      action("Reset stok sahaja",()->resetData(false));
-      action("Reset semua data",()->resetData(true));
+      action("🏪  Maklumat Kedai",()->{activePage=8;draw();});
+      action("⚠  Reset",()->{activePage=9;draw();});
     }else if(activePage==5){
       heading("Account","Google, backup dan pemulihan data.");
       action("‹  Kembali ke Setting",()->{activePage=4;draw();});
@@ -220,6 +218,26 @@ googleSignInClient = GoogleSignIn.getClient(this, gso);snapshotBeforeUpdate();lo
       action("Edit harga jualan & harga mentah",()->chooseMenuPrice());
       action("Upload / tukar gambar menu",()->pickMenuImage());
       action("− Padam menu",()->deleteMenu());
+    }else if(activePage==7){
+      heading("Bill / Resit","Printer dan maklumat pada resit.");
+      action("‹  Kembali ke Setting",()->{activePage=4;draw();});
+      action("Pilih printer Bluetooth",()->choosePrinter());
+      action("No. telefon pada resit",()->editPhone());
+      action("Alamat Gmail pada resit",()->editEmail());
+      action("Preview resit",()->previewTestReceipt(false));
+      action("Test Print",()->previewTestReceipt(true));
+    }else if(activePage==8){
+      heading("Maklumat Kedai","Butiran kedai dan syarikat.");
+      action("‹  Kembali ke Setting",()->{activePage=4;draw();});
+      action("Nama kedai",()->editShopInfo("shop_name","Nama kedai","WARISAN FROZEN"));
+      action("Nama syarikat",()->editShopInfo("company_name","Nama syarikat",""));
+      action("No. lesen / pendaftaran",()->editShopInfo("company_reg","No. lesen / pendaftaran perniagaan",""));
+      action("Alamat HQ",()->editShopInfo("company_hq","Alamat HQ",""));
+    }else if(activePage==9){
+      heading("Reset","Pilihan reset data WarisanPOS.");
+      action("‹  Kembali ke Setting",()->{activePage=4;draw();});
+      action("Reset stok sahaja",()->resetData(false));
+      action("Reset semua data",()->resetData(true));
     }}
   void stockTile(LinearLayout row,String title,String value){LinearLayout box=col();box.setPadding(dp(10),dp(8),dp(7),dp(8));box.setBackground(shape(0xffd5dfec,10));add(box,text(title,10,muted,true),-1,-2);add(box,text(value,21,"BAKI".equals(title)?blue:ink,true),-1,-2);LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(0,-2,1);p.setMargins(dp(2),0,dp(2),0);row.addView(box,p);}
   void stockEntryItem(int id){stockEntryItem(id,false);}
@@ -444,7 +462,8 @@ googleSignInClient = GoogleSignIn.getClient(this, gso);snapshotBeforeUpdate();lo
       .setPositiveButton("Semak bayaran",(d,w)->confirm("QR / DuitNow",due)).setNegativeButton("Batal",null).show();}
   String line(String left,String right){int spaces=Math.max(1,32-left.length()-right.length());return left+String.format(Locale.US,"%"+spaces+"s","")+right+"\n";}
   String receipt(String method,int due,int order,int tendered){StringBuilder b=new StringBuilder();
-    b.append("          WARISAN FROZEN\n");
+    String shopName=getPreferences(0).getString("shop_name","WARISAN FROZEN");
+    b.append(centerReceipt(shopName));
     String phone=getPreferences(0).getString("receipt_phone","");if(!phone.isEmpty())b.append("       Tel: ").append(phone).append("\n");
     String email=getPreferences(0).getString("receipt_email","");if(!email.isEmpty())b.append(email).append("\n");
     b.append("--------------------------------\n").append(line("No. resit",String.format(Locale.US,"#%04d",order)))
@@ -453,7 +472,7 @@ googleSignInClient = GoogleSignIn.getClient(this, gso);snapshotBeforeUpdate();lo
     b.append("--------------------------------\n").append(line("JUMLAH",money(due))).append(line("BAYAR",method));
     if("Tunai".equals(method))b.append(line("TUNAI DITERIMA",money(tendered))).append(line("BAKI PULANGAN",money(tendered-due)));
     return b
-      .append("================================\n       TERIMA KASIH!\n   Sila datang lagi.\n\n\n").toString();}
+      .append("================================\n       TERIMA KASIH!\n   Sila datang lagi.\n").append(ownerReceipt()).append("\n\n").toString();}
   void confirm(String method,int due){confirm(method,due,due);}
   void confirm(String method,int due,int tendered){new AlertDialog.Builder(this).setTitle("Sahkan bayaran").setMessage(method+" · "+money(due)+("Tunai".equals(method)?"\nTunai diterima: "+money(tendered)+"\nBaki pulangan: "+money(tendered-due):"")+"\n\nPastikan bayaran sudah diterima sebelum simpan.")
     .setPositiveButton("Bayaran diterima",(d,w)->{
@@ -477,7 +496,7 @@ googleSignInClient = GoogleSignIn.getClient(this, gso);snapshotBeforeUpdate();lo
     LinearLayout sheet=col();sheet.setPadding(dp(18),dp(12),dp(18),dp(14));sheet.setBackgroundColor(Color.WHITE);scroll.addView(sheet);
     ImageView logo=new ImageView(this);logo.setImageResource(R.drawable.warisan_logo);logo.setScaleType(ImageView.ScaleType.FIT_CENTER);
     add(sheet,logo,-1,74);gap(sheet,5);
-    TextView brand=text("WARISAN FROZEN",17,blue,true);brand.setGravity(Gravity.CENTER);add(sheet,brand,-1,-2);
+    TextView brand=text(getPreferences(0).getString("shop_name","WARISAN FROZEN"),17,blue,true);brand.setGravity(Gravity.CENTER);add(sheet,brand,-1,-2);
     String phone=getPreferences(0).getString("receipt_phone","");
     TextView contact=text(phone.isEmpty()?"No. telefon belum diisi":"Tel: "+phone,11,muted,false);contact.setGravity(Gravity.CENTER);add(sheet,contact,-1,-2);
     String email=getPreferences(0).getString("receipt_email","");if(!email.isEmpty()){TextView mail=text(email,11,muted,false);mail.setGravity(Gravity.CENTER);add(sheet,mail,-1,-2);}
@@ -490,10 +509,16 @@ googleSignInClient = GoogleSignIn.getClient(this, gso);snapshotBeforeUpdate();lo
     receiptRule(sheet);receiptRow(sheet,"JUMLAH",money(due),true);gap(sheet,8);
     receiptRow(sheet,"Kaedah bayaran",method,false);if("Tunai".equals(method)){gap(sheet,6);receiptRow(sheet,"Tunai diterima",money(tendered),false);gap(sheet,6);receiptRow(sheet,"BAKI PULANGAN",money(tendered-due),true);}receiptRule(sheet);
     TextView thanks=text("Terima kasih! Sila datang lagi.",12,muted,false);thanks.setGravity(Gravity.CENTER);add(sheet,thanks,-1,-2);
+    String owner=ownerDisplay();if(!owner.isEmpty()){gap(sheet,8);TextView owned=text("DIMILIKI OLEH : "+owner,10,muted,true);owned.setGravity(Gravity.CENTER);add(sheet,owned,-1,-2);}
     new AlertDialog.Builder(this).setTitle("Semak resit").setView(scroll)
       .setPositiveButton("Cetak resit",(dialog,button)->print(printed))
       .setNegativeButton("Tutup",null).show();
   }
+  String centerReceipt(String value){if(value==null)value="";value=value.trim();if(value.length()>32)value=value.substring(0,32);int left=Math.max(0,(32-value.length())/2);return String.format(Locale.US,"%"+left+"s%s\n","",value);}
+  String ownerDisplay(){String company=getPreferences(0).getString("company_name","").trim();String reg=getPreferences(0).getString("company_reg","").trim();if(company.isEmpty()&&reg.isEmpty())return "";if(company.isEmpty())return reg;if(reg.isEmpty())return company;return company+" ("+reg+")";}
+  String ownerReceipt(){String owner=ownerDisplay();return owner.isEmpty()?"":"DIMILIKI OLEH : "+owner+"\n";}
+  void editShopInfo(String key,String title,String fallback){EditText input=new EditText(this);input.setSingleLine(!"company_hq".equals(key));input.setText(getPreferences(0).getString(key,fallback));input.setHint(title);new AlertDialog.Builder(this).setTitle(title).setView(input).setPositiveButton("Simpan",(d,w)->{getPreferences(0).edit().putString(key,input.getText().toString().trim()).apply();message(title+" disimpan");}).setNegativeButton("Batal",null).show();}
+  void previewTestReceipt(boolean directPrint){int[] sample=new int[names.length];if(sample.length>0)sample[0]=10;int due=sample.length>0?prices[0]*10:0;String printed=receipt("Tunai",due,1,due);if(directPrint){print(printed);return;}previewReceipt(printed,sample,"Tunai",due,1,due);}
   void choosePrinter(){
     if(android.os.Build.VERSION.SDK_INT>=31&&checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT)!=PackageManager.PERMISSION_GRANTED){
       requestPermissions(new String[]{Manifest.permission.BLUETOOTH_CONNECT},REQUEST_BLUETOOTH);return;
