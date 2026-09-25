@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "728293918382",
+    "project_id": "warisan-pos",
+    "storage_bucket": "warisan-pos.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:728293918382:android:7f2c9517b4f73480af4f3f",
+        "android_client_info": {
+          "package_name": "my.warisan.pos"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAM9K9vjsOlfePsM0po3nY9PZDrAZUUG7U"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
