@@ -632,6 +632,7 @@ if(user == null){
 data.remove("app");
 data.remove("version");
 data.remove("createdAt");
+              data.remove("format");
 restoreBackup(data);
             }catch(Exception e){
                 message("Gagal pulihkan backup: "+e.getMessage());
