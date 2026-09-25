@@ -35,9 +35,13 @@ import com.google.firebase.auth.AuthCredential;
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.auth.FirebaseUser;
 import com.google.firebase.auth.GoogleAuthProvider;
+import com.google.firebase.firestore.FirebaseFirestore;
+import com.google.firebase.firestore.SetOptions;
 
 public class MainActivity extends Activity {
   private FirebaseAuth firebaseAuth;
+  private FirebaseFirestore firestore;
+  private boolean cloudSyncBusy = false;
 private GoogleSignInClient googleSignInClient;
 private static final int RC_SIGN_IN = 9001;
   String[] names={"Sate Ayam","Sate Daging","Sate Kambing","Nasi Impit","Extra Kuah Kacang","Laksa Utara","Kuih Siput"};
@@ -89,7 +93,7 @@ private static final int RC_SIGN_IN = 9001;
   TextView chip(String s,int back,int fore){TextView t=text(s,13,fore,true);t.setGravity(Gravity.CENTER);t.setBackground(shape(back,11));t.setPadding(dp(8),dp(5),dp(8),dp(5));return t;}
   void loadMenu(){JSONArray custom=entries("custom_menu");int size=7+custom.length();names=Arrays.copyOf(new String[]{"Sate Ayam","Sate Daging","Sate Kambing","Nasi Impit","Extra Kuah Kacang","Laksa Utara","Kuih Siput"},size);icons=Arrays.copyOf(new String[]{"🍢","🥩","🍢","🍚","🥣","🍜","🥨"},size);prices=Arrays.copyOf(new int[]{160,180,200,60,100,700,500},size);qty=new int[size];
     for(int i=7;i<size;i++){JSONObject item=custom.optJSONObject(i-7);names[i]=item==null?"Menu":item.optString("name","Menu");icons[i]="🍽";prices[i]=item==null?0:item.optInt("price");}for(int i=0;i<size;i++)prices[i]=getPreferences(0).getInt("price_"+i,prices[i]);}
-  @Override public void onCreate(Bundle b){super.onCreate(b);firebaseAuth = FirebaseAuth.getInstance();
+  @Override public void onCreate(Bundle b){super.onCreate(b);firebaseAuth = FirebaseAuth.getInstance();firestore = FirebaseFirestore.getInstance();
 GoogleSignInOptions gso = new GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
         .requestIdToken(getString(R.string.default_web_client_id))
         .requestEmail()
@@ -563,6 +567,41 @@ if(user == null){
   }
   void backupPicker(boolean restore){Intent intent=new Intent(restore?Intent.ACTION_OPEN_DOCUMENT:Intent.ACTION_CREATE_DOCUMENT);intent.addCategory(Intent.CATEGORY_OPENABLE);intent.setType(restore?"*/*":"application/json");if(!restore)intent.putExtra(Intent.EXTRA_TITLE,"WarisanPOS-Backup-"+date()+".json");try{startActivityForResult(intent,restore?IMPORT_BACKUP:EXPORT_BACKUP);}catch(Exception e){message("Pilihan fail tidak dapat dibuka");}}
   JSONObject backupJson()throws JSONException{JSONObject root=new JSONObject(),data=new JSONObject();root.put("app","my.warisan.pos");root.put("format",1);root.put("created",timestamp());for(Map.Entry<String,?> e:getPreferences(0).getAll().entrySet()){Object value=e.getValue();JSONObject item=new JSONObject();String type=value instanceof Integer?"int":value instanceof Long?"long":value instanceof Float?"float":value instanceof Boolean?"boolean":value instanceof Set?"set":"string";item.put("type",type);item.put("value",value instanceof Set?new JSONArray((Set<?>)value):value);data.put(e.getKey(),item);}root.put("preferences",data);return root;}
+  void syncToCloud(){
+  FirebaseUser user=firebaseAuth.getCurrentUser();
+
+  if(user==null){
+    message("Sila sambungkan akaun Google dahulu");
+    return;
+  }
+
+  if(cloudSyncBusy)return;
+  cloudSyncBusy=true;
+
+  try{
+    Map<String,Object> cloudData=new HashMap<>();
+    cloudData.put("backup",backupJson().toString());
+    cloudData.put("updatedAt",System.currentTimeMillis());
+
+    firestore.collection("users")
+      .document(user.getUid())
+      .collection("warisanpos")
+      .document("current")
+      .set(cloudData,SetOptions.merge())
+      .addOnSuccessListener(v->{
+        cloudSyncBusy=false;
+        message("Data berjaya sync ke Google");
+      })
+      .addOnFailureListener(e->{
+        cloudSyncBusy=false;
+        message("Sync gagal: "+e.getMessage());
+      });
+
+  }catch(Exception e){
+    cloudSyncBusy=false;
+    message("Sync gagal: "+e.getMessage());
+  }
+  }
   void readBackup(Uri uri){try(InputStream in=getContentResolver().openInputStream(uri)){if(in==null)throw new IOException();java.io.ByteArrayOutputStream out=new java.io.ByteArrayOutputStream();byte[] bytes=new byte[8192];int n;while((n=in.read(bytes))!=-1){if(out.size()+n>32*1024*1024)throw new IOException("Fail terlalu besar");out.write(bytes,0,n);}JSONObject root=new JSONObject(new String(out.toByteArray(),StandardCharsets.UTF_8));if(!"my.warisan.pos".equals(root.getString("app"))||root.getInt("format")!=1)throw new IOException("Format backup tidak serasi");JSONObject data=root.getJSONObject("preferences");validateBackup(data);new AlertDialog.Builder(this).setTitle("Pulihkan backup?").setMessage("Backup: "+root.optString("created")+"\nData semasa akan digantikan dengan backup ini. Salinan sebelum pulih disimpan dalam telefon. Gambar menu mungkin perlu dipilih semula jika berpindah telefon.").setPositiveButton("Pulihkan",(d,w)->restoreBackup(data)).setNegativeButton("Batal",null).show();}catch(Exception e){message("Backup tidak sah. Data semasa tidak diubah.");}}
   void validateBackup(JSONObject data)throws Exception{Iterator<String> keys=data.keys();while(keys.hasNext()){String key=keys.next();JSONObject e=data.getJSONObject(key);String type=e.getString("type");Object value=e.get("value");if(type.equals("int"))new java.math.BigDecimal(value.toString()).intValueExact();else if(type.equals("long"))new java.math.BigDecimal(value.toString()).longValueExact();else if(type.equals("float")){float f=Float.parseFloat(value.toString());if(Float.isInfinite(f)||Float.isNaN(f))throw new Exception();}else if(type.equals("boolean")){if(!(value instanceof Boolean))throw new Exception();}else if(type.equals("set")){JSONArray a=e.getJSONArray("value");for(int i=0;i<a.length();i++)if(!(a.get(i) instanceof String))throw new Exception();}else if(type.equals("string")){if(!(value instanceof String))throw new Exception();}else throw new Exception();
       boolean array=key.equals("stock_entries")||key.equals("stock_sales")||key.equals("stock_damage")||key.equals("cash_entries")||key.equals("custom_menu");if(array){if(!type.equals("string"))throw new Exception();JSONArray a=new JSONArray((String)value);for(int i=0;i<a.length();i++)a.getJSONObject(i);}if((key.equals("printer")||key.startsWith("receipt_")||key.startsWith("menu_image_"))&&!type.equals("string"))throw new Exception();if((key.equals("data_version")||key.startsWith("sales_")||key.startsWith("orders_")||key.startsWith("price_")||key.startsWith("cost_"))&&!type.equals("int"))throw new Exception();}}
