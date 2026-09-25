@@ -531,4 +531,49 @@ if(user == null){
 
   void snapshotBeforeUpdate(){if(getPreferences(0).getInt("data_version",0)>=19)return;try{if(!getPreferences(0).getAll().isEmpty()){java.io.File file=new java.io.File(getFilesDir(),"before-update-19.json");if(!file.exists())try(java.io.FileOutputStream out=new java.io.FileOutputStream(file)){out.write(backupJson().toString().getBytes(StandardCharsets.UTF_8));out.getFD().sync();}}getPreferences(0).edit().putInt("data_version",19).commit();}catch(Exception e){message("Salinan sebelum update gagal. Eksport backup melalui Setting.");}}
   void recoverInternal(){String[] files={"before-update-19.json","before-restore.json"};new AlertDialog.Builder(this).setTitle("Pilih salinan dalaman").setItems(new String[]{"Sebelum update 3.15","Sebelum pemulihan terakhir"},(d,index)->{java.io.File file=new java.io.File(getFilesDir(),files[index]);if(!file.exists()){message("Salinan ini belum tersedia");return;}readBackup(Uri.fromFile(file));}).setNegativeButton("Batal",null).show();}
+  @Override
+protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+    super.onActivityResult(requestCode, resultCode, data);
+
+    if (requestCode == RC_SIGN_IN) {
+        Task<GoogleSignInAccount> task =
+                GoogleSignIn.getSignedInAccountFromIntent(data);
+
+        try {
+            GoogleSignInAccount account =
+                    task.getResult(ApiException.class);
+
+            AuthCredential credential =
+                    GoogleAuthProvider.getCredential(account.getIdToken(), null);
+
+            firebaseAuth.signInWithCredential(credential)
+                    .addOnCompleteListener(this, authTask -> {
+                        if (authTask.isSuccessful()) {
+                            new AlertDialog.Builder(this)
+                                    .setTitle("Berjaya")
+                                    .setMessage("Google berjaya disambungkan")
+                                    .setPositiveButton("OK", null)
+                                    .show();
+                            draw();
+                        } else {
+                            new AlertDialog.Builder(this)
+                                    .setTitle("Firebase Error")
+                                    .setMessage(authTask.getException() == null
+                                            ? "Unknown error"
+                                            : authTask.getException().toString())
+                                    .setPositiveButton("OK", null)
+                                    .show();
+                        }
+                    });
+
+        } catch (ApiException e) {
+            new AlertDialog.Builder(this)
+                    .setTitle("Google Sign-In Error")
+                    .setMessage("Error code: " + e.getStatusCode()
+                            + "\n\n" + e.getMessage())
+                    .setPositiveButton("OK", null)
+                    .show();
+        }
+    }
+}
 }
