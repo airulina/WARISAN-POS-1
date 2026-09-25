@@ -51,7 +51,7 @@ private static final int RC_SIGN_IN = 9001;
   int costUnit(int id){return getPreferences(0).getInt("cost_"+id,id<defaultCosts.length?defaultCosts[id]:0);}
   int costPack(int id){return Math.max(1,getPreferences(0).getInt("cost_pack_"+id,id==3?30:1));}
   int restockCost(int id,int units){long total=((long)units*costUnit(id)+costPack(id)/2)/costPack(id);if(total>Integer.MAX_VALUE)throw new ArithmeticException("Kos terlalu besar");return (int)total;}
-  final int blue=Color.rgb(24,58,104), ink=Color.rgb(19,24,34), gold=Color.rgb(204,154,55), cream=Color.rgb(197,207,222), surface=Color.rgb(231,237,245), muted=Color.rgb(75,87,105);
+  final int blue=Color.rgb(69,126,202), ink=Color.rgb(238,244,252), gold=Color.rgb(218,166,48), cream=Color.rgb(7,20,34), surface=Color.rgb(18,40,64), muted=Color.rgb(166,183,204);
   LinearLayout body,basket; TextView total,today,items; Button payButton;
   static final int REQUEST_BLUETOOTH=42, EXPORT_CSV=43, EXPORT_PDF=44, PICK_IMAGE=45, EXPORT_BACKUP=46, IMPORT_BACKUP=47;
   int exportYear;
@@ -105,7 +105,7 @@ googleSignInClient = GoogleSignIn.getClient(this, gso);snapshotBeforeUpdate();lo
     LinearLayout screen=col();screen.setBackgroundColor(cream);
     getWindow().setStatusBarColor(cream);
     getWindow().setNavigationBarColor(ink);
-    getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR);
+    getWindow().getDecorView().setSystemUiVisibility(0);
     if(Build.VERSION.SDK_INT>=35){
       screen.setOnApplyWindowInsetsListener((view,insets)->{
         view.setPadding(0,insets.getSystemWindowInsetTop(),0,insets.getSystemWindowInsetBottom());
@@ -123,7 +123,7 @@ googleSignInClient = GoogleSignIn.getClient(this, gso);snapshotBeforeUpdate();lo
     add(hero,text("✦  JUALAN HARI INI",11,0xffffdf9a,true),-1,-2);today=text("RM 0.00",29,Color.WHITE,true);add(hero,today,-1,-2);add(hero,text("Bayaran selesai direkod di sini",12,0xffe5efff,false),-1,-2);add(body,hero,-1,-2);today();gap(body,20);
     LinearLayout title=row();title.addView(text("Pilih menu",20,ink,true),new LinearLayout.LayoutParams(0,-2,1));TextView addMenuButton=chip("+ MENU",blue,Color.WHITE);add(title,addMenuButton,-2,-2);addMenuButton.setOnClickListener(v->addMenu());items=chip("0 item",0xfff0e5cb,blue);LinearLayout.LayoutParams itemLp=params(-2,-2);itemLp.leftMargin=dp(7);title.addView(items,itemLp);add(body,title,-1,-2);
     add(body,text("Tekan + untuk tambah pesanan",12,muted,false),-1,-2);gap(body,13);
-    for(int i=0;i<names.length;i+=2){LinearLayout pair=row();pair.setGravity(Gravity.TOP);product(pair,i);if(i+1<names.length)product(pair,i+1);add(body,pair,-1,-2);gap(body,9);}
+    ArrayList<Integer> visibleMenu=new ArrayList<>();for(int i=0;i<names.length;i++)if(!getPreferences(0).getBoolean("menu_hidden_"+i,false))visibleMenu.add(i);for(int k=0;k<visibleMenu.size();k+=2){LinearLayout pair=row();pair.setGravity(Gravity.TOP);product(pair,visibleMenu.get(k));if(k+1<visibleMenu.size())product(pair,visibleMenu.get(k+1));add(body,pair,-1,-2);gap(body,9);}
     gap(body,10);add(body,text("Pesanan semasa",20,ink,true),-1,-2);gap(body,10);
     basket=col();basket.setPadding(dp(13),dp(10),dp(13),dp(10));basket.setBackground(shape(surface,15));add(body,basket,-1,-2);
     LinearLayout footer=row();footer.setPadding(dp(17),dp(9),dp(17),dp(10));footer.setBackgroundColor(surface);
@@ -151,13 +151,13 @@ googleSignInClient = GoogleSignIn.getClient(this, gso);snapshotBeforeUpdate();lo
     for(int i=0;i<qty.length;i++)if(qty[i]>0){final int id=i;LinearLayout r=row();r.addView(text(names[i]+" × "+qty[i],14,ink,true),new LinearLayout.LayoutParams(0,dp(39),1));add(r,text(money(qty[i]*prices[i]),13,blue,true),-2,-2);TextView minus=chip("−",0xfff0e5cb,blue);LinearLayout.LayoutParams m=params(32,30);m.leftMargin=dp(8);r.addView(minus,m);minus.setOnClickListener(v->{qty[id]--;draw();});add(basket,r,-1,-2);}
   }
   void addNavigation(LinearLayout screen){LinearLayout nav=row();nav.setBackgroundColor(ink);nav.setPadding(dp(4),dp(5),dp(4),dp(6));String[] labels={"MENU","STOK","GRAF","DUIT","SETTING"};
-    for(int i=0;i<labels.length;i++){final int page=i;TextView tab=text(labels[i],11,i==activePage?ink:Color.WHITE,true);tab.setGravity(Gravity.CENTER);tab.setBackground(shape(i==activePage?gold:blue,9));LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(0,dp(47),1);p.setMargins(dp(2),0,dp(2),0);nav.addView(tab,p);tab.setOnClickListener(v->{activePage=page;draw();});}add(screen,nav,-1,-2);}
+    for(int i=0;i<labels.length;i++){final int page=i;boolean selected=(i==activePage)||(i==4&&activePage>=4);TextView tab=text(labels[i],11,selected?Color.rgb(19,24,34):Color.WHITE,true);tab.setGravity(Gravity.CENTER);tab.setBackground(shape(selected?gold:Color.rgb(20,58,101),9));LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(0,dp(47),1);p.setMargins(dp(2),0,dp(2),0);nav.addView(tab,p);tab.setOnClickListener(v->{activePage=page;draw();});}add(screen,nav,-1,-2);}
   void heading(String title,String subtitle){add(body,text(title,24,blue,true),-1,-2);add(body,text(subtitle,12,muted,false),-1,-2);gap(body,18);}
   void action(String label,Runnable callback){TextView button=text(label+"   ›",15,blue,true);button.setPadding(dp(16),dp(14),dp(14),dp(14));button.setBackground(shape(surface,12));add(body,button,-1,-2);gap(body,9);button.setOnClickListener(v->callback.run());}
   void metric(LinearLayout row,String title,String value,int highlight,Runnable tap){LinearLayout card=col();card.setPadding(dp(12),dp(12),dp(9),dp(12));card.setBackground(shape(surface,13));TextView name=text(title,11,muted,true);name.setMaxLines(2);add(card,name,-1,-2);gap(card,8);TextView figure=text(value,value.startsWith("RM")?16:20,highlight,true);figure.setMaxLines(1);figure.setEllipsize(android.text.TextUtils.TruncateAt.END);add(card,figure,-1,-2);LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(0,dp(94),1);p.setMargins(dp(3),0,dp(3),0);row.addView(card,p);if(tap!=null)card.setOnClickListener(v->tap.run());}
   int[] cashTotals(String month){int[] totals=new int[2];JSONArray entries=entries("cash_entries");for(int i=0;i<entries.length();i++){JSONObject e=entries.optJSONObject(i);if(e==null||!month.equals(e.optString("month")))continue;int amount=e.optInt("amount");if(amount>=0)totals[0]+=amount;else totals[1]-=amount;}return totals;}
   void drawPage(){if(activePage==1){heading("Stok & restock","Baki semalam dibawa sebagai stok awal hari ini.");
-      for(int i=0;i<names.length;i++){final int id=i;if(unlimited(id)){action(names[id]+" · kuah ikut liter (tiada had unit)",()->message("Kuah kacang sentiasa boleh dijual."));continue;}
+      for(int i=0;i<names.length;i++){final int id=i;if(getPreferences(0).getBoolean("menu_hidden_"+id,false))continue;if(unlimited(id)){action(names[id]+" · kuah ikut liter (tiada had unit)",()->message("Kuah kacang sentiasa boleh dijual."));continue;}
         int[] s=stockToday(id);LinearLayout card=col();card.setPadding(dp(14),dp(13),dp(14),dp(13));card.setBackground(shape(surface,15));
         add(card,text(names[id],17,ink,true),-1,-2);gap(card,9);
         LinearLayout upper=row();stockTile(upper,"STOK AWAL",""+s[0]);stockTile(upper,"RESTOCK","+"+s[1]);add(card,upper,-1,-2);gap(card,5);
@@ -188,25 +188,39 @@ googleSignInClient = GoogleSignIn.getClient(this, gso);snapshotBeforeUpdate();lo
       action("Pecahan harian graf",()->cashDaily(month));
       LinearLayout controls=row();metric(controls,"+ CATAT","Masuk",blue,()->cashEntry(true));metric(controls,"− CATAT","Keluar",ink,()->cashEntry(false));add(body,controls,-1,-2);gap(body,12);
       action("Lihat catatan bulan dipilih",()->cashHistory());add(body,text("Baki bulan = jualan POS + duit masuk − duit keluar. Stok rosak mengurangkan baki dan nilai stok; kos restock tidak ditolak dua kali. Baki bulan bukan untung bersih.",11,muted,false),-1,-2);
-    }else if(activePage==4){heading("Setting","WarisanPOS 3.15 · Tetapan kedai dan data.");FirebaseUser user = firebaseAuth.getCurrentUser();
-
-if(user == null){
-    action("🔐  SIGN IN GOOGLE", () -> {
-        Intent signInIntent = googleSignInClient.getSignInIntent();
-        startActivityForResult(signInIntent, RC_SIGN_IN);
-    });
-}else{
-    String email = user.getEmail() == null ? "Google Account" : user.getEmail();
-
-    action("☁  GOOGLE: " + email, () ->
-        message("Google account telah disambungkan.")
-    );
-
-    action("LOG OUT GOOGLE", () -> {
-        firebaseAuth.signOut();
-        googleSignInClient.signOut().addOnCompleteListener(task -> draw());
-    });
-}action("Pilih printer Bluetooth",()->choosePrinter());action("No. telefon pada resit",()->editPhone());action("Alamat Gmail pada resit",()->editEmail());action("Edit harga jualan & harga mentah",()->chooseMenuPrice());action("+ Tambah menu & harga",()->addMenu());action("Upload gambar menu",()->pickMenuImage());action("Backup semua data",()->backupPicker(false));action("☁️ Sync data ke Google",()->syncToCloud());action("Pulihkan dari Google",()->restoreFromCloud());action("Pulihkan salinan sebelum update / pulih",()->recoverInternal());action("Reset stok sahaja",()->resetData(false));action("Reset semua data",()->resetData(true));}}
+    }else if(activePage==4){
+      heading("Setting","WarisanPOS 3.15 · Tetapan kedai dan data.");
+      action("👤  Account",()->{activePage=5;draw();});
+      action("Pilih printer Bluetooth",()->choosePrinter());
+      action("No. telefon pada resit",()->editPhone());
+      action("Alamat Gmail pada resit",()->editEmail());
+      action("🍽  Pengurusan Menu",()->{activePage=6;draw();});
+      action("Reset stok sahaja",()->resetData(false));
+      action("Reset semua data",()->resetData(true));
+    }else if(activePage==5){
+      heading("Account","Google, backup dan pemulihan data.");
+      action("‹  Kembali ke Setting",()->{activePage=4;draw();});
+      FirebaseUser user=firebaseAuth.getCurrentUser();
+      if(user==null){
+        action("🔐  SIGN IN GOOGLE",()->{Intent signInIntent=googleSignInClient.getSignInIntent();startActivityForResult(signInIntent,RC_SIGN_IN);});
+      }else{
+        String email=user.getEmail()==null?"Google Account":user.getEmail();
+        action("☁  GOOGLE: "+email,()->message("Google account telah disambungkan."));
+        action("LOG OUT GOOGLE",()->{firebaseAuth.signOut();googleSignInClient.signOut().addOnCompleteListener(task->draw());});
+        action("☁  Backup / Sync ke Google",()->syncToCloud());
+        action("Pulihkan dari Google",()->restoreFromCloud());
+      }
+      action("Backup ke telefon",()->backupPicker(false));
+      action("Restore dari device",()->backupPicker(true));
+      action("Pulihkan salinan sebelum update / pulih",()->recoverInternal());
+    }else if(activePage==6){
+      heading("Pengurusan Menu","Tambah, edit, gambar dan padam menu.");
+      action("‹  Kembali ke Setting",()->{activePage=4;draw();});
+      action("+ Tambah menu & harga",()->addMenu());
+      action("Edit harga jualan & harga mentah",()->chooseMenuPrice());
+      action("Upload / tukar gambar menu",()->pickMenuImage());
+      action("− Padam menu",()->deleteMenu());
+    }}
   void stockTile(LinearLayout row,String title,String value){LinearLayout box=col();box.setPadding(dp(10),dp(8),dp(7),dp(8));box.setBackground(shape(0xffd5dfec,10));add(box,text(title,10,muted,true),-1,-2);add(box,text(value,21,"BAKI".equals(title)?blue:ink,true),-1,-2);LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(0,-2,1);p.setMargins(dp(2),0,dp(2),0);row.addView(box,p);}
   void stockEntryItem(int id){stockEntryItem(id,false);}
   void stockEntryItem(int id,boolean opening){if(unlimited(id)){message("Kuah kacang diurus mengikut liter, tanpa had stok unit.");return;}if(opening&&hasOpeningStock(id)){message("Stok awal sudah direkod. Gunakan Restock untuk tambah.");return;}
@@ -228,6 +242,17 @@ if(user == null){
     new AlertDialog.Builder(this).setTitle("Alamat e-mel pada resit").setView(input).setPositiveButton("Simpan",(d,w)->{String value=input.getText().toString().trim();if(!value.isEmpty()&&!android.util.Patterns.EMAIL_ADDRESS.matcher(value).matches()){message("Alamat e-mel tidak sah");return;}getPreferences(0).edit().putString("receipt_email",value).apply();message("E-mel disimpan");}).setNegativeButton("Batal",null).show();}
   void addMenu(){LinearLayout form=col();form.setPadding(dp(18),dp(5),dp(18),0);EditText name=new EditText(this),price=new EditText(this);name.setSingleLine(true);name.setHint("Nama menu");price.setInputType(android.text.InputType.TYPE_CLASS_NUMBER|android.text.InputType.TYPE_NUMBER_FLAG_DECIMAL);price.setHint("Harga RM, contoh 7.00");add(form,name,-1,-2);add(form,price,-1,-2);
     new AlertDialog.Builder(this).setTitle("+ Tambah menu").setView(form).setPositiveButton("Simpan",(d,w)->{try{String title=name.getText().toString().trim();if(title.isEmpty()||title.length()>35)throw new Exception();int cents=new java.math.BigDecimal(price.getText().toString().trim()).movePointRight(2).intValueExact();if(cents<=0||cents>10000000)throw new Exception();JSONObject item=new JSONObject();item.put("name",title);item.put("price",cents);appendEntry("custom_menu",item);names=Arrays.copyOf(names,names.length+1);names[names.length-1]=title;icons=Arrays.copyOf(icons,icons.length+1);icons[icons.length-1]="🍽";prices=Arrays.copyOf(prices,prices.length+1);prices[prices.length-1]=cents;qty=Arrays.copyOf(qty,qty.length+1);draw();message("Menu baru disimpan. Masukkan stok sebelum jual.");}catch(Exception e){message("Semak nama dan harga menu");}}).setNegativeButton("Batal",null).show();}
+  void deleteMenu(){
+    ArrayList<Integer> ids=new ArrayList<>();ArrayList<String> labels=new ArrayList<>();
+    for(int i=0;i<names.length;i++)if(!getPreferences(0).getBoolean("menu_hidden_"+i,false)){ids.add(i);labels.add(names[i]);}
+    if(ids.isEmpty()){message("Tiada menu untuk dipadam");return;}
+    new AlertDialog.Builder(this).setTitle("Padam menu").setItems(labels.toArray(new String[0]),(d,which)->{
+      int id=ids.get(which);new AlertDialog.Builder(this).setTitle("Padam "+names[id]+"?")
+      .setMessage("Menu ini akan dibuang daripada paparan jualan dan stok. Rekod jualan lama dikekalkan supaya laporan tidak rosak.")
+      .setPositiveButton("PADAM",(x,w)->{getPreferences(0).edit().putBoolean("menu_hidden_"+id,true).remove("menu_image_"+id).commit();qty[id]=0;cachedStock=null;draw();message("Menu dipadam");})
+      .setNegativeButton("Batal",null).show();
+    }).setNegativeButton("Batal",null).show();
+  }
   void pickMenuImage(){new AlertDialog.Builder(this).setTitle("Gambar untuk menu").setItems(names,(d,id)->{imageItem=id;Intent intent=new Intent(Intent.ACTION_OPEN_DOCUMENT);intent.setType("image/*");intent.addCategory(Intent.CATEGORY_OPENABLE);try{startActivityForResult(intent,PICK_IMAGE);}catch(Exception e){message("Galeri tidak dapat dibuka");}}).show();}
   void today(){today.setText(money(getPreferences(0).getInt("sales_"+date(),0)));}
   void history(){new AlertDialog.Builder(this).setTitle("Rekod & operasi").setItems(new String[]{"Jualan hari ini","Graf & jualan bulanan","Buka jualan / tambah stok","Baki stok","Duit masuk / keluar","Eksport rekod Excel / PDF","No. telefon resit","Tetapan & reset data"},(d,which)->{
