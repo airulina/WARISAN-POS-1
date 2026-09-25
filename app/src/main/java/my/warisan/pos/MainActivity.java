@@ -605,74 +605,177 @@ if(user == null){
     FirebaseUser user=firebaseAuth.getCurrentUser();
 
     if(user==null){
-        message("Sila sambungkan akaun Google dahulu");
-        return;
+      message("Sila sambungkan akaun Google dahulu");
+      return;
     }
 
+    if(cloudSyncBusy)return;
+    cloudSyncBusy=true;
+
     firestore.collection("users")
-        .document(user.getUid())
-        .collection("warisanpos")
-        .document("current")
-        .get()
-        .addOnSuccessListener(doc->{
-            if(!doc.exists()){
-                message("Backup Google belum ada");
-                return;
-            }
+      .document(user.getUid())
+      .collection("warisanpos")
+      .document("current")
+      .get()
+      .addOnSuccessListener(doc->{
+        cloudSyncBusy=false;
 
-            String backup=doc.getString("backup");
+        if(!doc.exists()){
+          message("Backup Google belum ada");
+          return;
+        }
 
-            if(backup==null || backup.trim().isEmpty()){
-                message("Backup Google kosong");
-                return;
-            }
+        String backup=doc.getString("backup");
+        if(backup==null || backup.trim().isEmpty()){
+          message("Backup Google kosong");
+          return;
+        }
 
-            try{
-                JSONObject data=new JSONObject(backup);
-data.remove("app");
-data.remove("version");
-data.remove("createdAt");
-data.remove("format");
-data.remove("created");
-restoreBackup(data);
-            }catch(Exception e){
-                message("Gagal pulihkan backup: "+e.getMessage());
-            }
-        })
-        .addOnFailureListener(e->
-            message("Gagal ambil backup: "+e.getMessage())
-        );
+        try{
+          JSONObject root=new JSONObject(backup);
+          JSONObject data;
+
+          // Format backup WarisanPOS semasa:
+          // {app, format, created, preferences:{...}}
+          if(root.has("preferences") && root.opt("preferences") instanceof JSONObject){
+            data=root.getJSONObject("preferences");
+          }else{
+            // Sokongan backup lama yang menyimpan preferences terus di root.
+            data=root;
+            data.remove("app");
+            data.remove("version");
+            data.remove("createdAt");
+            data.remove("format");
+            data.remove("created");
+          }
+
+          validateBackup(data);
+
+          new AlertDialog.Builder(this)
+            .setTitle("Pulihkan dari Google?")
+            .setMessage("Data semasa akan digantikan dengan backup Google. Salinan data semasa akan disimpan dahulu dalam telefon.")
+            .setPositiveButton("Pulihkan",(d,w)->restoreBackup(data))
+            .setNegativeButton("Batal",null)
+            .show();
+
+        }catch(Exception e){
+          message("Gagal pulihkan backup: "+e.getMessage());
+        }
+      })
+      .addOnFailureListener(e->{
+        cloudSyncBusy=false;
+        message("Gagal ambil backup: "+e.getMessage());
+      });
   }
   void readBackup(Uri uri){try(InputStream in=getContentResolver().openInputStream(uri)){if(in==null)throw new IOException();java.io.ByteArrayOutputStream out=new java.io.ByteArrayOutputStream();byte[] bytes=new byte[8192];int n;while((n=in.read(bytes))!=-1){if(out.size()+n>32*1024*1024)throw new IOException("Fail terlalu besar");out.write(bytes,0,n);}JSONObject root=new JSONObject(new String(out.toByteArray(),StandardCharsets.UTF_8));if(!"my.warisan.pos".equals(root.getString("app"))||root.getInt("format")!=1)throw new IOException("Format backup tidak serasi");JSONObject data=root.getJSONObject("preferences");validateBackup(data);new AlertDialog.Builder(this).setTitle("Pulihkan backup?").setMessage("Backup: "+root.optString("created")+"\nData semasa akan digantikan dengan backup ini. Salinan sebelum pulih disimpan dalam telefon. Gambar menu mungkin perlu dipilih semula jika berpindah telefon.").setPositiveButton("Pulihkan",(d,w)->restoreBackup(data)).setNegativeButton("Batal",null).show();}catch(Exception e){message("Backup tidak sah. Data semasa tidak diubah.");}}
   void validateBackup(JSONObject data) throws Exception {
-    if (data == null) throw new Exception("Backup kosong");
+    if(data==null)throw new Exception("Backup kosong");
 
-    Iterator<String> keys = data.keys();
+    Iterator<String> keys=data.keys();
+    while(keys.hasNext()){
+      String key=keys.next();
+      Object raw=data.opt(key);
 
-    while (keys.hasNext()) {
-        String key = keys.next();
-        Object value = data.opt(key);
+      if(raw==null || raw==JSONObject.NULL)continue;
+      if(!(raw instanceof JSONObject))
+        throw new Exception("Format "+key+" tidak sah");
 
-        if (value == null || value == JSONObject.NULL) {
-            continue;
-        }
+      JSONObject item=(JSONObject)raw;
+      String type=item.optString("type","");
+      if(type.isEmpty())
+        throw new Exception("No value for type pada "+key);
 
-        // Data array utama WARISANPOS
-        if (key.equals("stock_entries") ||
-            key.equals("stock_sales") ||
-            key.equals("stock_damage") ||
-            key.equals("cash_entries") ||
-            key.equals("custom_menu")) {
+      if(!item.has("value"))
+        throw new Exception("No value pada "+key);
 
-            if (!(value instanceof String)) {
-                throw new Exception("Data " + key + " tidak sah");
-            }
-        }
+      Object value=item.opt("value");
+
+      if("int".equals(type)){
+        if(!(value instanceof Number))Integer.parseInt(String.valueOf(value));
+      }else if("long".equals(type)){
+        if(!(value instanceof Number))Long.parseLong(String.valueOf(value));
+      }else if("float".equals(type)){
+        Float.parseFloat(String.valueOf(value));
+      }else if("boolean".equals(type)){
+        if(!(value instanceof Boolean) &&
+           !"true".equalsIgnoreCase(String.valueOf(value)) &&
+           !"false".equalsIgnoreCase(String.valueOf(value)))
+          throw new Exception("Boolean "+key+" tidak sah");
+      }else if("string".equals(type)){
+        if(value==JSONObject.NULL)throw new Exception("String "+key+" kosong");
+      }else if("set".equals(type)){
+        if(!(value instanceof JSONArray))
+          throw new Exception("Set "+key+" tidak sah");
+      }else{
+        throw new Exception("Jenis "+type+" tidak disokong");
+      }
+
+      // Lima rekod utama disimpan sebagai JSON array dalam String.
+      if(("stock_entries".equals(key) ||
+          "stock_sales".equals(key) ||
+          "stock_damage".equals(key) ||
+          "cash_entries".equals(key) ||
+          "custom_menu".equals(key)) && "string".equals(type)){
+        new JSONArray(String.valueOf(value));
+      }
     }
-}
-  void restoreBackup(JSONObject data){try{validateBackup(data);try(java.io.FileOutputStream out=openFileOutput("before-restore.json",MODE_PRIVATE)){out.write(backupJson().toString().getBytes(StandardCharsets.UTF_8));out.getFD().sync();}android.content.SharedPreferences.Editor editor=getPreferences(0).edit().clear();Iterator<String> keys=data.keys();while(keys.hasNext()){String key=keys.next();JSONObject e=data.getJSONObject(key);switch(e.getString("type")){case "int":editor.putInt(key,e.getInt("value"));break;case "long":editor.putLong(key,e.getLong("value"));break;case "float":editor.putFloat(key,Float.parseFloat(e.get("value").toString()));break;case "boolean":editor.putBoolean(key,e.getBoolean("value"));break;case "string":editor.putString(key,e.getString("value"));break;case "set":Set<String> values=new HashSet<>();JSONArray a=e.getJSONArray("value");for(int i=0;i<a.length();i++)values.add(a.getString(i));editor.putStringSet(key,values);break;}}
-    if(!editor.commit())throw new IOException();loadMenu();cachedStock=null;draw();message("Backup berjaya dipulihkan");}catch(Exception e){message("Pemulihan gagal: "+e.getMessage());}}
+  }
+  void restoreBackup(JSONObject data){
+    try{
+      validateBackup(data);
 
+      // Simpan snapshot data semasa sebelum overwrite.
+      try(java.io.FileOutputStream out=openFileOutput("before-restore.json",MODE_PRIVATE)){
+        out.write(backupJson().toString().getBytes(StandardCharsets.UTF_8));
+        out.getFD().sync();
+      }
+
+      android.content.SharedPreferences.Editor editor=getPreferences(0).edit().clear();
+      Iterator<String> keys=data.keys();
+
+      while(keys.hasNext()){
+        String key=keys.next();
+        JSONObject e=data.getJSONObject(key);
+        String type=e.getString("type");
+        Object value=e.opt("value");
+
+        switch(type){
+          case "int":
+            editor.putInt(key,value instanceof Number?((Number)value).intValue():Integer.parseInt(String.valueOf(value)));
+            break;
+          case "long":
+            editor.putLong(key,value instanceof Number?((Number)value).longValue():Long.parseLong(String.valueOf(value)));
+            break;
+          case "float":
+            editor.putFloat(key,Float.parseFloat(String.valueOf(value)));
+            break;
+          case "boolean":
+            editor.putBoolean(key,value instanceof Boolean?(Boolean)value:Boolean.parseBoolean(String.valueOf(value)));
+            break;
+          case "string":
+            editor.putString(key,value==JSONObject.NULL?"":String.valueOf(value));
+            break;
+          case "set":
+            Set<String> values=new HashSet<>();
+            JSONArray a=e.getJSONArray("value");
+            for(int i=0;i<a.length();i++)values.add(a.getString(i));
+            editor.putStringSet(key,values);
+            break;
+          default:
+            throw new IOException("Jenis data tidak disokong: "+type);
+        }
+      }
+
+      if(!editor.commit())throw new IOException("Gagal menulis data");
+      loadMenu();
+      cachedStock=null;
+      Arrays.fill(qty,0);
+      draw();
+      message("Backup berjaya dipulihkan");
+    }catch(Exception e){
+      message("Pemulihan gagal: "+e.getMessage());
+    }
+  }
 
   void snapshotBeforeUpdate(){if(getPreferences(0).getInt("data_version",0)>=19)return;try{if(!getPreferences(0).getAll().isEmpty()){java.io.File file=new java.io.File(getFilesDir(),"before-update-19.json");if(!file.exists())try(java.io.FileOutputStream out=new java.io.FileOutputStream(file)){out.write(backupJson().toString().getBytes(StandardCharsets.UTF_8));out.getFD().sync();}}getPreferences(0).edit().putInt("data_version",19).commit();}catch(Exception e){message("Salinan sebelum update gagal. Eksport backup melalui Setting.");}}
   void recoverInternal(){String[] files={"before-update-19.json","before-restore.json"};new AlertDialog.Builder(this).setTitle("Pilih salinan dalaman").setItems(new String[]{"Sebelum update 3.15","Sebelum pemulihan terakhir"},(d,index)->{java.io.File file=new java.io.File(getFilesDir(),files[index]);if(!file.exists()){message("Salinan ini belum tersedia");return;}readBackup(Uri.fromFile(file));}).setNegativeButton("Batal",null).show();}
