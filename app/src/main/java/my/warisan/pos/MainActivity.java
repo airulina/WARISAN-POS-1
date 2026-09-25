@@ -84,6 +84,9 @@ private static final int RC_SIGN_IN = 9001;
     BitmapFactory.Options scaled=new BitmapFactory.Options();scaled.inSampleSize=1;while(size.outWidth/scaled.inSampleSize>360||size.outHeight/scaled.inSampleSize>360)scaled.inSampleSize*=2;
     try(InputStream source=getContentResolver().openInputStream(uri)){Bitmap bitmap=BitmapFactory.decodeStream(source,null,scaled);if(bitmap==null)throw new IOException("Gambar tidak dapat dibuka");view.setImageBitmap(bitmap);}}
   GradientDrawable shape(int color,int radius){GradientDrawable d=new GradientDrawable();d.setColor(color);d.setCornerRadius(dp(radius));return d;}
+  void makeCircle(ImageView view){
+    GradientDrawable oval=new GradientDrawable();oval.setShape(GradientDrawable.OVAL);oval.setColor(Color.TRANSPARENT);view.setBackground(oval);view.setClipToOutline(true);view.setScaleType(ImageView.ScaleType.CENTER_CROP);
+  }
   TextView text(String s,int size,int color,boolean bold){TextView t=new TextView(this);t.setText(s);t.setTextSize(size);t.setTextColor(color);if(bold)t.setTypeface(null,Typeface.BOLD);t.setGravity(Gravity.CENTER_VERTICAL);return t;}
   LinearLayout col(){LinearLayout l=new LinearLayout(this);l.setOrientation(1);return l;}
   LinearLayout row(){LinearLayout l=new LinearLayout(this);l.setOrientation(0);l.setGravity(Gravity.CENTER_VERTICAL);return l;}
@@ -116,7 +119,7 @@ googleSignInClient = GoogleSignIn.getClient(this, gso);snapshotBeforeUpdate();lo
     ScrollView scroll=new ScrollView(this);scroll.setVerticalScrollBarEnabled(false);screen.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
     body=col();body.setPadding(dp(17),dp(15),dp(17),dp(25));scroll.addView(body);
     if(activePage!=0){drawPage();addNavigation(screen);return;}
-    LinearLayout header=row();ImageView logo=new ImageView(this);logo.setImageResource(R.drawable.warisan_logo);logo.setScaleType(ImageView.ScaleType.FIT_CENTER);add(header,logo,49,49);
+    LinearLayout header=row();ImageView logo=new ImageView(this);logo.setImageResource(R.drawable.warisan_logo);makeCircle(logo);add(header,logo,49,49);
     LinearLayout heading=col();heading.setPadding(dp(10),0,0,0);add(heading,text("WARISAN POS",21,blue,true),-1,-2);add(heading,text("KIOS WARISAN  ·  SISTEM JUALAN",10,muted,true),-1,-2);header.addView(heading,new LinearLayout.LayoutParams(0,-2,1));
     add(body,header,-1,-2);gap(body,18);
     LinearLayout hero=col();hero.setPadding(dp(18),dp(14),dp(18),dp(14));hero.setBackground(shape(blue,17));
@@ -239,7 +242,7 @@ googleSignInClient = GoogleSignIn.getClient(this, gso);snapshotBeforeUpdate();lo
       action("Reset stok sahaja",()->resetData(false));
       action("Reset semua data",()->resetData(true));
     }}
-  void stockTile(LinearLayout row,String title,String value){LinearLayout box=col();box.setPadding(dp(10),dp(8),dp(7),dp(8));box.setBackground(shape(0xffd5dfec,10));add(box,text(title,10,muted,true),-1,-2);add(box,text(value,21,"BAKI".equals(title)?blue:ink,true),-1,-2);LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(0,-2,1);p.setMargins(dp(2),0,dp(2),0);row.addView(box,p);}
+  void stockTile(LinearLayout row,String title,String value){LinearLayout box=col();box.setPadding(dp(10),dp(8),dp(7),dp(8));box.setBackground(shape(0xffd5dfec,10));int tileLabel=0xff53657a;int tileValue=0xff15263a;add(box,text(title,10,tileLabel,true),-1,-2);add(box,text(value,21,"BAKI".equals(title)?blue:tileValue,true),-1,-2);LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(0,-2,1);p.setMargins(dp(2),0,dp(2),0);row.addView(box,p);}
   void stockEntryItem(int id){stockEntryItem(id,false);}
   void stockEntryItem(int id,boolean opening){if(unlimited(id)){message("Kuah kacang diurus mengikut liter, tanpa had stok unit.");return;}if(opening&&hasOpeningStock(id)){message("Stok awal sudah direkod. Gunakan Restock untuk tambah.");return;}
     if(!opening&&costUnit(id)<=0){new AlertDialog.Builder(this).setTitle("Harga mentah belum ditetapkan").setMessage("Tetapkan harga mentah "+names[id]+" sebelum restock supaya duit keluar dikira dengan betul.").setPositiveButton("Edit harga",(d,w)->editMenuPrice(id)).setNegativeButton("Batal",null).show();return;}
@@ -488,28 +491,29 @@ googleSignInClient = GoogleSignIn.getClient(this, gso);snapshotBeforeUpdate();lo
     }).setNegativeButton("Kembali",null).show();}
   void receiptRule(LinearLayout sheet){View rule=new View(this);rule.setBackgroundColor(0xffe5e7e2);LinearLayout.LayoutParams lp=params(-1,1);lp.setMargins(0,dp(13),0,dp(13));sheet.addView(rule,lp);}
   void receiptRow(LinearLayout sheet,String label,String value,boolean highlight){
-    LinearLayout r=row();TextView left=text(label,highlight?17:13,highlight?blue:muted,highlight);TextView right=text(value,highlight?20:13,highlight?blue:ink,true);
+    LinearLayout r=row();int receiptText=0xff26384c,receiptMuted=0xff66788a;TextView left=text(label,highlight?17:13,highlight?blue:receiptMuted,highlight);TextView right=text(value,highlight?20:13,highlight?blue:receiptText,true);
     r.addView(left,new LinearLayout.LayoutParams(0,-2,1));add(r,right,-2,-2);add(sheet,r,-1,-2);
   }
   void previewReceipt(String printed,int[] purchased,String method,int due,int order,int tendered){
     ScrollView scroll=new ScrollView(this);scroll.setVerticalScrollBarEnabled(false);
+    int receiptText=0xff26384c,receiptMuted=0xff66788a;
     LinearLayout sheet=col();sheet.setPadding(dp(18),dp(12),dp(18),dp(14));sheet.setBackgroundColor(Color.WHITE);scroll.addView(sheet);
-    ImageView logo=new ImageView(this);logo.setImageResource(R.drawable.warisan_logo);logo.setScaleType(ImageView.ScaleType.FIT_CENTER);
-    add(sheet,logo,-1,74);gap(sheet,5);
+    ImageView logo=new ImageView(this);logo.setImageResource(R.drawable.warisan_logo);makeCircle(logo);
+    LinearLayout logoRow=row();logoRow.setGravity(Gravity.CENTER);add(logoRow,logo,74,74);add(sheet,logoRow,-1,-2);gap(sheet,5);
     TextView brand=text(getPreferences(0).getString("shop_name","WARISAN FROZEN"),17,blue,true);brand.setGravity(Gravity.CENTER);add(sheet,brand,-1,-2);
     String phone=getPreferences(0).getString("receipt_phone","");
-    TextView contact=text(phone.isEmpty()?"No. telefon belum diisi":"Tel: "+phone,11,muted,false);contact.setGravity(Gravity.CENTER);add(sheet,contact,-1,-2);
-    String email=getPreferences(0).getString("receipt_email","");if(!email.isEmpty()){TextView mail=text(email,11,muted,false);mail.setGravity(Gravity.CENTER);add(sheet,mail,-1,-2);}
+    TextView contact=text(phone.isEmpty()?"No. telefon belum diisi":"Tel: "+phone,11,receiptMuted,false);contact.setGravity(Gravity.CENTER);add(sheet,contact,-1,-2);
+    String email=getPreferences(0).getString("receipt_email","");if(!email.isEmpty()){TextView mail=text(email,11,receiptMuted,false);mail.setGravity(Gravity.CENTER);add(sheet,mail,-1,-2);}
     receiptRule(sheet);
     receiptRow(sheet,"RESIT BAYARAN",String.format(Locale.US,"#%04d",order),false);gap(sheet,4);
     receiptRow(sheet,"Tarikh",new SimpleDateFormat("dd/MM/yyyy HH:mm",Locale.US).format(new Date()),false);
     receiptRule(sheet);
     for(int i=0;i<purchased.length;i++)if(purchased[i]>0){receiptRow(sheet,names[i],money(prices[i]*purchased[i]),false);
-      TextView details=text(purchased[i]+" × "+money(prices[i]),11,muted,false);add(sheet,details,-1,-2);gap(sheet,10);}
+      TextView details=text(purchased[i]+" × "+money(prices[i]),11,receiptMuted,false);add(sheet,details,-1,-2);gap(sheet,10);}
     receiptRule(sheet);receiptRow(sheet,"JUMLAH",money(due),true);gap(sheet,8);
     receiptRow(sheet,"Kaedah bayaran",method,false);if("Tunai".equals(method)){gap(sheet,6);receiptRow(sheet,"Tunai diterima",money(tendered),false);gap(sheet,6);receiptRow(sheet,"BAKI PULANGAN",money(tendered-due),true);}receiptRule(sheet);
-    TextView thanks=text("Terima kasih! Sila datang lagi.",12,muted,false);thanks.setGravity(Gravity.CENTER);add(sheet,thanks,-1,-2);
-    String owner=ownerDisplay();if(!owner.isEmpty()){gap(sheet,8);TextView owned=text("DIMILIKI OLEH : "+owner,10,muted,true);owned.setGravity(Gravity.CENTER);add(sheet,owned,-1,-2);}
+    TextView thanks=text("Terima kasih! Sila datang lagi.",12,receiptMuted,false);thanks.setGravity(Gravity.CENTER);add(sheet,thanks,-1,-2);
+    String owner=ownerDisplay();if(!owner.isEmpty()){gap(sheet,8);TextView owned=text("DIMILIKI OLEH : "+owner,10,receiptMuted,true);owned.setGravity(Gravity.CENTER);add(sheet,owned,-1,-2);}
     new AlertDialog.Builder(this).setTitle("Semak resit").setView(scroll)
       .setPositiveButton("Cetak resit",(dialog,button)->print(printed))
       .setNegativeButton("Tutup",null).show();
