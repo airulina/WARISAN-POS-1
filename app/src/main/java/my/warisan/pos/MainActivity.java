@@ -113,7 +113,7 @@ googleSignInClient = GoogleSignIn.getClient(this, gso);snapshotBeforeUpdate();lo
       });
     }
     setContentView(screen);
-    ScrollView scroll=new ScrollView(this);screen.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
+    ScrollView scroll=new ScrollView(this);scroll.setVerticalScrollBarEnabled(false);screen.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
     body=col();body.setPadding(dp(17),dp(15),dp(17),dp(25));scroll.addView(body);
     if(activePage!=0){drawPage();addNavigation(screen);return;}
     LinearLayout header=row();ImageView logo=new ImageView(this);logo.setImageResource(R.drawable.warisan_logo);logo.setScaleType(ImageView.ScaleType.FIT_CENTER);add(header,logo,49,49);
@@ -236,7 +236,7 @@ if(user == null){
   }).show();}
   void monthly(){Calendar now=Calendar.getInstance();String[] labels=new String[12],keys=new String[12];int[] totals=new int[12];int yearTotal=0;
     for(int i=0;i<12;i++){Calendar c=(Calendar)now.clone();c.add(Calendar.MONTH,i-11);keys[i]=new SimpleDateFormat("yyyy-MM",Locale.US).format(c.getTime());totals[i]=monthTotal(keys[i]);yearTotal+=totals[i];labels[i]=new SimpleDateFormat("MMM yy",new Locale("ms","MY")).format(c.getTime());}
-    ScrollView scroll=new ScrollView(this);LinearLayout panel=col();panel.setPadding(dp(16),dp(10),dp(16),dp(12));scroll.addView(panel);
+    ScrollView scroll=new ScrollView(this);scroll.setVerticalScrollBarEnabled(false);LinearLayout panel=col();panel.setPadding(dp(16),dp(10),dp(16),dp(12));scroll.addView(panel);
     add(panel,text("JUMLAH 12 BULAN",12,muted,true),-1,-2);add(panel,text(money(yearTotal),28,blue,true),-1,-2);gap(panel,12);
     add(panel,new SalesChart(totals,labels),-1,210);gap(panel,10);
     for(int i=11;i>=0;i--){final String month=keys[i];LinearLayout row=row();row.setPadding(dp(10),dp(8),dp(10),dp(8));row.setBackground(shape(i%2==0?0xfff7f7f2:Color.WHITE,9));TextView name=text(labels[i],14,ink,true);row.addView(name,new LinearLayout.LayoutParams(0,dp(37),1));add(row,text(money(totals[i])+"  ›",14,blue,true),-2,-2);add(panel,row,-1,-2);row.setOnClickListener(v->{selectedMonth=month;draw();monthDetail(month);});}
@@ -252,7 +252,7 @@ if(user == null){
   void rangeSales(String start){String end=date();Calendar cursor=calendarDay(start),last=calendarDay(end);if(cursor.after(last)){message("Tarikh mula tidak boleh selepas hari ini");return;}
     int sales=0,orders=0;ArrayList<String> days=new ArrayList<>();StringBuilder detail=new StringBuilder();SimpleDateFormat format=new SimpleDateFormat("yyyy-MM-dd",Locale.US);
     while(!cursor.after(last)){String day=format.format(cursor.getTime());int amount=getPreferences(0).getInt("sales_"+day,0),count=getPreferences(0).getInt("orders_"+day,0);sales+=amount;orders+=count;if(amount!=0||count!=0){days.add(day);detail.append(day).append("  ·  ").append(money(amount)).append("  (").append(count).append(" pesanan)\n");}cursor.add(Calendar.DAY_OF_MONTH,1);}
-    int[] sold=soldBetween(start,end);ScrollView scroll=new ScrollView(this);LinearLayout panel=col();panel.setPadding(dp(18),dp(12),dp(18),dp(14));scroll.addView(panel);
+    int[] sold=soldBetween(start,end);ScrollView scroll=new ScrollView(this);scroll.setVerticalScrollBarEnabled(false);LinearLayout panel=col();panel.setPadding(dp(18),dp(12),dp(18),dp(14));scroll.addView(panel);
     add(panel,text("DARI "+start+" HINGGA "+end,12,muted,true),-1,-2);gap(panel,9);
     LinearLayout metrics=row();metric(metrics,"TOTAL JUALAN",money(sales),blue,null);metric(metrics,"TOTAL PESANAN",""+orders,gold,null);add(panel,metrics,-1,-2);gap(panel,15);
     add(panel,text("JUMLAH ITEM TERJUAL",13,ink,true),-1,-2);gap(panel,8);
@@ -414,7 +414,7 @@ if(user == null){
     dialog.setOnShowListener(v->{Button next=dialog.getButton(AlertDialog.BUTTON_POSITIVE);next.setEnabled(false);
       received.addTextChangedListener(new android.text.TextWatcher(){public void beforeTextChanged(CharSequence s,int start,int count,int after){}public void onTextChanged(CharSequence s,int start,int before,int count){int tendered=cashCents(received);boolean enough=tendered>=due;next.setEnabled(enough);change.setText(enough?"BAKI PULANGAN  "+money(tendered-due):tendered<0?"Masukkan jumlah tunai diterima":"Tunai belum cukup · kurang "+money(due-tendered));change.setTextColor(enough?blue:muted);}public void afterTextChanged(android.text.Editable value){}});
       next.setOnClickListener(view->{int tendered=cashCents(received);if(tendered<due){message("Tunai diterima tidak mencukupi");return;}dialog.dismiss();confirm("Tunai",due,tendered);});});dialog.show();}
-  void showPaymentQr(int due){ScrollView scroll=new ScrollView(this);scroll.setFillViewport(false);ImageView image=new ImageView(this);image.setImageResource(R.drawable.qr_frozen_ld);image.setAdjustViewBounds(true);image.setScaleType(ImageView.ScaleType.FIT_CENTER);scroll.addView(image,new ScrollView.LayoutParams(-1,-2));
+  void showPaymentQr(int due){ScrollView scroll=new ScrollView(this);scroll.setVerticalScrollBarEnabled(false);scroll.setFillViewport(false);ImageView image=new ImageView(this);image.setImageResource(R.drawable.qr_frozen_ld);image.setAdjustViewBounds(true);image.setScaleType(ImageView.ScaleType.FIT_CENTER);scroll.addView(image,new ScrollView.LayoutParams(-1,-2));
     new AlertDialog.Builder(this).setTitle("QR DuitNow · Frozen LD").setMessage("Jumlah: "+money(due)+"\nTunjukkan QR ini kepada pelanggan. Sahkan selepas bayaran diterima.").setView(scroll)
       .setPositiveButton("Semak bayaran",(d,w)->confirm("QR / DuitNow",due)).setNegativeButton("Batal",null).show();}
   String line(String left,String right){int spaces=Math.max(1,32-left.length()-right.length());return left+String.format(Locale.US,"%"+spaces+"s","")+right+"\n";}
@@ -448,7 +448,7 @@ if(user == null){
     r.addView(left,new LinearLayout.LayoutParams(0,-2,1));add(r,right,-2,-2);add(sheet,r,-1,-2);
   }
   void previewReceipt(String printed,int[] purchased,String method,int due,int order,int tendered){
-    ScrollView scroll=new ScrollView(this);
+    ScrollView scroll=new ScrollView(this);scroll.setVerticalScrollBarEnabled(false);
     LinearLayout sheet=col();sheet.setPadding(dp(18),dp(12),dp(18),dp(14));sheet.setBackgroundColor(Color.WHITE);scroll.addView(sheet);
     ImageView logo=new ImageView(this);logo.setImageResource(R.drawable.warisan_logo);logo.setScaleType(ImageView.ScaleType.FIT_CENTER);
     add(sheet,logo,-1,74);gap(sheet,5);
