@@ -303,6 +303,47 @@ if(user == null){
         try{startActivityForResult(intent,kind==0?EXPORT_CSV:EXPORT_PDF);}catch(Exception e){message("Telefon tidak boleh membuka pilihan simpan fail");}
       }).show();}).show();}
   @Override protected void onActivityResult(int request,int result,Intent data){super.onActivityResult(request,result,data);
+  if (request == RC_SIGN_IN) {
+    Task<GoogleSignInAccount> task =
+            GoogleSignIn.getSignedInAccountFromIntent(data);
+
+    try {
+        GoogleSignInAccount account =
+                task.getResult(ApiException.class);
+
+        AuthCredential credential =
+                GoogleAuthProvider.getCredential(account.getIdToken(), null);
+
+        firebaseAuth.signInWithCredential(credential)
+                .addOnCompleteListener(this, authTask -> {
+                    if (authTask.isSuccessful()) {
+                        new AlertDialog.Builder(this)
+                                .setTitle("Berjaya")
+                                .setMessage("Google berjaya disambungkan")
+                                .setPositiveButton("OK", null)
+                                .show();
+                        draw();
+                    } else {
+                        new AlertDialog.Builder(this)
+                                .setTitle("Firebase Error")
+                                .setMessage(authTask.getException() == null
+                                        ? "Unknown error"
+                                        : authTask.getException().toString())
+                                .setPositiveButton("OK", null)
+                                .show();
+                    }
+                });
+
+    } catch (ApiException e) {
+        new AlertDialog.Builder(this)
+                .setTitle("Google Sign-In Error")
+                .setMessage("Error code: " + e.getStatusCode()
+                        + "\n\n" + e.getMessage())
+                .setPositiveButton("OK", null)
+                .show();
+    }
+    return;
+  }                                                                              
     if(result!=RESULT_OK||data==null||data.getData()==null)return;Uri uri=data.getData();
     if(request==IMPORT_BACKUP){readBackup(uri);return;}
     if(request==PICK_IMAGE){try{getContentResolver().takePersistableUriPermission(uri,Intent.FLAG_GRANT_READ_URI_PERMISSION);if(imageItem<0||imageItem>=names.length)return;getPreferences(0).edit().putString("menu_image_"+imageItem,uri.toString()).apply();draw();message("Gambar menu disimpan");}catch(Exception e){message("Tidak dapat menyimpan gambar ini");}return;}
