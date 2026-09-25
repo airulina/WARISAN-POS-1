@@ -39,7 +39,16 @@ jobs:
             -keystore "$HOME/.android/debug.keystore" \
             -storepass android \
             -alias androiddebugkey > /dev/null
+      - name: Show SHA-1
+        run: |
+          keytool -list -v \
+            -keystore "$HOME/.android/debug.keystore" \
+            -alias androiddebugkey \
+            -storepass android \
+            -keypass android
 
+      - name: Build APK
+        run: gradle assembleDebug --no-daemon
       - name: Build APK
         run: gradle assembleDebug --no-daemon
 
