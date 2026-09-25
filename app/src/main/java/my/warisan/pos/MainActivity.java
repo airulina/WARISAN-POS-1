@@ -184,7 +184,25 @@ googleSignInClient = GoogleSignIn.getClient(this, gso);snapshotBeforeUpdate();lo
       action("Pecahan harian graf",()->cashDaily(month));
       LinearLayout controls=row();metric(controls,"+ CATAT","Masuk",blue,()->cashEntry(true));metric(controls,"− CATAT","Keluar",ink,()->cashEntry(false));add(body,controls,-1,-2);gap(body,12);
       action("Lihat catatan bulan dipilih",()->cashHistory());add(body,text("Baki bulan = jualan POS + duit masuk − duit keluar. Stok rosak mengurangkan baki dan nilai stok; kos restock tidak ditolak dua kali. Baki bulan bukan untung bersih.",11,muted,false),-1,-2);
-    }else if(activePage==4){heading("Setting","WarisanPOS 3.15 · Tetapan kedai dan data.");action("Pilih printer Bluetooth",()->choosePrinter());action("No. telefon pada resit",()->editPhone());action("Alamat Gmail pada resit",()->editEmail());action("Edit harga jualan & harga mentah",()->chooseMenuPrice());action("+ Tambah menu & harga",()->addMenu());action("Upload gambar menu",()->pickMenuImage());action("Backup semua data",()->backupPicker(false));action("Pulihkan backup",()->backupPicker(true));action("Pulihkan salinan sebelum update / pulih",()->recoverInternal());action("Reset stok sahaja",()->resetData(false));action("Reset semua data",()->resetData(true));}}
+    }else if(activePage==4){heading("Setting","WarisanPOS 3.15 · Tetapan kedai dan data.");FirebaseUser user = firebaseAuth.getCurrentUser();
+
+if(user == null){
+    action("🔐  SIGN IN GOOGLE", () -> {
+        Intent signInIntent = googleSignInClient.getSignInIntent();
+        startActivityForResult(signInIntent, RC_SIGN_IN);
+    });
+}else{
+    String email = user.getEmail() == null ? "Google Account" : user.getEmail();
+
+    action("☁  GOOGLE: " + email, () ->
+        message("Google account telah disambungkan.")
+    );
+
+    action("LOG OUT GOOGLE", () -> {
+        firebaseAuth.signOut();
+        googleSignInClient.signOut().addOnCompleteListener(task -> draw());
+    });
+}action("Pilih printer Bluetooth",()->choosePrinter());action("No. telefon pada resit",()->editPhone());action("Alamat Gmail pada resit",()->editEmail());action("Edit harga jualan & harga mentah",()->chooseMenuPrice());action("+ Tambah menu & harga",()->addMenu());action("Upload gambar menu",()->pickMenuImage());action("Backup semua data",()->backupPicker(false));action("Pulihkan backup",()->backupPicker(true));action("Pulihkan salinan sebelum update / pulih",()->recoverInternal());action("Reset stok sahaja",()->resetData(false));action("Reset semua data",()->resetData(true));}}
   void stockTile(LinearLayout row,String title,String value){LinearLayout box=col();box.setPadding(dp(10),dp(8),dp(7),dp(8));box.setBackground(shape(0xffd5dfec,10));add(box,text(title,10,muted,true),-1,-2);add(box,text(value,21,"BAKI".equals(title)?blue:ink,true),-1,-2);LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(0,-2,1);p.setMargins(dp(2),0,dp(2),0);row.addView(box,p);}
   void stockEntryItem(int id){stockEntryItem(id,false);}
   void stockEntryItem(int id,boolean opening){if(unlimited(id)){message("Kuah kacang diurus mengikut liter, tanpa had stok unit.");return;}if(opening&&hasOpeningStock(id)){message("Stok awal sudah direkod. Gunakan Restock untuk tambah.");return;}
@@ -513,5 +531,36 @@ googleSignInClient = GoogleSignIn.getClient(this, gso);snapshotBeforeUpdate();lo
 
   void snapshotBeforeUpdate(){if(getPreferences(0).getInt("data_version",0)>=19)return;try{if(!getPreferences(0).getAll().isEmpty()){java.io.File file=new java.io.File(getFilesDir(),"before-update-19.json");if(!file.exists())try(java.io.FileOutputStream out=new java.io.FileOutputStream(file)){out.write(backupJson().toString().getBytes(StandardCharsets.UTF_8));out.getFD().sync();}}getPreferences(0).edit().putInt("data_version",19).commit();}catch(Exception e){message("Salinan sebelum update gagal. Eksport backup melalui Setting.");}}
   void recoverInternal(){String[] files={"before-update-19.json","before-restore.json"};new AlertDialog.Builder(this).setTitle("Pilih salinan dalaman").setItems(new String[]{"Sebelum update 3.15","Sebelum pemulihan terakhir"},(d,index)->{java.io.File file=new java.io.File(getFilesDir(),files[index]);if(!file.exists()){message("Salinan ini belum tersedia");return;}readBackup(Uri.fromFile(file));}).setNegativeButton("Batal",null).show();}
+@Override
+protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+    super.onActivityResult(requestCode, resultCode, data);
 
+    if (requestCode == RC_SIGN_IN) {
+        Task<GoogleSignInAccount> task =
+                GoogleSignIn.getSignedInAccountFromIntent(data);
+
+        try {
+            GoogleSignInAccount account =
+                    task.getResult(ApiException.class);
+
+            AuthCredential credential =
+                    GoogleAuthProvider.getCredential(account.getIdToken(), null);
+
+            firebaseAuth.signInWithCredential(credential)
+                    .addOnCompleteListener(this, authTask -> {
+                        if (authTask.isSuccessful()) {
+                            message("Google berjaya disambungkan");
+                            draw();
+                        } else {
+                            message("Google gagal disambungkan");
+                        }
+                    });
+
+        } catch (ApiException e) {
+            message("Google Sign-In gagal: " + e.getStatusCode());
+        }
+    }
 }
+}
+
+
