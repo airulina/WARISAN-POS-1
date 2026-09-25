@@ -12,7 +12,20 @@
           "package_name": "my.warisan.pos"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "728293918382-6cllr5scntbq7mh7kdj2tt97b5gdri32.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "my.warisan.pos",
+            "certificate_hash": "248368ef8a3bb01d402c04b4f4fc31d458ba87d1"
+          }
+        },
+        {
+          "client_id": "728293918382-u5u2c5slgpuf32v7usc4jqbv5unb2226.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyAM9K9vjsOlfePsM0po3nY9PZDrAZUUG7U"
@@ -20,7 +33,12 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "728293918382-u5u2c5slgpuf32v7usc4jqbv5unb2226.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
         }
       }
     }
