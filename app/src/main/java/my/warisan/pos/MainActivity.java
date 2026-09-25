@@ -644,8 +644,32 @@ restoreBackup(data);
         );
   }
   void readBackup(Uri uri){try(InputStream in=getContentResolver().openInputStream(uri)){if(in==null)throw new IOException();java.io.ByteArrayOutputStream out=new java.io.ByteArrayOutputStream();byte[] bytes=new byte[8192];int n;while((n=in.read(bytes))!=-1){if(out.size()+n>32*1024*1024)throw new IOException("Fail terlalu besar");out.write(bytes,0,n);}JSONObject root=new JSONObject(new String(out.toByteArray(),StandardCharsets.UTF_8));if(!"my.warisan.pos".equals(root.getString("app"))||root.getInt("format")!=1)throw new IOException("Format backup tidak serasi");JSONObject data=root.getJSONObject("preferences");validateBackup(data);new AlertDialog.Builder(this).setTitle("Pulihkan backup?").setMessage("Backup: "+root.optString("created")+"\nData semasa akan digantikan dengan backup ini. Salinan sebelum pulih disimpan dalam telefon. Gambar menu mungkin perlu dipilih semula jika berpindah telefon.").setPositiveButton("Pulihkan",(d,w)->restoreBackup(data)).setNegativeButton("Batal",null).show();}catch(Exception e){message("Backup tidak sah. Data semasa tidak diubah.");}}
-  void validateBackup(JSONObject data)throws Exception{Iterator<String> keys=data.keys();while(keys.hasNext()){String key=keys.next();JSONObject e=data.getJSONObject(key);String type=e.getString("type");Object value=e.get("value");if(type.equals("int"))new java.math.BigDecimal(value.toString()).intValueExact();else if(type.equals("long"))new java.math.BigDecimal(value.toString()).longValueExact();else if(type.equals("float")){float f=Float.parseFloat(value.toString());if(Float.isInfinite(f)||Float.isNaN(f))throw new Exception();}else if(type.equals("boolean")){if(!(value instanceof Boolean))throw new Exception();}else if(type.equals("set")){JSONArray a=e.getJSONArray("value");for(int i=0;i<a.length();i++)if(!(a.get(i) instanceof String))throw new Exception();}else if(type.equals("string")){if(!(value instanceof String))throw new Exception();}else throw new Exception();
-      boolean array=key.equals("stock_entries")||key.equals("stock_sales")||key.equals("stock_damage")||key.equals("cash_entries")||key.equals("custom_menu");if(array){if(!type.equals("string"))throw new Exception();JSONArray a=new JSONArray((String)value);for(int i=0;i<a.length();i++)a.getJSONObject(i);}if((key.equals("printer")||key.startsWith("receipt_")||key.startsWith("menu_image_"))&&!type.equals("string"))throw new Exception();if((key.equals("data_version")||key.startsWith("sales_")||key.startsWith("orders_")||key.startsWith("price_")||key.startsWith("cost_"))&&!type.equals("int"))throw new Exception();}}
+  void validateBackup(JSONObject data) throws Exception {
+    if (data == null) throw new Exception("Backup kosong");
+
+    Iterator<String> keys = data.keys();
+
+    while (keys.hasNext()) {
+        String key = keys.next();
+        Object value = data.opt(key);
+
+        if (value == null || value == JSONObject.NULL) {
+            continue;
+        }
+
+        // Data array utama WARISANPOS
+        if (key.equals("stock_entries") ||
+            key.equals("stock_sales") ||
+            key.equals("stock_damage") ||
+            key.equals("cash_entries") ||
+            key.equals("custom_menu")) {
+
+            if (!(value instanceof String)) {
+                throw new Exception("Data " + key + " tidak sah");
+            }
+        }
+    }
+}
   void restoreBackup(JSONObject data){try{validateBackup(data);try(java.io.FileOutputStream out=openFileOutput("before-restore.json",MODE_PRIVATE)){out.write(backupJson().toString().getBytes(StandardCharsets.UTF_8));out.getFD().sync();}android.content.SharedPreferences.Editor editor=getPreferences(0).edit().clear();Iterator<String> keys=data.keys();while(keys.hasNext()){String key=keys.next();JSONObject e=data.getJSONObject(key);switch(e.getString("type")){case "int":editor.putInt(key,e.getInt("value"));break;case "long":editor.putLong(key,e.getLong("value"));break;case "float":editor.putFloat(key,Float.parseFloat(e.get("value").toString()));break;case "boolean":editor.putBoolean(key,e.getBoolean("value"));break;case "string":editor.putString(key,e.getString("value"));break;case "set":Set<String> values=new HashSet<>();JSONArray a=e.getJSONArray("value");for(int i=0;i<a.length();i++)values.add(a.getString(i));editor.putStringSet(key,values);break;}}
     if(!editor.commit())throw new IOException();loadMenu();cachedStock=null;draw();message("Backup berjaya dipulihkan");}catch(Exception e){message("Pemulihan gagal: "+e.getMessage());}}
 
