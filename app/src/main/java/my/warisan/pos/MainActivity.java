@@ -540,13 +540,13 @@ googleSignInClient = GoogleSignIn.getClient(this, gso);snapshotBeforeUpdate();lo
     add(form,text("JUMLAH BELIAN  "+money(due),16,blue,true),-1,-2);gap(form,10);
     EditText received=new EditText(this);received.setSingleLine(true);received.setInputType(android.text.InputType.TYPE_CLASS_NUMBER|android.text.InputType.TYPE_NUMBER_FLAG_DECIMAL);received.setHint("Duit pelanggan beri · contoh 50.00");add(form,received,-1,-2);gap(form,10);
     TextView change=text("Masukkan jumlah tunai diterima",17,muted,true);add(form,change,-1,-2);
-    AlertDialog dialog=new AlertDialog.Builder(this).setTitle("Bayaran tunai").setView(form).setPositiveButton("Semak bayaran",null).setNegativeButton("Batal",null).create();
+    AlertDialog dialog=new AlertDialog.Builder(this).setTitle("Bayaran tunai").setView(form).setPositiveButton("Bayaran diterima",null).setNegativeButton("Batal",null).create();
     dialog.setOnShowListener(v->{Button next=dialog.getButton(AlertDialog.BUTTON_POSITIVE);next.setEnabled(false);
       received.addTextChangedListener(new android.text.TextWatcher(){public void beforeTextChanged(CharSequence s,int start,int count,int after){}public void onTextChanged(CharSequence s,int start,int before,int count){int tendered=cashCents(received);boolean enough=tendered>=due;next.setEnabled(enough);change.setText(enough?"BAKI PULANGAN  "+money(tendered-due):tendered<0?"Masukkan jumlah tunai diterima":"Tunai belum cukup · kurang "+money(due-tendered));change.setTextColor(enough?blue:muted);}public void afterTextChanged(android.text.Editable value){}});
-      next.setOnClickListener(view->{int tendered=cashCents(received);if(tendered<due){message("Tunai diterima tidak mencukupi");return;}dialog.dismiss();confirm("Tunai",due,tendered);});});dialog.show();}
+      next.setOnClickListener(view->{int tendered=cashCents(received);if(tendered<due){message("Tunai diterima tidak mencukupi");return;}dialog.dismiss();completePayment("Tunai",due,tendered);});});dialog.show();}
   void showPaymentQr(int due){ScrollView scroll=new ScrollView(this);scroll.setVerticalScrollBarEnabled(false);scroll.setFillViewport(false);ImageView image=new ImageView(this);image.setImageResource(R.drawable.qr_frozen_ld);image.setAdjustViewBounds(true);image.setScaleType(ImageView.ScaleType.FIT_CENTER);scroll.addView(image,new ScrollView.LayoutParams(-1,-2));
     new AlertDialog.Builder(this).setTitle("QR DuitNow · Frozen LD").setMessage("Jumlah: "+money(due)+"\nTunjukkan QR ini kepada pelanggan. Sahkan selepas bayaran diterima.").setView(scroll)
-      .setPositiveButton("Semak bayaran",(d,w)->confirm("QR / DuitNow",due)).setNegativeButton("Batal",null).show();}
+      .setPositiveButton("Bayaran diterima",(d,w)->completePayment("QR / DuitNow",due,due)).setNegativeButton("Batal",null).show();}
   String line(String left,String right){int spaces=Math.max(1,32-left.length()-right.length());return left+String.format(Locale.US,"%"+spaces+"s","")+right+"\n";}
   String receipt(String method,int due,int order,int tendered){StringBuilder b=new StringBuilder();
     String shopName=getPreferences(0).getString("shop_name","WARISAN FROZEN");
@@ -560,9 +560,9 @@ googleSignInClient = GoogleSignIn.getClient(this, gso);snapshotBeforeUpdate();lo
     if("Tunai".equals(method))b.append(line("TUNAI DITERIMA",money(tendered))).append(line("BAKI PULANGAN",money(tendered-due)));
     return b
       .append("================================\n       TERIMA KASIH!\n   Sila datang lagi.\n").append(ownerReceipt()).append("\n\n").toString();}
-  void confirm(String method,int due){confirm(method,due,due);}
-  void confirm(String method,int due,int tendered){new AlertDialog.Builder(this).setTitle("Sahkan bayaran").setMessage(method+" · "+money(due)+("Tunai".equals(method)?"\nTunai diterima: "+money(tendered)+"\nBaki pulangan: "+money(tendered-due):"")+"\n\nPastikan bayaran sudah diterima sebelum simpan.")
-    .setPositiveButton("Bayaran diterima",(d,w)->{
+  void confirm(String method,int due){completePayment(method,due,due);}
+  void confirm(String method,int due,int tendered){completePayment(method,due,tendered);}
+  void completePayment(String method,int due,int tendered){
       int order=getPreferences(0).getInt("orders_"+date(),0)+1;
       int[] purchased=Arrays.copyOf(qty,qty.length);
       String printed=receipt(method,due,order,tendered);
@@ -572,7 +572,7 @@ googleSignInClient = GoogleSignIn.getClient(this, gso);snapshotBeforeUpdate();lo
       playPaymentSound();
       Arrays.fill(qty,0);draw();
       previewReceipt(printed,purchased,method,due,order,tendered);
-    }).setNegativeButton("Kembali",null).show();}
+  }
   void receiptRule(LinearLayout sheet){View rule=new View(this);rule.setBackgroundColor(0xffe5e7e2);LinearLayout.LayoutParams lp=params(-1,1);lp.setMargins(0,dp(13),0,dp(13));sheet.addView(rule,lp);}
   void receiptRow(LinearLayout sheet,String label,String value,boolean highlight){
     LinearLayout r=row();int receiptText=0xff26384c,receiptMuted=0xff66788a;TextView left=text(label,highlight?17:13,highlight?blue:receiptMuted,highlight);TextView right=text(value,highlight?20:13,highlight?blue:receiptText,true);
