@@ -75,7 +75,7 @@ private static final int RC_SIGN_IN = 9001;
     int[] summary=new int[5];long opening=0;JSONArray incoming=entries("stock_entries"),sales=entries("stock_sales"),damaged=entries("stock_damage");
     for(int i=0;i<incoming.length();i++){JSONObject e=incoming.optJSONObject(i);if(e==null||e.optInt("item",-1)!=id)continue;String day=entryDay(e),type=e.optString("type","restock");int value=e.optInt("qty",0);if(day.compareTo(target)<0)opening+=value;else if(day.equals(target)){if("restock".equals(type))summary[1]+=Math.max(0,value);else if("opening".equals(type)||"opening_adjustment".equals(type))opening+=value;}}
     for(int i=0;i<sales.length();i++){JSONObject e=sales.optJSONObject(i);if(e==null)continue;JSONArray q=e.optJSONArray("qty");if(q==null)continue;String day=entryDay(e);int value=Math.max(0,q.optInt(id));if(day.compareTo(target)<0)opening-=value;else if(day.equals(target))summary[2]+=value;}
-    for(int i=0;i<damaged.length();i++){JSONObject e=damaged.optJSONObject(i);if(e==null||e.optBoolean("stockReset",false)||e.optInt("item",-1)!=id)continue;String day=entryDay(e);int value=Math.max(0,e.optInt("qty"));if(day.compareTo(target)<0)opening-=value;else if(day.equals(target))summary[4]+=value;}
+    for(int i=0;i<damaged.length();i++){JSONObject e=damaged.optJSONObject(i);if(e==null||e.optBoolean("stockReset",false)||e.optInt("item",-1)!=id)continue;String day=entryDay(e);int value=Math.max(0,e.optInt("qty"));boolean refund=e.optBoolean("refund",false);if(day.compareTo(target)<0){if(!refund)opening-=value;}else if(day.equals(target))summary[4]+=value;}
     summary[0]=(int)Math.max(0,Math.min(Integer.MAX_VALUE,opening));summary[3]=Math.max(0,summary[0]+summary[1]-summary[2]-summary[4]);return summary;
   }
   int[] stockToday(int id){return stockForDay(id,date());}
@@ -152,7 +152,7 @@ googleSignInClient = GoogleSignIn.getClient(this, gso);snapshotBeforeUpdate();lo
     add(body,header,-1,-2);gap(body,18);
     LinearLayout hero=col();hero.setPadding(dp(18),dp(14),dp(18),dp(14));hero.setBackground(shape(blue,17));
     add(hero,text("✦  JUALAN HARI INI",11,0xffffdf9a,true),-1,-2);today=text("RM 0.00",29,Color.WHITE,true);add(hero,today,-1,-2);add(hero,text("Bayaran selesai direkod di sini",12,0xffe5efff,false),-1,-2);add(body,hero,-1,-2);today();gap(body,20);
-    LinearLayout title=row();title.addView(text("Pilih menu",20,ink,true),new LinearLayout.LayoutParams(0,-2,1));TextView addMenuButton=chip("+ MENU",blue,Color.WHITE);add(title,addMenuButton,-2,-2);addMenuButton.setOnClickListener(v->addMenu());items=chip("0 item",0xfff0e5cb,blue);LinearLayout.LayoutParams itemLp=params(-2,-2);itemLp.leftMargin=dp(7);title.addView(items,itemLp);add(body,title,-1,-2);
+    LinearLayout title=row();title.addView(text("Pilih menu",20,ink,true),new LinearLayout.LayoutParams(0,-2,1));TextView historyButton=chip("HISTORY",0xff203f61,gold);add(title,historyButton,-2,-2);historyButton.setOnClickListener(v->saleHistoryChooseDate());LinearLayout.LayoutParams hp=(LinearLayout.LayoutParams)historyButton.getLayoutParams();TextView addMenuButton=chip("+ MENU",blue,Color.WHITE);LinearLayout.LayoutParams amp=params(-2,-2);amp.leftMargin=dp(6);title.addView(addMenuButton,amp);addMenuButton.setOnClickListener(v->addMenu());items=chip("0 item",0xfff0e5cb,blue);LinearLayout.LayoutParams itemLp=params(-2,-2);itemLp.leftMargin=dp(7);title.addView(items,itemLp);add(body,title,-1,-2);
     add(body,text("Tekan + untuk tambah pesanan",12,muted,false),-1,-2);gap(body,13);
     ArrayList<Integer> visibleMenu=new ArrayList<>();for(int i=0;i<names.length;i++)if(!getPreferences(0).getBoolean("menu_hidden_"+i,false))visibleMenu.add(i);for(int k=0;k<visibleMenu.size();k+=2){LinearLayout pair=row();pair.setGravity(Gravity.TOP);product(pair,visibleMenu.get(k));if(k+1<visibleMenu.size())product(pair,visibleMenu.get(k+1));add(body,pair,-1,-2);gap(body,9);}
     gap(body,10);add(body,text("Pesanan semasa",20,ink,true),-1,-2);gap(body,10);
@@ -169,7 +169,7 @@ googleSignInClient = GoogleSignIn.getClient(this, gso);snapshotBeforeUpdate();lo
     TextView name=text(names[id],14,ink,true);name.setMaxLines(2);name.setMinHeight(dp(34));add(card,name,-1,-2);
     add(card,text(money(prices[id]),14,gold,true),-1,-2);
     int available=unlimited(id)?Integer.MAX_VALUE:stock(id);TextView stockLabel=text(unlimited(id)?"Kuah · tanpa had unit":"Stok: "+available+(available==0?" · HABIS":""),11,available==0?0xffb54743:blue,true);add(card,stockLabel,-1,-2);gap(card,5);
-    LinearLayout controls=row();TextView minus=chip("−",0xffe8edf6,blue),number=text(""+qty[id],15,ink,true),plus=chip("+",blue,Color.WHITE);number.setGravity(Gravity.CENTER);
+    LinearLayout controls=row();TextView minus=chip("−",0xffc83f46,Color.WHITE),number=text(""+qty[id],15,ink,true),plus=chip("+",blue,Color.WHITE);number.setGravity(Gravity.CENTER);
     controls.addView(minus,new LinearLayout.LayoutParams(0,dp(32),1));controls.addView(number,new LinearLayout.LayoutParams(0,dp(32),1));controls.addView(plus,new LinearLayout.LayoutParams(0,dp(32),1));add(card,controls,-1,-2);
     minus.setOnClickListener(v->{qty[id]=Math.max(0,qty[id]-1);draw();});
     plus.setAlpha(available<=qty[id]?.35f:1f);plus.setEnabled(available>qty[id]);
@@ -179,9 +179,9 @@ googleSignInClient = GoogleSignIn.getClient(this, gso);snapshotBeforeUpdate();lo
   }
   void refresh(){items.setText(count()+" item");total.setText(money(sum()));payButton.setAlpha(sum()==0?.55f:1f);basket.removeAllViews();
     if(count()==0){TextView empty=text("Belum ada pesanan. Pilih menu di atas.",13,muted,false);empty.setPadding(0,dp(13),0,dp(13));add(basket,empty,-1,-2);return;}
-    for(int i=0;i<qty.length;i++)if(qty[i]>0){final int id=i;LinearLayout r=row();r.addView(text(names[i]+" × "+qty[i],14,ink,true),new LinearLayout.LayoutParams(0,dp(39),1));add(r,text(money(qty[i]*prices[i]),13,blue,true),-2,-2);TextView minus=chip("−",0xfff0e5cb,blue);LinearLayout.LayoutParams m=params(32,30);m.leftMargin=dp(8);r.addView(minus,m);minus.setOnClickListener(v->{qty[id]--;draw();});add(basket,r,-1,-2);}
+    for(int i=0;i<qty.length;i++)if(qty[i]>0){final int id=i;LinearLayout r=row();r.addView(text(names[i]+" × "+qty[i],14,ink,true),new LinearLayout.LayoutParams(0,dp(39),1));add(r,text(money(qty[i]*prices[i]),13,blue,true),-2,-2);TextView minus=chip("−",0xffc83f46,Color.WHITE);LinearLayout.LayoutParams m=params(32,30);m.leftMargin=dp(8);r.addView(minus,m);minus.setOnClickListener(v->{qty[id]--;draw();});add(basket,r,-1,-2);}
   }
-  void addNavigation(LinearLayout screen){LinearLayout nav=row();nav.setBackgroundColor(ink);nav.setPadding(dp(4),dp(5),dp(4),dp(6));String[] labels={"MENU","STOK","GRAF","DUIT","SETTING"};
+  void addNavigation(LinearLayout screen){LinearLayout nav=row();nav.setBackgroundColor(cream);nav.setPadding(dp(7),dp(7),dp(7),dp(9));String[] labels={"MENU","STOK","GRAF","DUIT","SETTING"};
     for(int i=0;i<labels.length;i++){final int page=i;boolean selected=(i==activePage)||(i==4&&activePage>=4);TextView tab=text(labels[i],11,selected?Color.rgb(19,24,34):Color.WHITE,true);tab.setGravity(Gravity.CENTER);tab.setBackground(shape(selected?gold:Color.rgb(20,58,101),9));LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(0,dp(47),1);p.setMargins(dp(2),0,dp(2),0);nav.addView(tab,p);tab.setOnClickListener(v->{activePage=page;draw();});}add(screen,nav,-1,-2);}
   void heading(String title,String subtitle){add(body,text(title,24,blue,true),-1,-2);add(body,text(subtitle,12,muted,false),-1,-2);gap(body,18);}
   void action(String label,Runnable callback){TextView button=text(label+"   ›",15,blue,true);button.setPadding(dp(16),dp(14),dp(14),dp(14));button.setBackground(shape(surface,12));add(body,button,-1,-2);gap(body,9);button.setOnClickListener(v->callback.run());}
@@ -588,12 +588,42 @@ googleSignInClient = GoogleSignIn.getClient(this, gso);snapshotBeforeUpdate();lo
       int order=getPreferences(0).getInt("orders_"+date(),0)+1;
       int[] purchased=Arrays.copyOf(qty,qty.length);
       String printed=receipt(method,due,order,tendered);
-      try{JSONObject sale=new JSONObject();sale.put("time",timestamp());JSONArray soldItems=new JSONArray();for(int amount:purchased)soldItems.put(amount);sale.put("qty",soldItems);JSONArray sales=entries("stock_sales");sales.put(sale);
+      try{JSONObject sale=new JSONObject();sale.put("time",timestamp());sale.put("order",order);sale.put("total",due);sale.put("method",method);sale.put("refunded",false);JSONArray soldItems=new JSONArray();for(int amount:purchased)soldItems.put(amount);sale.put("qty",soldItems);JSONArray sales=entries("stock_sales");sales.put(sale);
         if(!getPreferences(0).edit().putInt("sales_"+date(),getPreferences(0).getInt("sales_"+date(),0)+due).putInt("orders_"+date(),order).putString("stock_sales",sales.toString()).commit())throw new IOException("Gagal simpan");
       }catch(Exception e){message("Bayaran gagal direkod. Semak simpanan telefon.");return;}
       playPaymentSound();
       Arrays.fill(qty,0);draw();
       previewReceipt(printed,purchased,method,due,order,tendered);
+  }
+
+  int saleTotal(JSONObject sale){
+    int stored=sale.optInt("total",-1);if(stored>=0)return stored;JSONArray q=sale.optJSONArray("qty");int total=0;if(q!=null)for(int i=0;i<Math.min(q.length(),prices.length);i++)total+=q.optInt(i)*prices[i];return total;
+  }
+  String saleItemsText(JSONObject sale){
+    JSONArray q=sale.optJSONArray("qty");StringBuilder b=new StringBuilder();if(q!=null)for(int i=0;i<Math.min(q.length(),names.length);i++){int n=q.optInt(i);if(n>0){if(b.length()>0)b.append("\n");b.append(names[i]).append(" × ").append(n).append("  ·  ").append(money(n*prices[i]));}}return b.length()==0?"Tiada butiran item":b.toString();
+  }
+  void saleHistoryChooseDate(){pickDay("Pilih tarikh history",date(),value->saleHistory(value));}
+  void saleHistory(String day){
+    JSONArray sales=entries("stock_sales");ScrollView scroll=new ScrollView(this);scroll.setVerticalScrollBarEnabled(false);LinearLayout panel=col();panel.setPadding(dp(14),dp(14),dp(14),dp(14));panel.setBackgroundColor(cream);scroll.addView(panel);
+    LinearLayout hero=col();hero.setPadding(dp(14),dp(12),dp(14),dp(12));hero.setBackground(shape(0xff102f4d,14));add(hero,text("HISTORY CUSTOMER",20,ink,true),-1,-2);add(hero,text(day,12,gold,true),-1,-2);add(hero,text("Tekan transaksi untuk lihat pembelian atau buat refund.",11,muted,false),-1,-2);add(panel,hero,-1,-2);gap(panel,10);
+    int found=0;for(int i=sales.length()-1;i>=0;i--){JSONObject sale=sales.optJSONObject(i);if(sale==null||!day.equals(entryDay(sale)))continue;found++;final int saleIndex=i;int total=saleTotal(sale);boolean refunded=sale.optBoolean("refunded",false);
+      LinearLayout card=col();card.setPadding(dp(13),dp(11),dp(13),dp(11));card.setBackground(shape(surface,13));LinearLayout top=row();String time=sale.optString("time");String clock=time.length()>=16?time.substring(11):time;top.addView(text("CUSTOMER #"+sale.optInt("order",found)+"  ·  "+clock,12,muted,true),new LinearLayout.LayoutParams(0,-2,1));add(top,text(money(total),15,refunded?0xffff6b6b:blue,true),-2,-2);add(card,top,-1,-2);gap(card,5);add(card,text(saleItemsText(sale),12,ink,false),-1,-2);gap(card,6);TextView status=chip(refunded?"REFUNDED":"LIHAT / REFUND",refunded?0xff4b2930:0xff203f61,refunded?0xffff6b6b:gold);status.setGravity(Gravity.CENTER);add(card,status,-1,35);if(!refunded)card.setOnClickListener(v->saleDetailRefund(saleIndex));add(panel,card,-1,-2);gap(panel,8);}
+    if(found==0)add(panel,text("Tiada pembelian customer pada tarikh ini.",13,muted,false),-1,-2);
+    AlertDialog dialog=new AlertDialog.Builder(this).setView(scroll).setPositiveButton("TUTUP",null).setNeutralButton("TUKAR TARIKH",(d,w)->saleHistoryChooseDate()).create();applyDarkReportDialog(dialog);
+  }
+  void saleDetailRefund(int saleIndex){
+    JSONArray sales=entries("stock_sales");JSONObject sale=sales.optJSONObject(saleIndex);if(sale==null)return;int total=saleTotal(sale);LinearLayout box=col();box.setPadding(dp(16),dp(12),dp(16),0);box.setBackgroundColor(cream);add(box,text(saleItemsText(sale),14,ink,false),-1,-2);gap(box,10);add(box,text("Jumlah bayaran: "+money(total),16,blue,true),-1,-2);add(box,text("Refund penuh akan direkod sebagai DUIT KELUAR dan item dipindahkan ke rekod STOK ROSAK dengan alasan Refund Customer.",11,muted,false),-1,-2);
+    AlertDialog dialog=new AlertDialog.Builder(this).setView(box).setPositiveButton("REFUND PENUH",null).setNegativeButton("BATAL",null).create();dialog.setOnShowListener(v->{dialog.getWindow().setBackgroundDrawable(shape(cream,18));Button ok=dialog.getButton(AlertDialog.BUTTON_POSITIVE);ok.setTextColor(0xffff6b6b);dialog.getButton(AlertDialog.BUTTON_NEGATIVE).setTextColor(gold);ok.setOnClickListener(x->{refundSale(saleIndex);dialog.dismiss();});});dialog.show();
+  }
+  void refundSale(int saleIndex){
+    try{
+      JSONArray sales=entries("stock_sales");JSONObject sale=sales.optJSONObject(saleIndex);if(sale==null||sale.optBoolean("refunded",false)){message("Transaksi ini sudah direfund.");return;}int refund=saleTotal(sale);JSONArray q=sale.optJSONArray("qty");String now=timestamp();
+      JSONArray damage=entries("stock_damage");if(q!=null)for(int i=0;i<Math.min(q.length(),names.length);i++){int n=q.optInt(i);if(n<=0||unlimited(i))continue;JSONObject d=new JSONObject();d.put("time",now);d.put("item",i);d.put("name",names[i]);d.put("qty",n);d.put("cost",restockCost(i,n));d.put("unitCost",costUnit(i));d.put("pack",costPack(i));d.put("note","Refund Customer");d.put("refund",true);damage.put(d);}
+      JSONArray cash=entries("cash_entries");JSONObject out=new JSONObject();out.put("time",now);out.put("month",date().substring(0,7));out.put("amount",-refund);out.put("category","Refund Customer");out.put("note","Refund transaksi "+sale.optString("time"));cash.put(out);
+      sale.put("refunded",true);sale.put("refundTime",now);sale.put("refundAmount",refund);sales.put(saleIndex,sale);
+      android.content.SharedPreferences.Editor ed=getPreferences(0).edit().putString("stock_sales",sales.toString()).putString("stock_damage",damage.toString()).putString("cash_entries",cash.toString());if(!ed.commit())throw new IOException();
+      draw();message("Refund "+money(refund)+" direkod. Duit keluar dan stok rosak telah dikemas kini.");
+    }catch(Exception e){message("Refund gagal direkod.");}
   }
   void receiptRule(LinearLayout sheet){View rule=new View(this);rule.setBackgroundColor(0xffe5e7e2);LinearLayout.LayoutParams lp=params(-1,1);lp.setMargins(0,dp(13),0,dp(13));sheet.addView(rule,lp);}
   void receiptRow(LinearLayout sheet,String label,String value,boolean highlight){
