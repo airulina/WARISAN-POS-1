@@ -164,7 +164,7 @@ googleSignInClient = GoogleSignIn.getClient(this, gso);snapshotBeforeUpdate();lo
         int[] s=stockToday(id);LinearLayout card=col();card.setPadding(dp(14),dp(13),dp(14),dp(13));card.setBackground(shape(surface,15));
         add(card,text(names[id],17,ink,true),-1,-2);gap(card,9);
         LinearLayout upper=row();stockTile(upper,"STOK AWAL",""+s[0]);stockTile(upper,"RESTOCK","+"+s[1]);add(card,upper,-1,-2);gap(card,5);
-        LinearLayout lower=row();stockTile(lower,"TERJUAL","−"+s[2]);stockTile(lower,"BAKI",""+s[3]);add(card,lower,-1,-2);add(card,text("Rosak hari ini: "+s[4]+" unit",12,0xffb54743,true),-1,-2);gap(card,10);
+        LinearLayout lower=row();stockTile(lower,"TERJUAL","−"+s[2]);stockTile(lower,"BAKI",""+s[3]);add(card,lower,-1,-2);add(card,text("Rosak hari ini: "+s[4]+" unit",12,0xffff1744,true),-1,-2);gap(card,10);
         LinearLayout controls=row();TextView start=chip(hasOpeningStock(id)?"Awal ✓":"+ Stok awal",0xfff0e5cb,ink),more=chip("+ Restock",blue,Color.WHITE);
         controls.addView(start,new LinearLayout.LayoutParams(0,dp(43),1));LinearLayout.LayoutParams mp=new LinearLayout.LayoutParams(0,dp(43),1);mp.leftMargin=dp(7);controls.addView(more,mp);
         start.setEnabled(!hasOpeningStock(id));start.setAlpha(hasOpeningStock(id)?.6f:1f);start.setOnClickListener(v->stockEntryItem(id,true));more.setOnClickListener(v->stockEntryItem(id,false));add(card,controls,-1,-2);gap(card,7);TextView damage=chip("− Stok rosak",0xffffe4de,0xffa2382d);add(card,damage,-1,40);damage.setOnClickListener(v->damageEntry(id));
@@ -242,7 +242,7 @@ googleSignInClient = GoogleSignIn.getClient(this, gso);snapshotBeforeUpdate();lo
       action("Reset stok sahaja",()->resetData(false));
       action("Reset semua data",()->resetData(true));
     }}
-  void stockTile(LinearLayout row,String title,String value){LinearLayout box=col();box.setPadding(dp(10),dp(8),dp(7),dp(8));box.setBackground(shape(0xffd5dfec,10));int tileLabel=0xff53657a;int tileValue=0xff15263a;add(box,text(title,10,tileLabel,true),-1,-2);add(box,text(value,21,"BAKI".equals(title)?blue:tileValue,true),-1,-2);LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(0,-2,1);p.setMargins(dp(2),0,dp(2),0);row.addView(box,p);}
+  void stockTile(LinearLayout row,String title,String value){LinearLayout box=col();box.setPadding(dp(10),dp(8),dp(7),dp(8));box.setBackground(shape(0xffffd54f,10));int tileLabel=0xff7a1f1f;int tileValue=0xffb71c1c;add(box,text(title,10,tileLabel,true),-1,-2);add(box,text(value,21,"BAKI".equals(title)?blue:tileValue,true),-1,-2);LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(0,-2,1);p.setMargins(dp(2),0,dp(2),0);row.addView(box,p);}
   void stockEntryItem(int id){stockEntryItem(id,false);}
   void stockEntryItem(int id,boolean opening){if(unlimited(id)){message("Kuah kacang diurus mengikut liter, tanpa had stok unit.");return;}if(opening&&hasOpeningStock(id)){message("Stok awal sudah direkod. Gunakan Restock untuk tambah.");return;}
     if(!opening&&costUnit(id)<=0){new AlertDialog.Builder(this).setTitle("Harga mentah belum ditetapkan").setMessage("Tetapkan harga mentah "+names[id]+" sebelum restock supaya duit keluar dikira dengan betul.").setPositiveButton("Edit harga",(d,w)->editMenuPrice(id)).setNegativeButton("Batal",null).show();return;}
