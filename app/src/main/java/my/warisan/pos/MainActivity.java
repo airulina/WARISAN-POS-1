@@ -68,12 +68,35 @@ private static final int RC_SIGN_IN = 9001;
   boolean unlimited(int id){return id==4;}
   String entryDay(JSONObject entry){String time=entry.optString("time","");return time.length()>=10?time.substring(6,10)+"-"+time.substring(3,5)+"-"+time.substring(0,2):"";}
   boolean hasOpeningStock(int id){JSONArray list=entries("stock_entries");for(int i=0;i<list.length();i++){JSONObject record=list.optJSONObject(i);if(record!=null&&record.optInt("item",-1)==id)return true;}return false;}
-  int[] stockToday(int id){int[] summary=new int[5];String today=date();JSONArray incoming=entries("stock_entries"),sales=entries("stock_sales");boolean firstLegacy=true;
-    for(int i=0;i<incoming.length();i++){JSONObject e=incoming.optJSONObject(i);if(e==null||e.optInt("item",-1)!=id)continue;String day=entryDay(e);int value=e.optInt("qty");String type=e.optString("type");boolean opening="opening".equals(type)||"opening_adjustment".equals(type)||(firstLegacy&&!e.has("type"));firstLegacy=false;
-      if(day.compareTo(today)<0)summary[0]+=value;else if(day.equals(today)){if(opening)summary[0]+=value;else summary[1]+=value;}}
-    for(int i=0;i<sales.length();i++){JSONObject e=sales.optJSONObject(i);if(e==null)continue;JSONArray q=e.optJSONArray("qty");if(q==null)continue;String day=entryDay(e);if(day.compareTo(today)<0)summary[0]-=q.optInt(id);else if(day.equals(today))summary[2]+=q.optInt(id);}
-    JSONArray damaged=entries("stock_damage");for(int i=0;i<damaged.length();i++){JSONObject e=damaged.optJSONObject(i);if(e==null||e.optBoolean("stockReset",false)||e.optInt("item",-1)!=id)continue;String day=entryDay(e);if(day.compareTo(today)<0)summary[0]-=e.optInt("qty");else if(day.equals(today))summary[4]+=e.optInt("qty");}
-    summary[3]=summary[0]+summary[1]-summary[2]-summary[4];return summary;}
+  int[] stockToday(int id){
+    // [0]=stok awal/carry forward, [1]=restock HARI INI sahaja,
+    // [2]=terjual hari ini, [3]=baki, [4]=rosak hari ini.
+    int[] summary=new int[5];String today=date();long opening=0;
+    JSONArray incoming=entries("stock_entries"),sales=entries("stock_sales"),damaged=entries("stock_damage");
+    for(int i=0;i<incoming.length();i++){
+      JSONObject e=incoming.optJSONObject(i);if(e==null||e.optInt("item",-1)!=id)continue;
+      String day=entryDay(e),type=e.optString("type","restock");int value=e.optInt("qty",0);
+      if(day.compareTo(today)<0)opening+=value;
+      else if(day.equals(today)){
+        if("restock".equals(type))summary[1]+=Math.max(0,value);
+        else if("opening".equals(type)||"opening_adjustment".equals(type))opening+=value;
+      }
+    }
+    for(int i=0;i<sales.length();i++){
+      JSONObject e=sales.optJSONObject(i);if(e==null)continue;JSONArray q=e.optJSONArray("qty");if(q==null)continue;
+      String day=entryDay(e);int value=Math.max(0,q.optInt(id));
+      if(day.compareTo(today)<0)opening-=value;else if(day.equals(today))summary[2]+=value;
+    }
+    for(int i=0;i<damaged.length();i++){
+      JSONObject e=damaged.optJSONObject(i);if(e==null||e.optBoolean("stockReset",false)||e.optInt("item",-1)!=id)continue;
+      String day=entryDay(e);int value=Math.max(0,e.optInt("qty"));
+      if(day.compareTo(today)<0)opening-=value;else if(day.equals(today))summary[4]+=value;
+    }
+    summary[0]=(int)Math.max(0,Math.min(Integer.MAX_VALUE,opening));
+    summary[1]=Math.max(0,summary[1]);summary[2]=Math.max(0,summary[2]);summary[4]=Math.max(0,summary[4]);
+    summary[3]=Math.max(0,summary[0]+summary[1]-summary[2]-summary[4]);
+    return summary;
+  }
   int stock(int id){if(cachedStock==null||cachedStock.length!=names.length){cachedStock=new int[names.length];JSONArray in=entries("stock_entries"),out=entries("stock_sales");
       for(int n=0;n<in.length();n++){JSONObject e=in.optJSONObject(n);if(e!=null){int item=e.optInt("item",-1);if(item>=0&&item<cachedStock.length)cachedStock[item]+=e.optInt("qty");}}
       for(int n=0;n<out.length();n++){JSONObject e=out.optJSONObject(n);if(e!=null){JSONArray q=e.optJSONArray("qty");if(q!=null)for(int j=0;j<cachedStock.length;j++)cachedStock[j]-=q.optInt(j);}}}
@@ -163,10 +186,32 @@ googleSignInClient = GoogleSignIn.getClient(this, gso);snapshotBeforeUpdate();lo
   boolean sateItem(int id){return id>=0&&id<3;}
   boolean supplierItem(int id){return sateItem(id)||getPreferences(0).getBoolean("menu_supplier_"+id,id==5||id==6);}
   int totalMoneyBalance(){long total=0;for(String key:getPreferences(0).getAll().keySet())if(key.matches("sales_\\d{4}-\\d{2}-\\d{2}"))total+=getPreferences(0).getInt(key,0);JSONArray list=entries("cash_entries");for(int i=0;i<list.length();i++){JSONObject e=list.optJSONObject(i);if(e!=null)total+=e.optInt("amount");}return (int)Math.max(Integer.MIN_VALUE,Math.min(Integer.MAX_VALUE,total));}
-  String supplierReceipt(int original,int deduction,int paid,String remark){return "WARISAN FROZEN\n--------------------------------\nRESIT BAYARAN PEMBEKAL\nTarikh: "+new SimpleDateFormat("dd/MM/yyyy HH:mm",Locale.US).format(new Date())+"\n--------------------------------\nJumlah asal       "+money(original)+"\nJumlah tolakan    "+money(deduction)+"\nJUMLAH DIBAYAR    "+money(paid)+"\n--------------------------------\nRemark: "+(remark.isEmpty()?"-":remark)+"\nStatus: TELAH DIBAYAR\n";}
-  void showSupplierReceipt(String receipt){new AlertDialog.Builder(this).setTitle("Resit pembekal").setMessage(receipt).setPositiveButton("Cetak",(d,w)->print(receipt)).setNegativeButton("Tutup",null).show();}
-  void previewSupplierReceipt(){showSupplierReceipt(supplierReceipt(17500,2500,15000,"Contoh remark / alasan tolakan"));}
-  void paySupplier(){int due=supplierDue();if(due<=0){message("Tiada bayaran pembekal tertunggak.");return;}LinearLayout form=col();form.setPadding(dp(18),dp(5),dp(18),0);add(form,text("Jumlah perlu dibayar: "+money(due),15,ink,true),-1,-2);EditText deduction=priceField("Jumlah tolakan RM","0.00");EditText remark=new EditText(this);remark.setHint("Remark / alasan tolakan");add(form,text("Jumlah tolakan",12,muted,true),-1,-2);add(form,deduction,-1,-2);add(form,text("Remark",12,muted,true),-1,-2);add(form,remark,-1,-2);AlertDialog dialog=new AlertDialog.Builder(this).setTitle("Telah dibayar · Pembekal").setView(form).setPositiveButton("CONFIRM",null).setNegativeButton("Batal",null).create();dialog.setOnShowListener(v->dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(x->{try{int cut=parseCents(deduction);String note=remark.getText().toString().trim();if(cut<0||cut>due){message("Jumlah tolakan tidak sah");return;}if(cut>0&&note.isEmpty()){message("Isi remark / alasan untuk jumlah tolakan");return;}int paid=due-cut;JSONObject expense=new JSONObject();expense.put("time",timestamp());expense.put("month",date().substring(0,7));expense.put("amount",-paid);expense.put("category","Bayaran Pembekal");expense.put("note",note);expense.put("supplierOriginal",due);expense.put("supplierDeduction",cut);expense.put("supplierPaid",paid);JSONArray cash=entries("cash_entries");cash.put(expense);android.content.SharedPreferences.Editor editor=getPreferences(0).edit().putString("cash_entries",cash.toString()).putInt("supplier_due",0).putInt("supplier_due_sate",0);if(!editor.commit())throw new Exception();String receipt=supplierReceipt(due,cut,paid,note);dialog.dismiss();draw();showSupplierReceipt(receipt);}catch(Exception e){message("Semak jumlah tolakan dan cuba lagi.");}}));dialog.show();}
+  String supplierReceipt(int original,int deduction,int paid,String remark){StringBuilder b=new StringBuilder();
+    String shopName=getPreferences(0).getString("shop_name","WARISAN FROZEN");b.append(centerReceipt(shopName));
+    String phone=getPreferences(0).getString("receipt_phone","");if(!phone.isEmpty())b.append(centerReceipt("Tel: "+phone));
+    String email=getPreferences(0).getString("receipt_email","");if(!email.isEmpty())b.append(centerReceipt(email));
+    b.append("--------------------------------\n").append(centerReceipt("RESIT BAYARAN PEMBEKAL"))
+      .append(line("Tarikh",new SimpleDateFormat("dd/MM/yy HH:mm",Locale.US).format(new Date()))).append("--------------------------------\n")
+      .append(line("Jumlah asal",money(original))).append(line("Jumlah tolakan",money(deduction)))
+      .append("--------------------------------\n").append(line("JUMLAH DIBAYAR",money(paid)));
+    if(!remark.trim().isEmpty())b.append("--------------------------------\nRemark:\n").append(remark.trim()).append("\n");
+    b.append("================================\n").append(centerReceipt("TELAH DIBAYAR")).append(ownerReceipt()).append("\n");return b.toString();}
+  void showSupplierReceipt(String printed,int original,int deduction,int paid,String remark){
+    ScrollView scroll=new ScrollView(this);scroll.setVerticalScrollBarEnabled(false);int receiptText=0xff26384c,receiptMuted=0xff66788a;
+    LinearLayout sheet=col();sheet.setPadding(dp(18),dp(12),dp(18),dp(14));sheet.setBackgroundColor(Color.WHITE);scroll.addView(sheet);
+    ImageView logo=new ImageView(this);logo.setImageResource(R.drawable.warisan_logo);makeCircle(logo);LinearLayout logoRow=row();logoRow.setGravity(Gravity.CENTER);add(logoRow,logo,74,74);add(sheet,logoRow,-1,-2);gap(sheet,5);
+    TextView brand=text(getPreferences(0).getString("shop_name","WARISAN FROZEN"),17,blue,true);brand.setGravity(Gravity.CENTER);add(sheet,brand,-1,-2);
+    String phone=getPreferences(0).getString("receipt_phone","");TextView contact=text(phone.isEmpty()?"No. telefon belum diisi":"Tel: "+phone,11,receiptMuted,false);contact.setGravity(Gravity.CENTER);add(sheet,contact,-1,-2);
+    String email=getPreferences(0).getString("receipt_email","");if(!email.isEmpty()){TextView mail=text(email,11,receiptMuted,false);mail.setGravity(Gravity.CENTER);add(sheet,mail,-1,-2);}
+    receiptRule(sheet);TextView title=text("RESIT BAYARAN PEMBEKAL",14,blue,true);title.setGravity(Gravity.CENTER);add(sheet,title,-1,-2);gap(sheet,9);
+    receiptRow(sheet,"Tarikh",new SimpleDateFormat("dd/MM/yyyy HH:mm",Locale.US).format(new Date()),false);receiptRule(sheet);
+    receiptRow(sheet,"Jumlah asal",money(original),false);gap(sheet,7);receiptRow(sheet,"Jumlah tolakan",money(deduction),false);receiptRule(sheet);receiptRow(sheet,"JUMLAH DIBAYAR",money(paid),true);
+    if(!remark.trim().isEmpty()){receiptRule(sheet);TextView rl=text("REMARK",11,receiptMuted,true);add(sheet,rl,-1,-2);gap(sheet,4);TextView rv=text(remark.trim(),13,receiptText,false);add(sheet,rv,-1,-2);}
+    receiptRule(sheet);TextView status=text("TELAH DIBAYAR",13,blue,true);status.setGravity(Gravity.CENTER);add(sheet,status,-1,-2);
+    String owner=ownerDisplay();if(!owner.isEmpty()){gap(sheet,8);TextView owned=text("DIMILIKI OLEH : "+owner,10,receiptMuted,true);owned.setGravity(Gravity.CENTER);add(sheet,owned,-1,-2);}
+    new AlertDialog.Builder(this).setTitle("Semak resit pembekal").setView(scroll).setPositiveButton("Cetak resit",(d,w)->print(printed)).setNegativeButton("Tutup",null).show();}
+  void previewSupplierReceipt(){int original=17500,deduction=2500,paid=15000;String remark="Contoh remark / alasan tolakan";showSupplierReceipt(supplierReceipt(original,deduction,paid,remark),original,deduction,paid,remark);}
+  void paySupplier(){int due=supplierDue();if(due<=0){message("Tiada bayaran pembekal tertunggak.");return;}LinearLayout form=col();form.setPadding(dp(18),dp(5),dp(18),0);add(form,text("Jumlah perlu dibayar: "+money(due),15,ink,true),-1,-2);EditText deduction=priceField("Jumlah tolakan RM","0.00");EditText remark=new EditText(this);remark.setHint("Remark / alasan tolakan");add(form,text("Jumlah tolakan",12,muted,true),-1,-2);add(form,deduction,-1,-2);add(form,text("Remark",12,muted,true),-1,-2);add(form,remark,-1,-2);AlertDialog dialog=new AlertDialog.Builder(this).setTitle("Telah dibayar · Pembekal").setView(form).setPositiveButton("CONFIRM",null).setNegativeButton("Batal",null).create();dialog.setOnShowListener(v->dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(x->{try{int cut=parseCents(deduction);String note=remark.getText().toString().trim();if(cut<0||cut>due){message("Jumlah tolakan tidak sah");return;}if(cut>0&&note.isEmpty()){message("Isi remark / alasan untuk jumlah tolakan");return;}int paid=due-cut;JSONObject expense=new JSONObject();expense.put("time",timestamp());expense.put("month",date().substring(0,7));expense.put("amount",-paid);expense.put("category","Bayaran Pembekal");expense.put("note",note);expense.put("supplierOriginal",due);expense.put("supplierDeduction",cut);expense.put("supplierPaid",paid);JSONArray cash=entries("cash_entries");cash.put(expense);android.content.SharedPreferences.Editor editor=getPreferences(0).edit().putString("cash_entries",cash.toString()).putInt("supplier_due",0).putInt("supplier_due_sate",0);if(!editor.commit())throw new Exception();String printed=supplierReceipt(due,cut,paid,note);dialog.dismiss();draw();showSupplierReceipt(printed,due,cut,paid,note);}catch(Exception e){message("Semak jumlah tolakan dan cuba lagi.");}}));dialog.show();}
   void drawPage(){if(activePage==1){heading("Stok & restock","Baki semalam dibawa sebagai stok awal hari ini.");
       for(int i=0;i<names.length;i++){final int id=i;if(getPreferences(0).getBoolean("menu_hidden_"+id,false))continue;if(unlimited(id)){action(names[id]+" · kuah ikut liter (tiada had unit)",()->message("Kuah kacang sentiasa boleh dijual."));continue;}
         int[] s=stockToday(id);LinearLayout card=col();card.setPadding(dp(14),dp(13),dp(14),dp(13));card.setBackground(shape(surface,15));
