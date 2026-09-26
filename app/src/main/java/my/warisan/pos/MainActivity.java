@@ -171,12 +171,20 @@ googleSignInClient = GoogleSignIn.getClient(this, gso);snapshotBeforeUpdate();lo
     int available=unlimited(id)?Integer.MAX_VALUE:stock(id);TextView stockLabel=text(unlimited(id)?"Kuah · tanpa had unit":"Stok: "+available+(available==0?" · HABIS":""),11,available==0?0xffb54743:blue,true);add(card,stockLabel,-1,-2);gap(card,5);
     LinearLayout controls=row();TextView minus=chip("−",0xffc83f46,Color.WHITE),number=text(""+qty[id],15,ink,true),plus=chip("+",blue,Color.WHITE);number.setGravity(Gravity.CENTER);
     controls.addView(minus,new LinearLayout.LayoutParams(0,dp(32),1));controls.addView(number,new LinearLayout.LayoutParams(0,dp(32),1));controls.addView(plus,new LinearLayout.LayoutParams(0,dp(32),1));add(card,controls,-1,-2);
+    number.setClickable(true);number.setOnClickListener(v->editOrderQuantity(id));
     minus.setOnClickListener(v->{qty[id]=Math.max(0,qty[id]-1);draw();});
     plus.setAlpha(available<=qty[id]?.35f:1f);plus.setEnabled(available>qty[id]);
     plus.setOnClickListener(v->stockLimit(id,1));
     if(id<3){gap(card,5);LinearLayout presets=row();for(int n:new int[]{10,20,30}){TextView p=chip("+"+n,0xfffff3db,blue);p.setEnabled(available>qty[id]);p.setAlpha(available<=qty[id]?.35f:1f);LinearLayout.LayoutParams pp=new LinearLayout.LayoutParams(0,dp(26),1);pp.setMargins(dp(1),0,dp(1),0);presets.addView(p,pp);p.setOnClickListener(v->stockLimit(id,n));}add(card,presets,-1,-2);}
     LinearLayout.LayoutParams cp=new LinearLayout.LayoutParams(0,-2,1);cp.setMargins(dp(2),0,dp(2),0);pair.addView(card,cp);
   }
+  void editOrderQuantity(int id){
+    EditText input=new EditText(this);input.setSingleLine(true);input.setInputType(android.text.InputType.TYPE_CLASS_NUMBER);input.setText(""+qty[id]);input.setSelectAllOnFocus(true);input.setHint("Masukkan kuantiti");
+    AlertDialog dialog=new AlertDialog.Builder(this).setTitle("Kuantiti · "+names[id]).setMessage(unlimited(id)?"Masukkan jumlah yang customer beli.":"Stok tersedia: "+stock(id)).setView(input).setPositiveButton("OK",null).setNegativeButton("Batal",null).create();
+    dialog.setOnShowListener(v->{input.requestFocus();dialog.getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_VISIBLE);dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(x->{try{String raw=input.getText().toString().trim();if(raw.isEmpty())throw new NumberFormatException();int value=Integer.parseInt(raw);if(value<0||value>100000)throw new NumberFormatException();if(!unlimited(id)&&value>stock(id)){message("Stok "+names[id]+" hanya tinggal "+stock(id)+".");return;}qty[id]=value;dialog.dismiss();draw();}catch(Exception e){message("Masukkan nombor 0 hingga 100000.");}});});
+    dialog.show();
+  }
+
   void refresh(){items.setText(count()+" item");total.setText(money(sum()));payButton.setAlpha(sum()==0?.55f:1f);basket.removeAllViews();
     if(count()==0){TextView empty=text("Belum ada pesanan. Pilih menu di atas.",13,muted,false);empty.setPadding(0,dp(13),0,dp(13));add(basket,empty,-1,-2);return;}
     for(int i=0;i<qty.length;i++)if(qty[i]>0){final int id=i;LinearLayout r=row();r.addView(text(names[i]+" × "+qty[i],14,ink,true),new LinearLayout.LayoutParams(0,dp(39),1));add(r,text(money(qty[i]*prices[i]),13,blue,true),-2,-2);TextView minus=chip("−",0xffc83f46,Color.WHITE);LinearLayout.LayoutParams m=params(32,30);m.leftMargin=dp(8);r.addView(minus,m);minus.setOnClickListener(v->{qty[id]--;draw();});add(basket,r,-1,-2);}
