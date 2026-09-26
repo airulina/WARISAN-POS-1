@@ -302,6 +302,7 @@ googleSignInClient = GoogleSignIn.getClient(this, gso);snapshotBeforeUpdate();lo
       heading("Setting","WarisanPOS 3.15 · Tetapan kedai dan data.");
       action("👤  Account",()->{activePage=5;draw();});
       action("🧾  Bill / Resit",()->{activePage=7;draw();});
+       action("💳  Payment / DuitNow",()->{activePage=10;draw();});
       action("🍽  Pengurusan Menu",()->{activePage=6;draw();});
       action("🏪  Maklumat Kedai",()->{activePage=8;draw();});
       action("⚠  Reset",()->{activePage=9;draw();});
@@ -345,12 +346,27 @@ googleSignInClient = GoogleSignIn.getClient(this, gso);snapshotBeforeUpdate();lo
       action("Nama syarikat",()->editShopInfo("company_name","Nama syarikat",""));
       action("No. lesen / pendaftaran",()->editShopInfo("company_reg","No. lesen / pendaftaran perniagaan",""));
       action("Alamat HQ",()->editShopInfo("company_hq","Alamat HQ",""));
+    }else if(activePage==10){
+      heading("Payment / DuitNow","Tetapan merchant disimpan dari Setting, bukan hard-code dalam source.");
+      action("‹  Kembali ke Setting",()->{activePage=4;draw();});
+      String provider=getPreferences(0).getString("payment_provider","Static DuitNow");
+      action("Provider · "+provider,()->editPaymentProvider());
+      action("Merchant ID",()->editPaymentSetting("payment_merchant_id","Merchant ID",""));
+      action("API / Public Key",()->editPaymentSetting("payment_api_key","API / Public Key",""));
+      action("Secret Key",()->editPaymentSetting("payment_secret","Secret Key",""));
+      action("API Base URL",()->editPaymentSetting("payment_base_url","API Base URL",""));
+      action("Test Connection",()->testPaymentConnection());
+      action("Padam konfigurasi merchant",()->deletePaymentConfig());
     }else if(activePage==9){
       heading("Reset","Pilihan reset data WarisanPOS.");
       action("‹  Kembali ke Setting",()->{activePage=4;draw();});
       action("Reset stok sahaja",()->resetData(false));
       action("Reset semua data",()->resetData(true));
     }}
+  void editPaymentProvider(){String[] options={"Static DuitNow","HitPay","Maybank QRPayBiz","Custom API"};String current=getPreferences(0).getString("payment_provider","Static DuitNow");int checked=0;for(int i=0;i<options.length;i++)if(options[i].equals(current))checked=i;final int initial=checked;new AlertDialog.Builder(this).setTitle("Pilih payment provider").setSingleChoiceItems(options,checked,null).setPositiveButton("Simpan",(d,w)->{AlertDialog a=(AlertDialog)d;int pos=a.getListView().getCheckedItemPosition();if(pos<0)pos=initial;getPreferences(0).edit().putString("payment_provider",options[pos]).apply();draw();}).setNegativeButton("Batal",null).show();}
+  void editPaymentSetting(String key,String title,String hint){EditText input=new EditText(this);input.setSingleLine(true);input.setHint(hint);String old=getPreferences(0).getString(key,"");input.setText(old);if(key.contains("secret")||key.contains("api_key"))input.setInputType(android.text.InputType.TYPE_CLASS_TEXT|android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD);new AlertDialog.Builder(this).setTitle(title).setView(input).setPositiveButton("Simpan",(d,w)->{getPreferences(0).edit().putString(key,input.getText().toString().trim()).apply();message(title+" disimpan pada device.");}).setNegativeButton("Batal",null).show();}
+  void testPaymentConnection(){String provider=getPreferences(0).getString("payment_provider","Static DuitNow");if("Static DuitNow".equals(provider)){message("Static DuitNow tidak memerlukan API connection.");return;}String base=getPreferences(0).getString("payment_base_url","").trim(),key=getPreferences(0).getString("payment_api_key","").trim();if(base.isEmpty()||key.isEmpty()){message("Isi API Base URL dan API/Public Key dahulu.");return;}message("Konfigurasi "+provider+" tersedia. Ujian server sebenar akan aktif selepas endpoint provider disahkan.");}
+  void deletePaymentConfig(){new AlertDialog.Builder(this).setTitle("Padam konfigurasi merchant?").setMessage("Merchant ID, API key, secret dan URL akan dipadam dari telefon ini.").setPositiveButton("PADAM",(d,w)->{getPreferences(0).edit().remove("payment_provider").remove("payment_merchant_id").remove("payment_api_key").remove("payment_secret").remove("payment_base_url").apply();draw();message("Konfigurasi merchant dipadam.");}).setNegativeButton("Batal",null).show();}
   void stockTile(LinearLayout row,String title,String value){LinearLayout box=col();box.setPadding(dp(10),dp(8),dp(7),dp(8));box.setBackground(shape(0xffffd54f,10));int tileLabel=0xff6d3b16;int tileValue=0xff15263a;add(box,text(title,10,tileLabel,true),-1,-2);add(box,text(value,21,"BAKI".equals(title)?blue:tileValue,true),-1,-2);LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(0,-2,1);p.setMargins(dp(2),0,dp(2),0);row.addView(box,p);}
   void stockEntryItem(int id){stockEntryItem(id,false);}
   void stockEntryItem(int id,boolean opening){if(unlimited(id)){message("Kuah kacang diurus mengikut liter, tanpa had stok unit.");return;}if(opening&&hasOpeningStock(id)){editOpeningStock(id);return;}
