@@ -58,7 +58,8 @@ private static final int RC_SIGN_IN = 9001;
   static final int REQUEST_BLUETOOTH=42, EXPORT_CSV=43, EXPORT_PDF=44, PICK_IMAGE=45, EXPORT_BACKUP=46, IMPORT_BACKUP=47;
   int exportYear;
   int activePage=0, imageItem=-1;
-  String selectedMonth,selectedDay,rangeStart;
+  String selectedMonth,selectedDay,rangeStart,selectedStockDay,selectedCashDay;
+  boolean cashDailyMode=false;
   int[] cachedStock;
   final UUID printerUuid=UUID.fromString("00001101-0000-1000-8000-00805F9B34FB");
   String pendingReceipt;
@@ -70,35 +71,14 @@ private static final int RC_SIGN_IN = 9001;
   boolean unlimited(int id){return id==4;}
   String entryDay(JSONObject entry){String time=entry.optString("time","");return time.length()>=10?time.substring(6,10)+"-"+time.substring(3,5)+"-"+time.substring(0,2):"";}
   boolean hasOpeningStock(int id){JSONArray list=entries("stock_entries");for(int i=0;i<list.length();i++){JSONObject record=list.optJSONObject(i);if(record!=null&&record.optInt("item",-1)==id)return true;}return false;}
-  int[] stockToday(int id){
-    // [0]=stok awal/carry forward, [1]=restock HARI INI sahaja,
-    // [2]=terjual hari ini, [3]=baki, [4]=rosak hari ini.
-    int[] summary=new int[5];String today=date();long opening=0;
-    JSONArray incoming=entries("stock_entries"),sales=entries("stock_sales"),damaged=entries("stock_damage");
-    for(int i=0;i<incoming.length();i++){
-      JSONObject e=incoming.optJSONObject(i);if(e==null||e.optInt("item",-1)!=id)continue;
-      String day=entryDay(e),type=e.optString("type","restock");int value=e.optInt("qty",0);
-      if(day.compareTo(today)<0)opening+=value;
-      else if(day.equals(today)){
-        if("restock".equals(type))summary[1]+=Math.max(0,value);
-        else if("opening".equals(type)||"opening_adjustment".equals(type))opening+=value;
-      }
-    }
-    for(int i=0;i<sales.length();i++){
-      JSONObject e=sales.optJSONObject(i);if(e==null)continue;JSONArray q=e.optJSONArray("qty");if(q==null)continue;
-      String day=entryDay(e);int value=Math.max(0,q.optInt(id));
-      if(day.compareTo(today)<0)opening-=value;else if(day.equals(today))summary[2]+=value;
-    }
-    for(int i=0;i<damaged.length();i++){
-      JSONObject e=damaged.optJSONObject(i);if(e==null||e.optBoolean("stockReset",false)||e.optInt("item",-1)!=id)continue;
-      String day=entryDay(e);int value=Math.max(0,e.optInt("qty"));
-      if(day.compareTo(today)<0)opening-=value;else if(day.equals(today))summary[4]+=value;
-    }
-    summary[0]=(int)Math.max(0,Math.min(Integer.MAX_VALUE,opening));
-    summary[1]=Math.max(0,summary[1]);summary[2]=Math.max(0,summary[2]);summary[4]=Math.max(0,summary[4]);
-    summary[3]=Math.max(0,summary[0]+summary[1]-summary[2]-summary[4]);
-    return summary;
+  int[] stockForDay(int id,String target){
+    int[] summary=new int[5];long opening=0;JSONArray incoming=entries("stock_entries"),sales=entries("stock_sales"),damaged=entries("stock_damage");
+    for(int i=0;i<incoming.length();i++){JSONObject e=incoming.optJSONObject(i);if(e==null||e.optInt("item",-1)!=id)continue;String day=entryDay(e),type=e.optString("type","restock");int value=e.optInt("qty",0);if(day.compareTo(target)<0)opening+=value;else if(day.equals(target)){if("restock".equals(type))summary[1]+=Math.max(0,value);else if("opening".equals(type)||"opening_adjustment".equals(type))opening+=value;}}
+    for(int i=0;i<sales.length();i++){JSONObject e=sales.optJSONObject(i);if(e==null)continue;JSONArray q=e.optJSONArray("qty");if(q==null)continue;String day=entryDay(e);int value=Math.max(0,q.optInt(id));if(day.compareTo(target)<0)opening-=value;else if(day.equals(target))summary[2]+=value;}
+    for(int i=0;i<damaged.length();i++){JSONObject e=damaged.optJSONObject(i);if(e==null||e.optBoolean("stockReset",false)||e.optInt("item",-1)!=id)continue;String day=entryDay(e);int value=Math.max(0,e.optInt("qty"));if(day.compareTo(target)<0)opening-=value;else if(day.equals(target))summary[4]+=value;}
+    summary[0]=(int)Math.max(0,Math.min(Integer.MAX_VALUE,opening));summary[3]=Math.max(0,summary[0]+summary[1]-summary[2]-summary[4]);return summary;
   }
+  int[] stockToday(int id){return stockForDay(id,date());}
   int stock(int id){return unlimited(id)?Integer.MAX_VALUE:stockToday(id)[3];}
   void stockLimit(int id,int amount){if(unlimited(id)){qty[id]+=amount;draw();return;}int available=stock(id)-qty[id];if(available<=0){message(names[id]+" habis. Masukkan stok dahulu.");return;}qty[id]+=Math.min(amount,available);draw();}
   void loadMenuPhoto(ImageView view,String location)throws Exception{Uri uri=Uri.parse(location);BitmapFactory.Options size=new BitmapFactory.Options();size.inJustDecodeBounds=true;
@@ -149,8 +129,8 @@ GoogleSignInOptions gso = new GoogleSignInOptions.Builder(GoogleSignInOptions.DE
         .requestIdToken(getString(R.string.default_web_client_id))
         .requestEmail()
         .build();
-googleSignInClient = GoogleSignIn.getClient(this, gso);snapshotBeforeUpdate();loadMenu();clearCurrentNasiDamageOnce();applyCorrection20260926();applySupplierReceiptDetailFix20260926();selectedDay=date();selectedMonth=selectedDay.substring(0,7);rangeStart=selectedDay;if(b!=null){int[] saved=b.getIntArray("cart");if(saved!=null)System.arraycopy(saved,0,qty,0,Math.min(saved.length,qty.length));activePage=b.getInt("page",0);selectedDay=b.getString("selectedDay",selectedDay);selectedMonth=selectedDay.substring(0,7);rangeStart=b.getString("rangeStart",rangeStart);}draw();}
-  @Override protected void onSaveInstanceState(Bundle b){b.putIntArray("cart",qty);b.putInt("page",activePage);b.putString("selectedDay",selectedDay);b.putString("rangeStart",rangeStart);super.onSaveInstanceState(b);}
+googleSignInClient = GoogleSignIn.getClient(this, gso);snapshotBeforeUpdate();loadMenu();clearCurrentNasiDamageOnce();applyCorrection20260926();applySupplierReceiptDetailFix20260926();selectedDay=date();selectedMonth=selectedDay.substring(0,7);rangeStart=selectedDay;selectedStockDay=selectedDay;selectedCashDay=selectedDay;if(b!=null){int[] saved=b.getIntArray("cart");if(saved!=null)System.arraycopy(saved,0,qty,0,Math.min(saved.length,qty.length));activePage=b.getInt("page",0);selectedDay=b.getString("selectedDay",selectedDay);selectedMonth=selectedDay.substring(0,7);rangeStart=b.getString("rangeStart",rangeStart);selectedStockDay=b.getString("selectedStockDay",selectedStockDay);selectedCashDay=b.getString("selectedCashDay",selectedCashDay);cashDailyMode=b.getBoolean("cashDailyMode",cashDailyMode);}draw();}
+  @Override protected void onSaveInstanceState(Bundle b){b.putIntArray("cart",qty);b.putInt("page",activePage);b.putString("selectedDay",selectedDay);b.putString("rangeStart",rangeStart);b.putString("selectedStockDay",selectedStockDay);b.putString("selectedCashDay",selectedCashDay);b.putBoolean("cashDailyMode",cashDailyMode);super.onSaveInstanceState(b);}
   void draw(){
     cachedStock=null;
     LinearLayout screen=col();screen.setBackgroundColor(cream);
@@ -210,6 +190,10 @@ googleSignInClient = GoogleSignIn.getClient(this, gso);snapshotBeforeUpdate();lo
     String c=e==null?"":e.optString("category","");if(!c.startsWith("Restock · "))return false;String item=c.substring("Restock · ".length()).trim();for(int id=0;id<names.length;id++)if(names[id].equals(item)&&supplierItem(id))return true;return false;
   }
   int[] cashTotals(String month){int[] totals=new int[2];JSONArray entries=entries("cash_entries");for(int i=0;i<entries.length();i++){JSONObject e=entries.optJSONObject(i);if(e==null||legacySupplierRestock(e)||!month.equals(e.optString("month")))continue;int amount=e.optInt("amount");if(amount>=0)totals[0]+=amount;else totals[1]-=amount;}return totals;}
+  int[] cashTotalsDay(String day){int[] totals=new int[2];JSONArray list=entries("cash_entries");for(int i=0;i<list.length();i++){JSONObject e=list.optJSONObject(i);if(e==null||legacySupplierRestock(e)||!day.equals(entryDay(e)))continue;int amount=e.optInt("amount");if(amount>=0)totals[0]+=amount;else totals[1]-=amount;}return totals;}
+  int damageTotalDay(String day){int n=0;JSONArray list=entries("stock_damage");for(int i=0;i<list.length();i++){JSONObject e=list.optJSONObject(i);if(e!=null&&!e.optBoolean("stockReset",false)&&day.equals(entryDay(e)))n+=e.optInt("cost");}return n;}
+  void chooseStockDay(){pickDay("Pilih tarikh stok",selectedStockDay,value->{selectedStockDay=value;draw();});}
+  void chooseCashDay(){pickDay("Pilih tarikh duit",selectedCashDay,value->{selectedCashDay=value;selectedMonth=value.substring(0,7);draw();});}
   String supplierDueKey(int group){return group<0?"supplier_due_sate":group==5?"supplier_due_laksa":group==6?"supplier_due_kuih":"supplier_due_item_"+group;}
   int supplierDue(int group){return Math.max(0,getPreferences(0).getInt(supplierDueKey(group),0));}
   int supplierDue(){int total=supplierDue(-1);for(int id=3;id<names.length;id++)if(id!=4&&supplierItem(id))total+=supplierDue(id);return total;}
@@ -260,18 +244,16 @@ googleSignInClient = GoogleSignIn.getClient(this, gso);snapshotBeforeUpdate();lo
 
 
   void addSupplierPaymentCard(String label,int group){int due=supplierDue(group);LinearLayout supplier=col();supplier.setPadding(dp(15),dp(13),dp(15),dp(13));supplier.setBackground(shape(surface,15));add(supplier,text("BAYARAN PEMBEKAL · "+label,11,muted,true),-1,-2);gap(supplier,7);add(supplier,text("Jumlah perlu dibayar",12,ink,true),-1,-2);add(supplier,text(money(due),23,due>0?gold:blue,true),-1,-2);gap(supplier,10);TextView paid=chip("TELAH DIBAYAR",due>0?blue:0xff526273,Color.WHITE);paid.setGravity(Gravity.CENTER);paid.setEnabled(due>0);paid.setAlpha(due>0?1f:.55f);add(supplier,paid,-1,43);paid.setOnClickListener(v->paySupplier(group,label));add(body,supplier,-1,-2);gap(body,10);}
-  void drawPage(){if(activePage==1){heading("Stok & restock","Baki semalam dibawa sebagai stok awal hari ini.");
+  void drawPage(){if(activePage==1){heading("Stok & restock","Pilih tarikh untuk semak rekod stok. Baki hari sebelumnya dibawa ke hari seterusnya.");
+      action("Tarikh stok: "+selectedStockDay+"   ▼",()->chooseStockDay());boolean stockTodayView=date().equals(selectedStockDay);
       for(int i=0;i<names.length;i++){final int id=i;if(getPreferences(0).getBoolean("menu_hidden_"+id,false))continue;if(unlimited(id)){action(names[id]+" · kuah ikut liter (tiada had unit)",()->message("Kuah kacang sentiasa boleh dijual."));continue;}
-        int[] s=stockToday(id);LinearLayout card=col();card.setPadding(dp(14),dp(13),dp(14),dp(13));card.setBackground(shape(surface,15));
-        add(card,text(names[id],17,ink,true),-1,-2);gap(card,9);
-        LinearLayout upper=row();stockTile(upper,"STOK AWAL",""+s[0]);stockTile(upper,"RESTOCK","+"+s[1]);add(card,upper,-1,-2);gap(card,5);
-        LinearLayout lower=row();stockTile(lower,"TERJUAL","−"+s[2]);stockTile(lower,"BAKI",""+s[3]);add(card,lower,-1,-2);add(card,text("Rosak hari ini: "+s[4]+" unit",12,0xffb54743,true),-1,-2);gap(card,10);
-        LinearLayout controls=row();TextView start=chip(hasOpeningStock(id)?"Edit stok awal":"+ Stok awal",0xffffd54f,0xff6d3b16),more=chip("+ Restock",blue,Color.WHITE);
-        controls.addView(start,new LinearLayout.LayoutParams(0,dp(43),1));LinearLayout.LayoutParams mp=new LinearLayout.LayoutParams(0,dp(43),1);mp.leftMargin=dp(7);controls.addView(more,mp);
-        start.setEnabled(true);start.setAlpha(1f);start.setOnClickListener(v->{if(hasOpeningStock(id))editOpeningStock(id);else stockEntryItem(id,true);});more.setOnClickListener(v->stockEntryItem(id,false));add(card,controls,-1,-2);gap(card,7);TextView damage=chip("− Stok rosak",0xffff2d2d,Color.WHITE);add(card,damage,-1,40);damage.setOnClickListener(v->damageEntry(id));
-        add(body,card,-1,-2);gap(body,12);
-      }
-      action("Lihat ringkasan stok masuk / keluar",()->stockBalance());action("Rekod stok rosak",()->damageHistory());
+        int[] st=stockForDay(id,selectedStockDay);LinearLayout card=col();card.setPadding(dp(14),dp(13),dp(14),dp(13));card.setBackground(shape(surface,15));LinearLayout nr=row();nr.addView(text(names[id],17,ink,true),new LinearLayout.LayoutParams(0,-2,1));add(nr,chip(selectedStockDay,0xff203f61,muted),-2,-2);add(card,nr,-1,-2);gap(card,9);
+        LinearLayout upper=row();stockTile(upper,"STOK AWAL",""+st[0]);stockTile(upper,"RESTOCK","+"+st[1]);add(card,upper,-1,-2);gap(card,5);LinearLayout lower=row();stockTile(lower,"TERJUAL","−"+st[2]);stockTile(lower,"BAKI",""+st[3]);add(card,lower,-1,-2);
+        TextView damaged=text("Rosak pada tarikh ini: "+st[4]+" unit",12,st[4]>0?0xffff4d4d:muted,true);damaged.setPadding(dp(4),dp(7),0,0);add(card,damaged,-1,-2);gap(card,10);
+        if(stockTodayView){LinearLayout controls=row();TextView startBtn=chip(hasOpeningStock(id)?"Edit stok awal":"+ Stok awal",0xffffd54f,0xff6d3b16),more=chip("+ Restock",blue,Color.WHITE);controls.addView(startBtn,new LinearLayout.LayoutParams(0,dp(43),1));LinearLayout.LayoutParams mp=new LinearLayout.LayoutParams(0,dp(43),1);mp.leftMargin=dp(7);controls.addView(more,mp);startBtn.setOnClickListener(v->{if(hasOpeningStock(id))editOpeningStock(id);else stockEntryItem(id,true);});more.setOnClickListener(v->stockEntryItem(id,false));add(card,controls,-1,-2);gap(card,7);TextView damage=chip("− Stok rosak",0xffff2d2d,Color.WHITE);add(card,damage,-1,40);damage.setOnClickListener(v->damageEntry(id));}
+        else{TextView old=chip("REKOD LAMA · PAPARAN SAHAJA",0xff31485f,muted);old.setGravity(Gravity.CENTER);add(card,old,-1,38);}
+        add(body,card,-1,-2);gap(body,12);}
+      action("Lihat ringkasan stok tarikh dipilih",()->stockBalance());action("Rekod stok rosak",()->damageHistory());
     }else if(activePage==2){heading("Graf jualan","Pilih tarikh untuk lihat rekod jualan harian.");
       action("Tarikh: "+selectedDay+"   ▼",()->chooseSalesDay());
       int days=daysInMonth(selectedMonth);int[] totals=new int[days];String[] labels=new String[days];
@@ -282,17 +264,14 @@ googleSignInClient = GoogleSignIn.getClient(this, gso);snapshotBeforeUpdate();lo
       add(body,text("ITEM TERJUAL PADA "+selectedDay,13,muted,true),-1,-2);gap(body,10);
       ArrayList<Integer> visibleGraphItems=new ArrayList<>();for(int i=0;i<names.length;i++)if(!getPreferences(0).getBoolean("menu_hidden_"+i,false))visibleGraphItems.add(i);for(int p=0;p<visibleGraphItems.size();p+=2){LinearLayout pair=row();int i=visibleGraphItems.get(p);metric(pair,names[i],sold[i]+(i<3?" cucuk":i==4?" hidangan":" unit"),sold[i]>0?blue:muted,null);if(p+1<visibleGraphItems.size()){int j=visibleGraphItems.get(p+1);metric(pair,names[j],sold[j]+(j<3?" cucuk":j==4?" hidangan":" unit"),sold[j]>0?blue:muted,null);}add(body,pair,-1,-2);gap(body,7);}
       action("Pecahan jualan · total ikut tarikh",()->chooseRangeStart());action("Muat turun laporan Excel / PDF",()->exportMenu());
-    }else if(activePage==3){heading("Duit masuk / keluar","Graf aliran wang & kerugian stok.");String month=selectedMonth;action("Bulan: "+monthLabel(month)+"  ▼",()->chooseMonth());int[] cash=cashTotals(month);int sale=monthTotal(month);
-      LinearLayout top=row();metric(top,"JUALAN POS",money(sale),blue,null);metric(top,"DUIT MASUK",money(cash[0]),blue,null);add(body,top,-1,-2);gap(body,8);
-      LinearLayout bottom=row();metric(bottom,"DUIT KELUAR",money(cash[1]),ink,null);metric(bottom,"BAKI DUIT",money(totalMoneyBalance()),gold,null);add(body,bottom,-1,-2);gap(body,16);
-      LinearLayout loss=row();metric(loss,"STOK ROSAK",money(damageTotal(month)),0xffb54743,()->damageHistory());add(body,loss,-1,-2);gap(body,12);
+    }else if(activePage==3){heading("Duit masuk / keluar","Aliran wang ikut harian atau bulanan. Baki duit kekal keseluruhan sebagai duit rolling.");
+      LinearLayout mode=row();TextView daily=chip("HARIAN",cashDailyMode?gold:0xff294563,cashDailyMode?0xff17202c:Color.WHITE),monthlyBtn=chip("BULANAN",!cashDailyMode?gold:0xff294563,!cashDailyMode?0xff17202c:Color.WHITE);daily.setGravity(Gravity.CENTER);monthlyBtn.setGravity(Gravity.CENTER);mode.addView(daily,new LinearLayout.LayoutParams(0,dp(42),1));LinearLayout.LayoutParams mlp=new LinearLayout.LayoutParams(0,dp(42),1);mlp.leftMargin=dp(7);mode.addView(monthlyBtn,mlp);add(body,mode,-1,-2);gap(body,9);daily.setOnClickListener(v->{cashDailyMode=true;draw();});monthlyBtn.setOnClickListener(v->{cashDailyMode=false;draw();});
+      if(cashDailyMode)action("Tarikh: "+selectedCashDay+"   ▼",()->chooseCashDay());else action("Bulan: "+monthLabel(selectedMonth)+"   ▼",()->chooseMonth());
+      String pm=cashDailyMode?selectedCashDay.substring(0,7):selectedMonth;int[] cash=cashDailyMode?cashTotalsDay(selectedCashDay):cashTotals(pm);int sale=cashDailyMode?getPreferences(0).getInt("sales_"+selectedCashDay,0):monthTotal(pm);int lossValue=cashDailyMode?damageTotalDay(selectedCashDay):damageTotal(pm);
+      LinearLayout top=row();metric(top,cashDailyMode?"JUALAN HARI":"JUALAN POS",money(sale),blue,null);metric(top,"DUIT MASUK",money(cash[0]),blue,null);add(body,top,-1,-2);gap(body,8);LinearLayout bottom=row();metric(bottom,"DUIT KELUAR",money(cash[1]),ink,null);metric(bottom,"BAKI DUIT · OVERALL",money(totalMoneyBalance()),gold,null);add(body,bottom,-1,-2);gap(body,8);LinearLayout loss=row();metric(loss,cashDailyMode?"STOK ROSAK · HARI":"STOK ROSAK · BULAN",money(lossValue),0xffb54743,()->damageHistory());add(body,loss,-1,-2);gap(body,12);
       addSupplierPaymentCard("SATE",-1);for(int supplierId=3;supplierId<names.length;supplierId++){if(supplierId==4||getPreferences(0).getBoolean("menu_hidden_"+supplierId,false)||!supplierItem(supplierId))continue;addSupplierPaymentCard(names[supplierId].toUpperCase(new Locale("ms","MY")),supplierId);}
-      add(body,text("Masuk termasuk jualan POS • Restock item Pembekal masuk hutang dahulu",11,muted,false),-1,-2);
-      add(body,text("Stok rosak: kerugian nilai stok, bukan bayaran baru",11,ink,true),-1,-2);
-      CashDonutChart cashChart=new CashDonutChart(month);add(body,cashChart,-1,270);gap(body,8);
-      action("Pecahan harian graf",()->cashDaily(month));
-      LinearLayout controls=row();metric(controls,"+ CATAT","Masuk",blue,()->cashEntry(true));metric(controls,"− CATAT","Keluar",ink,()->cashEntry(false));add(body,controls,-1,-2);gap(body,12);
-      action("Lihat catatan bulan dipilih",()->cashHistory());add(body,text("Baki Duit = semua jualan POS + semua duit masuk − semua duit keluar yang benar-benar telah dibayar. Hutang pembekal belum dibayar tidak ditolak.",11,muted,false),-1,-2);
+      add(body,text("Baki Duit tidak reset bila tukar tarikh/bulan. Ia ikut semua jualan + duit masuk − duit keluar yang telah dibayar.",11,muted,false),-1,-2);gap(body,8);if(!cashDailyMode){CashDonutChart cashChart=new CashDonutChart(pm);add(body,cashChart,-1,270);gap(body,8);action("Pecahan harian graf",()->cashDaily(pm));}
+      LinearLayout controls=row();metric(controls,"+ CATAT","Masuk",blue,()->cashEntry(true));metric(controls,"− CATAT","Keluar",ink,()->cashEntry(false));add(body,controls,-1,-2);gap(body,12);action(cashDailyMode?"Lihat catatan tarikh dipilih":"Lihat catatan bulan dipilih",()->cashHistory());
     }else if(activePage==4){
       heading("Setting","WarisanPOS 3.15 · Tetapan kedai dan data.");
       action("👤  Account",()->{activePage=5;draw();});
@@ -435,17 +414,19 @@ googleSignInClient = GoogleSignIn.getClient(this, gso);snapshotBeforeUpdate();lo
       stockEntryItem(id);
     }).setNegativeButton("Tutup",null).show();}
   int[] soldQty(){int[] sold=new int[names.length];JSONArray list=entries("stock_sales");for(int i=0;i<list.length();i++){JSONObject record=list.optJSONObject(i);if(record==null)continue;JSONArray q=record.optJSONArray("qty");if(q!=null)for(int j=0;j<sold.length;j++)sold[j]+=q.optInt(j); }return sold;}
-  void stockBalance(){int[] added=new int[names.length],sold=soldQty();JSONArray list=entries("stock_entries");for(int i=0;i<list.length();i++){JSONObject entry=list.optJSONObject(i);if(entry!=null){int id=entry.optInt("item",-1);if(id>=0&&id<added.length)added[id]+=entry.optInt("qty");}}
-    StringBuilder b=new StringBuilder("Stok dimasukkan − jualan − stok rosak\n\n");for(int i=0;i<names.length;i++){if(unlimited(i)){b.append(names[i]).append(": tanpa had unit · ").append(sold[i]).append(" hidangan terjual\n");continue;}b.append(names[i]).append(": ").append(stock(i)).append("\n  Masuk ").append(added[i]).append(" · Terjual ").append(sold[i]).append(" · Rosak ").append(damagedQty(i)).append("\n");}
-    new AlertDialog.Builder(this).setTitle("Baki stok").setMessage(b.toString()).setPositiveButton("Tutup",null).setNeutralButton("Tambah stok",(d,w)->stockEntry()).show();}
+  void stockBalance(){String day=selectedStockDay;ScrollView scroll=new ScrollView(this);scroll.setVerticalScrollBarEnabled(false);LinearLayout panel=col();panel.setPadding(dp(14),dp(10),dp(14),dp(14));scroll.addView(panel);add(panel,text("RINGKASAN · "+day,12,muted,true),-1,-2);gap(panel,8);
+    int[] soldDay=soldBetween(day,day);for(int i=0;i<names.length;i++){if(getPreferences(0).getBoolean("menu_hidden_"+i,false))continue;LinearLayout c=col();c.setPadding(dp(12),dp(10),dp(12),dp(10));c.setBackground(shape(surface,12));if(unlimited(i)){add(c,text(names[i],15,ink,true),-1,-2);add(c,text("Tanpa had unit · "+soldDay[i]+" hidangan terjual",12,muted,false),-1,-2);}else{int[] st=stockForDay(i,day);LinearLayout r=row();r.addView(text(names[i],15,ink,true),new LinearLayout.LayoutParams(0,-2,1));add(r,text("BAKI "+st[3],16,blue,true),-2,-2);add(c,r,-1,-2);gap(c,5);add(c,text("Awal "+st[0]+"   •   Restock +"+st[1]+"   •   Terjual −"+st[2]+"   •   Rosak −"+st[4],12,muted,false),-1,-2);}add(panel,c,-1,-2);gap(panel,7);}
+    new AlertDialog.Builder(this).setTitle("Baki stok · "+day).setView(scroll).setPositiveButton("Tutup",null).setNeutralButton(date().equals(day)?"Tambah stok":"Pilih tarikh",(d,w)->{if(date().equals(day))stockEntry();else chooseStockDay();}).show();}
   void cashBook(){new AlertDialog.Builder(this).setTitle("Duit masuk / keluar").setItems(new String[]{"Lihat rekod bulan ini","Catat duit masuk","Catat duit keluar"},(d,index)->{if(index==0)cashHistory();else cashEntry(index==1);}).show();}
   void cashEntry(boolean incoming){LinearLayout form=col();form.setPadding(dp(20),dp(5),dp(20),0);EditText amount=new EditText(this);amount.setInputType(android.text.InputType.TYPE_CLASS_NUMBER|android.text.InputType.TYPE_NUMBER_FLAG_DECIMAL);amount.setHint("Jumlah RM, contoh 10.50");add(form,amount,-1,-2);
     String[] categories=incoming?new String[]{"Modal tambahan","Lain-lain"}:new String[]{"Sewa","Minyak kereta","Barang plastik","Sate mentah","Arang","Bahan lain","Lain-lain"};
     Spinner category=new Spinner(this);ArrayAdapter<String> adapter=new ArrayAdapter<>(this,android.R.layout.simple_spinner_item,categories);adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);category.setAdapter(adapter);add(form,category,-1,48);
     EditText note=new EditText(this);note.setSingleLine(true);note.setHint("Catatan tambahan (jika ada)");add(form,note,-1,-2);
     new AlertDialog.Builder(this).setTitle(incoming?"Catat duit masuk":"Catat duit keluar").setView(form).setPositiveButton("Simpan",(d,w)->{try{java.math.BigDecimal rm=new java.math.BigDecimal(amount.getText().toString().trim());int cents=rm.movePointRight(2).intValueExact();if(cents<=0)throw new Exception();JSONObject entry=new JSONObject();entry.put("time",timestamp());entry.put("month",date().substring(0,7));entry.put("amount",incoming?cents:-cents);entry.put("category",categories[category.getSelectedItemPosition()]);entry.put("note",note.getText().toString().trim());appendEntry("cash_entries",entry);draw();message("Catatan disimpan");}catch(Exception e){message("Masukkan jumlah RM yang sah");}}).setNegativeButton("Batal",null).show();}
-  void cashHistory(){String month=selectedMonth;JSONArray list=entries("cash_entries");int incoming=0,outgoing=0;StringBuilder b=new StringBuilder();for(int i=0;i<list.length();i++){JSONObject entry=list.optJSONObject(i);if(entry==null||legacySupplierRestock(entry)||!month.equals(entry.optString("month")))continue;int value=entry.optInt("amount");if(value>0)incoming+=value;else outgoing-=value;b.append(entry.optString("time")).append(value>0?"  MASUK ":"  KELUAR ").append(money(Math.abs(value))).append("\n").append(entry.optString("category",entry.optString("note")));String note=entry.optString("note");if(!note.isEmpty()&&!note.equals(entry.optString("category")))b.append(" · ").append(note);b.append("\n\n");}
-    new AlertDialog.Builder(this).setTitle("Duit masuk / keluar · "+month).setMessage("Masuk: "+money(incoming)+"\nKeluar: "+money(outgoing)+"\nBaki catatan: "+money(incoming-outgoing)+"\n\n"+(b.length()==0?"Belum ada catatan.":b.toString())+"\nJualan POS direkod berasingan.").setPositiveButton("Tutup",null).show();}
+  void cashHistory(){String month=selectedMonth,day=selectedCashDay;JSONArray list=entries("cash_entries");int incoming=0,outgoing=0;ScrollView scroll=new ScrollView(this);scroll.setVerticalScrollBarEnabled(false);LinearLayout panel=col();panel.setPadding(dp(14),dp(10),dp(14),dp(14));scroll.addView(panel);String period=cashDailyMode?day:monthLabel(month);add(panel,text((cashDailyMode?"HARIAN · ":"BULANAN · ")+period,12,muted,true),-1,-2);gap(panel,8);ArrayList<JSONObject> shown=new ArrayList<>();
+    for(int i=list.length()-1;i>=0;i--){JSONObject e=list.optJSONObject(i);if(e==null||legacySupplierRestock(e))continue;boolean match=cashDailyMode?day.equals(entryDay(e)):month.equals(e.optString("month"));if(!match)continue;int value=e.optInt("amount");if(value>0)incoming+=value;else outgoing-=value;shown.add(e);}
+    LinearLayout totals=row();metric(totals,"MASUK",money(incoming),blue,null);metric(totals,"KELUAR",money(outgoing),ink,null);add(panel,totals,-1,-2);gap(panel,10);add(panel,text("BAKI DUIT OVERALL  "+money(totalMoneyBalance()),14,gold,true),-1,-2);gap(panel,12);if(shown.isEmpty())add(panel,text("Belum ada catatan untuk tempoh ini.",13,muted,false),-1,-2);
+    for(JSONObject e:shown){int value=e.optInt("amount");LinearLayout card=col();card.setPadding(dp(12),dp(10),dp(12),dp(10));card.setBackground(shape(surface,11));LinearLayout r=row();r.addView(text(e.optString("time"),11,muted,true),new LinearLayout.LayoutParams(0,-2,1));add(r,text((value>0?"+ ":"− ")+money(Math.abs(value)),14,value>0?blue:0xffd45a55,true),-2,-2);add(card,r,-1,-2);gap(card,4);add(card,text(e.optString("category","Catatan"),13,ink,true),-1,-2);String note=e.optString("note");if(!note.isEmpty()&&!note.equals(e.optString("category")))add(card,text(note,12,muted,false),-1,-2);add(panel,card,-1,-2);gap(panel,7);}new AlertDialog.Builder(this).setTitle("Duit masuk / keluar").setView(scroll).setPositiveButton("Tutup",null).show();}
   void settings(){new AlertDialog.Builder(this).setTitle("Tetapan data").setItems(new String[]{"No. telefon resit","Reset stok sahaja","Reset semua data (jualan, stok, duit & tetapan)"},(d,i)->{if(i==0)editPhone();else resetData(i==2);}).show();}
   void resetData(boolean all){String label=all?"SEMUA data jualan, stok, duit dan tetapan":"stok dan baki stok";
     new AlertDialog.Builder(this).setTitle("Padam "+label+"?").setMessage(all?"Rekod tidak boleh dipulihkan selepas dipadam. Eksport rekod sebelum teruskan.":"Rekod jualan, duit, nombor telefon dan printer masih disimpan. Stok akan kembali 0.")
@@ -736,7 +717,9 @@ googleSignInClient = GoogleSignIn.getClient(this, gso);snapshotBeforeUpdate();lo
       JSONObject e=new JSONObject();e.put("time",timestamp());e.put("item",id);e.put("name",names[id]);e.put("qty",n);e.put("cost",restockCost(id,n));e.put("unitCost",costUnit(id));e.put("pack",costPack(id));e.put("note",note);JSONArray list=entries("stock_damage");list.put(e);
       if(!getPreferences(0).edit().putString("stock_damage",list.toString()).commit())throw new IOException();qty[id]=Math.min(qty[id],stock(id));dialog.dismiss();draw();message("Stok rosak direkod · kerugian "+money(e.optInt("cost")));
     }catch(Exception e){message("Gagal simpan. Semak bilangan dan simpanan telefon.");}}));dialog.show();}
-  void damageHistory(){JSONArray list=entries("stock_damage");StringBuilder b=new StringBuilder();for(int i=list.length()-1;i>=0;i--){JSONObject e=list.optJSONObject(i);if(e==null||!entryDay(e).startsWith(selectedMonth+"-"))continue;b.append(e.optString("time")).append(" · ").append(e.optString("name")).append("\n").append(e.optInt("qty")).append(" unit · ").append(money(e.optInt("cost"))).append("\n").append(e.optString("note")).append("\n\n");}new AlertDialog.Builder(this).setTitle("Stok rosak · "+selectedMonth).setMessage(b.length()==0?"Tiada stok rosak bulan ini.":b.toString()).setPositiveButton("Tutup",null).show();}
+  void damageHistory(){JSONArray list=entries("stock_damage");ScrollView scroll=new ScrollView(this);scroll.setVerticalScrollBarEnabled(false);LinearLayout panel=col();panel.setPadding(dp(14),dp(10),dp(14),dp(14));scroll.addView(panel);boolean dayMode=activePage==1||cashDailyMode;String day=activePage==1?selectedStockDay:selectedCashDay;String month=selectedMonth;int totalLoss=0,countLoss=0;
+    for(int i=list.length()-1;i>=0;i--){JSONObject e=list.optJSONObject(i);if(e==null||e.optBoolean("stockReset",false))continue;String d=entryDay(e);if(dayMode?!day.equals(d):!d.startsWith(month+"-"))continue;countLoss++;totalLoss+=e.optInt("cost");LinearLayout card=col();card.setPadding(dp(12),dp(10),dp(12),dp(10));card.setBackground(shape(surface,11));LinearLayout r=row();r.addView(text(e.optString("name","Stok"),14,ink,true),new LinearLayout.LayoutParams(0,-2,1));add(r,text(money(e.optInt("cost")),14,0xffd45a55,true),-2,-2);add(card,r,-1,-2);add(card,text(e.optString("time")+"  ·  "+e.optInt("qty")+" unit",11,muted,true),-1,-2);String note=e.optString("note");if(!note.isEmpty())add(card,text(note,12,muted,false),-1,-2);add(panel,card,-1,-2);gap(panel,7);}
+    LinearLayout summary=col();summary.setPadding(dp(12),dp(10),dp(12),dp(10));summary.setBackground(shape(0xff2b3f55,11));add(summary,text("JUMLAH KERUGIAN",11,muted,true),-1,-2);add(summary,text(money(totalLoss),21,totalLoss>0?0xffd45a55:blue,true),-1,-2);panel.addView(summary,0);if(countLoss==0){TextView empty=text("Tiada stok rosak untuk tempoh ini.",13,muted,false);empty.setPadding(0,dp(12),0,0);add(panel,empty,-1,-2);}new AlertDialog.Builder(this).setTitle("Stok rosak · "+(dayMode?day:monthLabel(month))).setView(scroll).setPositiveButton("Tutup",null).show();}
   int[][] cashSeries(String month){int days=daysInMonth(month);int[][] values=new int[3][days];for(int d=0;d<days;d++)values[0][d]=getPreferences(0).getInt("sales_"+month+String.format(Locale.US,"-%02d",d+1),0);
     for(String key:new String[]{"cash_entries","stock_damage"}){JSONArray list=entries(key);for(int i=0;i<list.length();i++){JSONObject e=list.optJSONObject(i);if(e==null||(key.equals("cash_entries")&&legacySupplierRestock(e)))continue;String day=entryDay(e);if(!day.startsWith(month+"-"))continue;try{int d=Integer.parseInt(day.substring(8,10))-1;if(d<0||d>=days)continue;if(key.equals("stock_damage"))values[2][d]+=e.optInt("cost");else{int n=e.optInt("amount");values[n>=0?0:1][d]+=Math.abs(n);}}catch(Exception ignored){}}}return values;}
   void cashDaily(String month){int[][] v=cashSeries(month);StringBuilder b=new StringBuilder();for(int d=0;d<v[0].length;d++)if(v[0][d]!=0||v[1][d]!=0||v[2][d]!=0)b.append(d+1).append(" ").append(monthLabel(month)).append("\nMasuk ").append(money(v[0][d])).append(" · Keluar ").append(money(v[1][d])).append("\nRosak ").append(money(v[2][d])).append(" · Baki ").append(money(v[0][d]-v[1][d])).append("\n\n");new AlertDialog.Builder(this).setTitle("Pecahan harian").setMessage(b.length()==0?"Belum ada rekod.":b.toString()).setPositiveButton("Tutup",null).show();}
