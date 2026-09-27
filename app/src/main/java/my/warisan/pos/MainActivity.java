@@ -297,7 +297,7 @@ googleSignInClient = GoogleSignIn.getClient(this, gso);snapshotBeforeUpdate();lo
       LinearLayout bottom=row();metric(bottom,"PENGELUARAN PERIBADI",money(personal),0xffffb74d,null);metric(bottom,"BAKI DUIT · SEBENAR",money(totalMoneyBalance()),gold,null);add(body,bottom,-1,-2);gap(body,8);LinearLayout loss=row();metric(loss,cashDailyMode?"STOK ROSAK · HARI":"STOK ROSAK · BULAN",money(lossValue),0xffb54743,()->damageHistory());add(body,loss,-1,-2);gap(body,12);
       addSupplierPaymentCard("SATE",-1);for(int supplierId=3;supplierId<names.length;supplierId++){if(supplierId==4||getPreferences(0).getBoolean("menu_hidden_"+supplierId,false)||!supplierItem(supplierId))continue;addSupplierPaymentCard(names[supplierId].toUpperCase(new Locale("ms","MY")),supplierId);}
       add(body,text("Baki Duit tidak reset bila tukar tarikh/bulan. Ia ikut semua jualan + duit masuk − duit keluar yang telah dibayar.",11,muted,false),-1,-2);gap(body,8);if(!cashDailyMode){CashDonutChart cashChart=new CashDonutChart(pm);add(body,cashChart,-1,270);gap(body,8);action("Pecahan harian graf",()->cashDaily(pm));}
-      LinearLayout controls=row();metric(controls,"+ CATAT","Masuk",blue,()->cashEntry(true));metric(controls,"− CATAT","Keluar",ink,()->cashEntry(false));add(body,controls,-1,-2);gap(body,12);action(cashDailyMode?"Lihat catatan tarikh dipilih":"Lihat catatan bulan dipilih",()->cashHistory());
+      LinearLayout controls=row();metric(controls,"+ CATAT","Masuk",blue,()->cashEntry(true));metric(controls,"− CATAT","Keluar",ink,()->cashEntry(false));add(body,controls,-1,-2);gap(body,12);action(cashDailyMode?"Lihat catatan tarikh dipilih":"Lihat catatan bulan dipilih",()->cashHistory());gap(body,3);action("🧾  CLOSING HARIAN / PRINT REPORT",()->dailyClosing(date()));
     }else if(activePage==4){
       heading("Setting","WarisanPOS 3.15 · Tetapan kedai dan data.");
       action("👤  Account",()->{activePage=5;draw();});
@@ -363,6 +363,33 @@ googleSignInClient = GoogleSignIn.getClient(this, gso);snapshotBeforeUpdate();lo
       action("Reset stok sahaja",()->resetData(false));
       action("Reset semua data",()->resetData(true));
     }}
+  String dailyClosingReceipt(String day){
+    int sales=getPreferences(0).getInt("sales_"+day,0),orders=getPreferences(0).getInt("orders_"+day,0);
+    int[] sold=soldBetween(day,day),cash=cashTotalsDay(day);
+    int personal=personalTotal(day,true),damage=damageTotalDay(day),profit=businessProfit(day,true);
+    StringBuilder b=new StringBuilder();String shopName=getPreferences(0).getString("shop_name","WARISAN FROZEN");
+    b.append(centerReceipt(shopName));
+    String phone=getPreferences(0).getString("receipt_phone","");if(!phone.isEmpty())b.append(centerReceipt("Tel: "+phone));
+    b.append("--------------------------------\n").append(centerReceipt("LAPORAN CLOSING HARIAN"));
+    b.append(line("Tarikh",day)).append("--------------------------------\n");
+    b.append(line("JUALAN POS",money(sales))).append(line("PESANAN",String.valueOf(orders)));
+    b.append("--------------------------------\nITEM TERJUAL\n");
+    boolean any=false;for(int i=0;i<names.length;i++){if(sold[i]<=0)continue;any=true;String unit=i<3?" cucuk":i==4?" hidangan":" unit";b.append(line(names[i],sold[i]+unit));}
+    if(!any)b.append("Tiada item terjual\n");
+    b.append("--------------------------------\n");
+    b.append(line("DUIT MASUK",money(cash[0]))).append(line("DUIT KELUAR",money(cash[1])));
+    b.append(line("PERIBADI",money(personal))).append(line("STOK ROSAK",money(damage)));
+    b.append("--------------------------------\n").append(line("UNTUNG PERNIAGAAN",money(profit)));
+    b.append("================================\n").append(centerReceipt("CLOSING HARIAN")).append(ownerReceipt()).append("\n\n");return b.toString();
+  }
+  void dailyClosing(String day){
+    String printed=dailyClosingReceipt(day);int sales=getPreferences(0).getInt("sales_"+day,0),orders=getPreferences(0).getInt("orders_"+day,0),profit=businessProfit(day,true);int[] sold=soldBetween(day,day),cash=cashTotalsDay(day);
+    ScrollView scroll=new ScrollView(this);scroll.setVerticalScrollBarEnabled(false);LinearLayout panel=col();panel.setPadding(dp(16),dp(12),dp(16),dp(14));panel.setBackgroundColor(cream);scroll.addView(panel);
+    add(panel,text("CLOSING HARIAN · "+day,18,blue,true),-1,-2);gap(panel,10);LinearLayout top=row();metric(top,"JUALAN",money(sales),blue,null);metric(top,"PESANAN",""+orders,gold,null);add(panel,top,-1,-2);gap(panel,8);LinearLayout moneyRow=row();metric(moneyRow,"DUIT MASUK",money(cash[0]),blue,null);metric(moneyRow,"UNTUNG",money(profit),profit>=0?gold:0xffff6b6b,null);add(panel,moneyRow,-1,-2);gap(panel,12);
+    add(panel,text("ITEM TERJUAL",12,muted,true),-1,-2);gap(panel,6);boolean any=false;for(int i=0;i<names.length;i++){if(sold[i]<=0)continue;any=true;String unit=i<3?" cucuk":i==4?" hidangan":" unit";add(panel,text(names[i]+"  ·  "+sold[i]+unit,13,ink,false),-1,-2);gap(panel,4);}if(!any)add(panel,text("Tiada item terjual.",13,muted,false),-1,-2);
+    AlertDialog dialog=new AlertDialog.Builder(this).setView(scroll).setPositiveButton("CETAK REPORT",(d,w)->print(printed)).setNeutralButton("TUTUP",null).create();applyDarkReportDialog(dialog);
+  }
+
   void editPaymentProvider(){String[] options={"Static DuitNow","HitPay","Maybank QRPayBiz","Custom API"};String current=getPreferences(0).getString("payment_provider","Static DuitNow");int checked=0;for(int i=0;i<options.length;i++)if(options[i].equals(current))checked=i;final int initial=checked;new AlertDialog.Builder(this).setTitle("Pilih payment provider").setSingleChoiceItems(options,checked,null).setPositiveButton("Simpan",(d,w)->{AlertDialog a=(AlertDialog)d;int pos=a.getListView().getCheckedItemPosition();if(pos<0)pos=initial;getPreferences(0).edit().putString("payment_provider",options[pos]).apply();draw();}).setNegativeButton("Batal",null).show();}
   void editPaymentSetting(String key,String title,String hint){EditText input=new EditText(this);input.setSingleLine(true);input.setHint(hint);String old=getPreferences(0).getString(key,"");input.setText(old);if(key.contains("secret")||key.contains("api_key"))input.setInputType(android.text.InputType.TYPE_CLASS_TEXT|android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD);new AlertDialog.Builder(this).setTitle(title).setView(input).setPositiveButton("Simpan",(d,w)->{getPreferences(0).edit().putString(key,input.getText().toString().trim()).apply();message(title+" disimpan pada device.");}).setNegativeButton("Batal",null).show();}
   void testPaymentConnection(){String provider=getPreferences(0).getString("payment_provider","Static DuitNow");if("Static DuitNow".equals(provider)){message("Static DuitNow tidak memerlukan API connection.");return;}String base=getPreferences(0).getString("payment_base_url","").trim(),key=getPreferences(0).getString("payment_api_key","").trim();if(base.isEmpty()||key.isEmpty()){message("Isi API Base URL dan API/Public Key dahulu.");return;}message("Konfigurasi "+provider+" tersedia. Ujian server sebenar akan aktif selepas endpoint provider disahkan.");}
