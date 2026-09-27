@@ -287,7 +287,7 @@ googleSignInClient = GoogleSignIn.getClient(this, gso);snapshotBeforeUpdate();lo
       int[] sold=soldBetween(selectedDay,selectedDay);
       add(body,text("ITEM TERJUAL PADA "+selectedDay,13,muted,true),-1,-2);gap(body,10);
       ArrayList<Integer> visibleGraphItems=new ArrayList<>();for(int i=0;i<names.length;i++)if(!getPreferences(0).getBoolean("menu_hidden_"+i,false))visibleGraphItems.add(i);for(int p=0;p<visibleGraphItems.size();p+=2){LinearLayout pair=row();int i=visibleGraphItems.get(p);metric(pair,names[i],sold[i]+(i<3?" cucuk":i==4?" hidangan":" unit"),sold[i]>0?blue:muted,null);if(p+1<visibleGraphItems.size()){int j=visibleGraphItems.get(p+1);metric(pair,names[j],sold[j]+(j<3?" cucuk":j==4?" hidangan":" unit"),sold[j]>0?blue:muted,null);}add(body,pair,-1,-2);gap(body,7);}
-      action("Pecahan jualan · total ikut tarikh",()->chooseRangeStart());action("Muat turun laporan Excel / PDF",()->exportMenu());
+      action("Catatan jualan harian / Print",()->salesDailyReport(selectedMonth));action("Pecahan jualan · total ikut tarikh",()->chooseRangeStart());action("Muat turun laporan Excel / PDF",()->exportMenu());
     }else if(activePage==3){heading("Duit masuk / keluar","Aliran wang ikut harian atau bulanan. Baki duit kekal keseluruhan sebagai duit rolling.");
       LinearLayout mode=row();TextView daily=chip("HARIAN",cashDailyMode?gold:0xff294563,cashDailyMode?0xff17202c:Color.WHITE),monthlyBtn=chip("BULANAN",!cashDailyMode?gold:0xff294563,!cashDailyMode?0xff17202c:Color.WHITE);daily.setGravity(Gravity.CENTER);monthlyBtn.setGravity(Gravity.CENTER);mode.addView(daily,new LinearLayout.LayoutParams(0,dp(42),1));LinearLayout.LayoutParams mlp=new LinearLayout.LayoutParams(0,dp(42),1);mlp.leftMargin=dp(7);mode.addView(monthlyBtn,mlp);add(body,mode,-1,-2);gap(body,9);daily.setOnClickListener(v->{cashDailyMode=true;draw();});monthlyBtn.setOnClickListener(v->{cashDailyMode=false;draw();});
       if(cashDailyMode)action("Tarikh: "+selectedCashDay+"   ▼",()->chooseCashDay());else action("Bulan: "+monthLabel(selectedMonth)+"   ▼",()->chooseMonth());
@@ -470,6 +470,24 @@ googleSignInClient = GoogleSignIn.getClient(this, gso);snapshotBeforeUpdate();lo
     for(int i=0;i<names.length;i++){TextView item=text(names[i]+"  ·  "+sold[i]+(i<3?" cucuk":i==4?" hidangan":" unit"),13,ink,false);item.setPadding(dp(10),dp(10),dp(10),dp(10));item.setBackground(shape(surface,9));add(panel,item,-1,-2);gap(panel,5);}
     gap(panel,11);add(panel,text("REKOD HARIAN",13,ink,true),-1,-2);gap(panel,8);add(panel,text(detail.length()==0?"Belum ada jualan untuk tempoh ini.":detail.toString(),12,ink,false),-1,-2);
     AlertDialog reportDialog=new AlertDialog.Builder(this).setTitle("Pecahan jualan · total").setView(scroll).setPositiveButton("Tutup",null).setNeutralButton("Tukar tarikh",(d,w)->chooseRangeStart()).create();applyDarkReportDialog(reportDialog);}
+  String salesDailyPrintText(String month){
+    StringBuilder b=new StringBuilder();int totalSales=0,totalOrders=0;int days=daysInMonth(month);
+    b.append(centerReceipt(getPreferences(0).getString("shop_name","WARISAN FROZEN"))).append(centerReceipt("CATATAN JUALAN HARIAN"));
+    b.append("--------------------------------\n").append(line("Bulan",monthLabel(month))).append("--------------------------------\n");
+    for(int d=1;d<=days;d++){String day=month+String.format(Locale.US,"-%02d",d);int sale=getPreferences(0).getInt("sales_"+day,0),orders=getPreferences(0).getInt("orders_"+day,0);if(sale==0&&orders==0)continue;totalSales+=sale;totalOrders+=orders;b.append(String.format(Locale.US,"%02d/%02d  %3d order  %s\n",d,Integer.parseInt(month.substring(5,7)),orders,money(sale)));}
+    b.append("--------------------------------\n").append(line("TOTAL ORDER",String.valueOf(totalOrders))).append(line("TOTAL SALE",money(totalSales))).append("================================\n").append(centerReceipt("WARISAN POS")).append("\n");return b.toString();
+  }
+  void salesDailyReport(String month){
+    int days=daysInMonth(month),totalSales=0,totalOrders=0;int[] daily=new int[days];String[] labels=new String[days];
+    ScrollView scroll=new ScrollView(this);scroll.setVerticalScrollBarEnabled(false);LinearLayout panel=col();panel.setPadding(dp(16),dp(12),dp(16),dp(16));panel.setBackgroundColor(cream);scroll.addView(panel);
+    for(int d=0;d<days;d++){String day=month+String.format(Locale.US,"-%02d",d+1);daily[d]=getPreferences(0).getInt("sales_"+day,0);int orders=getPreferences(0).getInt("orders_"+day,0);totalSales+=daily[d];totalOrders+=orders;labels[d]=(d==0||(d+1)%5==0||d==days-1)?String.valueOf(d+1):"";}
+    add(panel,text("CATATAN JUALAN · "+monthLabel(month),13,gold,true),-1,-2);gap(panel,8);LinearLayout summary=row();metric(summary,"TOTAL SALE",money(totalSales),blue,null);metric(summary,"TOTAL ORDER",String.valueOf(totalOrders),gold,null);add(panel,summary,-1,-2);gap(panel,12);
+    LinearLayout chart=col();chart.setPadding(dp(10),dp(10),dp(10),dp(8));chart.setBackground(shape(surface,12));add(chart,text("GRAF SALE HARIAN",11,muted,true),-1,-2);add(chart,new SalesChart(daily,labels),-1,175);add(panel,chart,-1,-2);gap(panel,12);
+    add(panel,text("CATATAN HARIAN",12,muted,true),-1,-2);gap(panel,7);boolean any=false;
+    for(int d=0;d<days;d++){String day=month+String.format(Locale.US,"-%02d",d+1);int orders=getPreferences(0).getInt("orders_"+day,0);if(daily[d]==0&&orders==0)continue;any=true;LinearLayout card=col();card.setPadding(dp(12),dp(9),dp(12),dp(9));card.setBackground(shape(surface,10));add(card,text(day,12,ink,true),-1,-2);add(card,text("Sale "+money(daily[d])+"   •   "+orders+" order",12,gold,true),-1,-2);add(panel,card,-1,-2);gap(panel,6);}
+    if(!any)add(panel,text("Belum ada jualan untuk bulan ini.",12,muted,false),-1,-2);
+    AlertDialog dlg=new AlertDialog.Builder(this).setTitle("Catatan jualan harian").setView(scroll).setPositiveButton("PRINT",(d,w)->print(salesDailyPrintText(month))).setNeutralButton("Tukar bulan",(d,w)->chooseMonth()).setNegativeButton("Tutup",null).create();applyDarkReportDialog(dlg);
+  }
   int daysInMonth(String key){try{Calendar c=Calendar.getInstance();c.setTime(new SimpleDateFormat("yyyy-MM-dd",Locale.US).parse(key+"-01"));return c.getActualMaximum(Calendar.DAY_OF_MONTH);}catch(Exception e){return 31;}}
   void chooseMonth(){Calendar now=Calendar.getInstance();String[] labels=new String[12],keys=new String[12];
     for(int i=0;i<12;i++){Calendar c=(Calendar)now.clone();c.add(Calendar.MONTH,-i);keys[i]=new SimpleDateFormat("yyyy-MM",Locale.US).format(c.getTime());labels[i]=monthLabel(keys[i]);}
