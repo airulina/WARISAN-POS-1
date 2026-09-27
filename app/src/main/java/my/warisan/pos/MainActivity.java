@@ -834,7 +834,7 @@ googleSignInClient = GoogleSignIn.getClient(this, gso);snapshotBeforeUpdate();lo
   }
   void print(String receipt){
     String address=getPreferences(0).getString("printer","");
-    if(address.isEmpty()){pendingReceipt=receipt;new AlertDialog.Builder(this).setTitle("Printer belum dipilih").setMessage("Pair printer dalam tetapan Bluetooth telefon, kemudian pilih ikon printer di atas.").setPositiveButton("Pilih printer",(d,w)->choosePrinter()).setNegativeButton("Tutup",null).show();return;}
+    if(address.isEmpty()){pendingReceipt=receipt;new AlertDialog.Builder(this).setTitle("Printer tidak dijumpai").setMessage("Order / bayaran sudah disimpan. Anda boleh pilih printer atau teruskan tanpa print. Proses tidak akan dibatalkan.").setPositiveButton("PILIH PRINTER",(d,w)->choosePrinter()).setNegativeButton("TERUSKAN TANPA PRINT",(d,w)->{pendingReceipt=null;}).show();return;}
     new Thread(()->{
       BluetoothSocket socket=null;
       try{
@@ -850,7 +850,7 @@ googleSignInClient = GoogleSignIn.getClient(this, gso);snapshotBeforeUpdate();lo
         out.write(receipt.substring(split+1).getBytes(StandardCharsets.US_ASCII));
         out.flush();
         runOnUiThread(()->message("Resit berjaya dihantar"));
-      }catch(Exception e){String error=e.getMessage();runOnUiThread(()->new AlertDialog.Builder(this).setTitle("Cetakan gagal").setMessage(error==null?"Semak printer dan cuba lagi.":error).setPositiveButton("OK",null).show());}
+      }catch(Exception e){String error=e.getMessage();runOnUiThread(()->new AlertDialog.Builder(this).setTitle("Cetakan gagal").setMessage((error==null?"Printer tidak dapat disambungkan.":error)+"\n\nOrder / bayaran kekal disimpan. Anda boleh teruskan tanpa print.").setPositiveButton("TERUSKAN",null).show());}
       finally{if(socket!=null)try{socket.close();}catch(Exception ignored){}}
     }).start();
   }
