@@ -136,7 +136,7 @@ googleSignInClient = GoogleSignIn.getClient(this, gso);snapshotBeforeUpdate();lo
     cachedStock=null;
     LinearLayout screen=col();screen.setBackgroundColor(cream);
     getWindow().setStatusBarColor(cream);
-    getWindow().setNavigationBarColor(ink);
+    getWindow().setNavigationBarColor(cream);
     getWindow().getDecorView().setSystemUiVisibility(0);
     if(Build.VERSION.SDK_INT>=35){
       screen.setOnApplyWindowInsetsListener((view,insets)->{
@@ -151,7 +151,7 @@ googleSignInClient = GoogleSignIn.getClient(this, gso);snapshotBeforeUpdate();lo
     LinearLayout header=row();ImageView logo=new ImageView(this);logo.setImageResource(R.drawable.warisan_logo);makeCircle(logo);add(header,logo,49,49);
     LinearLayout heading=col();heading.setPadding(dp(10),0,0,0);add(heading,text("WARISAN POS",21,blue,true),-1,-2);LinearLayout sub=row();sub.addView(text("KIOS WARISAN  ·  SISTEM JUALAN",10,muted,true),new LinearLayout.LayoutParams(0,-2,1));TextView liveClock=text("",10,gold,true);liveClock.setGravity(Gravity.RIGHT|Gravity.CENTER_VERTICAL);add(sub,liveClock,-2,-2);add(heading,sub,-1,-2);startHeaderClock(liveClock);header.addView(heading,new LinearLayout.LayoutParams(0,-2,1));
     add(body,header,-1,-2);gap(body,18);
-    LinearLayout title=row();title.addView(text("Pilih menu",20,ink,true),new LinearLayout.LayoutParams(0,-2,1));TextView historyButton=chip("HISTORY",0xff203f61,gold);add(title,historyButton,-2,-2);historyButton.setOnClickListener(v->saleHistoryChooseDate());LinearLayout.LayoutParams hp=(LinearLayout.LayoutParams)historyButton.getLayoutParams();TextView addMenuButton=chip("+ MENU",blue,Color.WHITE);LinearLayout.LayoutParams amp=params(-2,-2);amp.leftMargin=dp(6);title.addView(addMenuButton,amp);addMenuButton.setOnClickListener(v->addMenu());items=chip("0 item",0xfff0e5cb,blue);LinearLayout.LayoutParams itemLp=params(-2,-2);itemLp.leftMargin=dp(7);title.addView(items,itemLp);add(body,title,-1,-2);
+    LinearLayout title=row();title.addView(text("Pilih menu",20,ink,true),new LinearLayout.LayoutParams(0,-2,1));TextView historyButton=chip("HISTORY",0xff203f61,gold);add(title,historyButton,-2,-2);historyButton.setOnClickListener(v->saleHistoryChooseDate());LinearLayout.LayoutParams hp=(LinearLayout.LayoutParams)historyButton.getLayoutParams();TextView addMenuButton=chip("+ MENU",blue,Color.WHITE);LinearLayout.LayoutParams amp=params(-2,-2);amp.leftMargin=dp(6);title.addView(addMenuButton,amp);addMenuButton.setOnClickListener(v->addMenu());items=chip("0 item",0xff203f61,gold);LinearLayout.LayoutParams itemLp=params(-2,-2);itemLp.leftMargin=dp(7);title.addView(items,itemLp);add(body,title,-1,-2);
     add(body,text("Tekan + untuk tambah pesanan",12,muted,false),-1,-2);gap(body,13);
     ArrayList<Integer> visibleMenu=new ArrayList<>();for(int i=0;i<names.length;i++){boolean manuallyHidden=getPreferences(0).getBoolean("menu_hidden_"+i,false);boolean hasStock=unlimited(i)||stock(i)>0;if(!manuallyHidden&&hasStock)visibleMenu.add(i);}for(int id:visibleMenu){LinearLayout line=row();product(line,id);add(body,line,-1,-2);gap(body,9);}
     // "Pesanan semasa" removed from MENU because confirmed orders are managed in ORDER.
@@ -167,8 +167,8 @@ googleSignInClient = GoogleSignIn.getClient(this, gso);snapshotBeforeUpdate();lo
   void product(LinearLayout pair,int id){
     LinearLayout card=row();card.setGravity(Gravity.CENTER_VERTICAL);card.setPadding(dp(11),dp(10),dp(11),dp(10));card.setBackground(shape(surface,15));
     String photo=getPreferences(0).getString("menu_image_"+id,"");
-    if(!photo.isEmpty()){ImageView photoView=new ImageView(this);try{loadMenuPhoto(photoView,photo);photoView.setScaleType(ImageView.ScaleType.CENTER_CROP);add(card,photoView,58,58);}catch(Exception e){add(card,chip(icons[id],0xfffff3db,blue),52,52);}}
-    else{TextView icon=chip(icons[id],0xfffff3db,blue);icon.setTextSize(20);add(card,icon,52,52);}
+    if(!photo.isEmpty()){ImageView photoView=new ImageView(this);try{loadMenuPhoto(photoView,photo);photoView.setScaleType(ImageView.ScaleType.CENTER_CROP);add(card,photoView,58,58);}catch(Exception e){add(card,chip(icons[id],0xff203f61,gold),52,52);}}
+    else{TextView icon=chip(icons[id],0xff203f61,gold);icon.setTextSize(20);add(card,icon,52,52);}
     LinearLayout info=col();info.setPadding(dp(11),0,dp(8),0);TextView name=text(names[id],15,ink,true);name.setMaxLines(2);add(info,name,-1,-2);gap(info,3);add(info,text(money(prices[id]),14,gold,true),-1,-2);
     int available=unlimited(id)?Integer.MAX_VALUE:stock(id);TextView stockLabel=text(unlimited(id)?"Kuah · tanpa had unit":"Stok: "+available+(available==0?" · HABIS":""),11,available==0?0xffff4d4d:blue,true);add(info,stockLabel,-1,-2);card.addView(info,new LinearLayout.LayoutParams(0,-2,1));
     LinearLayout controls=row();controls.setGravity(Gravity.CENTER_VERTICAL);TextView minus=chip("−",0xffc83f46,Color.WHITE),number=text(""+qty[id],16,ink,true),plus=chip("+",blue,Color.WHITE);minus.setGravity(Gravity.CENTER);number.setGravity(Gravity.CENTER);plus.setGravity(Gravity.CENTER);
@@ -785,9 +785,11 @@ googleSignInClient = GoogleSignIn.getClient(this, gso);snapshotBeforeUpdate();lo
     r.addView(left,new LinearLayout.LayoutParams(0,-2,1));add(r,right,-2,-2);add(sheet,r,-1,-2);
   }
   void previewReceipt(String printed,int[] purchased,String method,int due,int order,int tendered){
-    ScrollView scroll=new ScrollView(this);scroll.setVerticalScrollBarEnabled(false);
-    int receiptText=ink,receiptMuted=muted;
-    LinearLayout sheet=col();sheet.setPadding(dp(18),dp(12),dp(18),dp(14));sheet.setBackgroundColor(cream);scroll.addView(sheet);
+    // Customer receipt uses the same printer-paper preview language as supplier receipts.
+    LinearLayout previewFrame=col();previewFrame.setPadding(dp(12),dp(4),dp(12),dp(8));previewFrame.setBackground(shape(cream,20));
+    ScrollView scroll=new ScrollView(this);scroll.setVerticalScrollBarEnabled(false);scroll.setFillViewport(true);previewFrame.addView(scroll,new LinearLayout.LayoutParams(-1,-2));
+    int receiptText=0xff26384c,receiptMuted=0xff66788a;
+    LinearLayout sheet=col();sheet.setPadding(dp(20),dp(14),dp(20),dp(16));sheet.setBackground(shape(Color.WHITE,10));scroll.addView(sheet);
     ImageView logo=new ImageView(this);logo.setImageResource(R.drawable.warisan_logo);makeCircle(logo);
     LinearLayout logoRow=row();logoRow.setGravity(Gravity.CENTER);add(logoRow,logo,74,74);add(sheet,logoRow,-1,-2);gap(sheet,5);
     TextView brand=text(getPreferences(0).getString("shop_name","WARISAN FROZEN"),17,blue,true);brand.setGravity(Gravity.CENTER);add(sheet,brand,-1,-2);
@@ -795,19 +797,19 @@ googleSignInClient = GoogleSignIn.getClient(this, gso);snapshotBeforeUpdate();lo
     TextView contact=text(phone.isEmpty()?"No. telefon belum diisi":"Tel: "+phone,11,receiptMuted,false);contact.setGravity(Gravity.CENTER);add(sheet,contact,-1,-2);
     String email=getPreferences(0).getString("receipt_email","");if(!email.isEmpty()){TextView mail=text(email,11,receiptMuted,false);mail.setGravity(Gravity.CENTER);add(sheet,mail,-1,-2);}
     receiptRule(sheet);
-    receiptRow(sheet,"RESIT BAYARAN",String.format(Locale.US,"#%04d",order),false);gap(sheet,4);
-    receiptRow(sheet,"Tarikh",new SimpleDateFormat("dd/MM/yyyy HH:mm",Locale.US).format(new Date()),false);
+    receiptRowLight(sheet,"RESIT BAYARAN",String.format(Locale.US,"#%04d",order),false);gap(sheet,4);
+    receiptRowLight(sheet,"Tarikh",new SimpleDateFormat("dd/MM/yyyy HH:mm",Locale.US).format(new Date()),false);
     receiptRule(sheet);
-    for(int i=0;i<purchased.length;i++)if(purchased[i]>0){receiptRow(sheet,names[i],money(prices[i]*purchased[i]),false);
+    for(int i=0;i<purchased.length;i++)if(purchased[i]>0){receiptRowLight(sheet,names[i],money(prices[i]*purchased[i]),false);
       TextView details=text(purchased[i]+" × "+money(prices[i]),11,receiptMuted,false);add(sheet,details,-1,-2);gap(sheet,10);}
-    receiptRule(sheet);receiptRow(sheet,"JUMLAH",money(due),true);gap(sheet,8);
-    receiptRow(sheet,"Kaedah bayaran",method,false);if("Tunai".equals(method)){gap(sheet,6);receiptRow(sheet,"Tunai diterima",money(tendered),false);gap(sheet,6);receiptRow(sheet,"BAKI PULANGAN",money(tendered-due),true);}receiptRule(sheet);
-    TextView thanks=text("Terima kasih! Sila datang lagi.",12,receiptMuted,false);thanks.setGravity(Gravity.CENTER);add(sheet,thanks,-1,-2);
+    receiptRule(sheet);receiptRowLight(sheet,"JUMLAH",money(due),true);gap(sheet,8);
+    receiptRowLight(sheet,"Kaedah bayaran",method,false);if("Tunai".equals(method)){gap(sheet,6);receiptRowLight(sheet,"Tunai diterima",money(tendered),false);gap(sheet,6);receiptRowLight(sheet,"BAKI PULANGAN",money(tendered-due),true);}receiptRule(sheet);
+    TextView thanks=text("TERIMA KASIH · SILA DATANG LAGI",12,receiptMuted,true);thanks.setGravity(Gravity.CENTER);add(sheet,thanks,-1,-2);
     String owner=ownerDisplay();if(!owner.isEmpty()){gap(sheet,8);TextView owned=text("DIMILIKI OLEH : "+owner,10,receiptMuted,true);owned.setGravity(Gravity.CENTER);add(sheet,owned,-1,-2);}
-    darkBuilder().setTitle("Semak resit").setView(scroll)
-      .setPositiveButton("Cetak resit",(dialog,button)->print(printed))
-      .setNeutralButton("Share",(dialog,button)->shareReceiptImage(sheet,"resit-customer"))
-      .setNegativeButton("Tutup",null).show();
+    AlertDialog dialog=darkBuilder().setTitle("PREVIEW RESIT CUSTOMER").setView(previewFrame)
+      .setPositiveButton("Cetak resit",(d,b)->print(printed))
+      .setNeutralButton("Share",(d,b)->shareReceiptImage(sheet,"resit-customer"))
+      .setNegativeButton("Tutup",null).create();applyDarkReportDialog(dialog);
   }
   void shareReceiptImage(View receiptView,String prefix){
     try{
