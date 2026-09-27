@@ -155,7 +155,7 @@ googleSignInClient = GoogleSignIn.getClient(this, gso);snapshotBeforeUpdate();lo
     add(hero,text("✦  JUALAN HARI INI",11,0xffffdf9a,true),-1,-2);today=text("RM 0.00",29,Color.WHITE,true);add(hero,today,-1,-2);add(hero,text("Bayaran selesai direkod di sini",12,0xffe5efff,false),-1,-2);add(body,hero,-1,-2);today();gap(body,20);
     LinearLayout title=row();title.addView(text("Pilih menu",20,ink,true),new LinearLayout.LayoutParams(0,-2,1));TextView historyButton=chip("HISTORY",0xff203f61,gold);add(title,historyButton,-2,-2);historyButton.setOnClickListener(v->saleHistoryChooseDate());LinearLayout.LayoutParams hp=(LinearLayout.LayoutParams)historyButton.getLayoutParams();TextView addMenuButton=chip("+ MENU",blue,Color.WHITE);LinearLayout.LayoutParams amp=params(-2,-2);amp.leftMargin=dp(6);title.addView(addMenuButton,amp);addMenuButton.setOnClickListener(v->addMenu());items=chip("0 item",0xfff0e5cb,blue);LinearLayout.LayoutParams itemLp=params(-2,-2);itemLp.leftMargin=dp(7);title.addView(items,itemLp);add(body,title,-1,-2);
     add(body,text("Tekan + untuk tambah pesanan",12,muted,false),-1,-2);gap(body,13);
-    ArrayList<Integer> visibleMenu=new ArrayList<>();for(int i=0;i<names.length;i++)if(!getPreferences(0).getBoolean("menu_hidden_"+i,false))visibleMenu.add(i);for(int k=0;k<visibleMenu.size();k+=2){LinearLayout pair=row();pair.setGravity(Gravity.TOP);product(pair,visibleMenu.get(k));if(k+1<visibleMenu.size())product(pair,visibleMenu.get(k+1));add(body,pair,-1,-2);gap(body,9);}
+    ArrayList<Integer> visibleMenu=new ArrayList<>();for(int i=0;i<names.length;i++)if(!getPreferences(0).getBoolean("menu_hidden_"+i,false))visibleMenu.add(i);for(int id:visibleMenu){LinearLayout line=row();product(line,id);add(body,line,-1,-2);gap(body,9);}
     gap(body,10);add(body,text("Pesanan semasa",20,ink,true),-1,-2);gap(body,10);
     basket=col();basket.setPadding(dp(13),dp(10),dp(13),dp(10));basket.setBackground(shape(surface,15));add(body,basket,-1,-2);gap(body,12);drawPendingOrders();
     LinearLayout footer=row();footer.setPadding(dp(17),dp(9),dp(17),dp(10));footer.setBackgroundColor(surface);
@@ -165,21 +165,18 @@ googleSignInClient = GoogleSignIn.getClient(this, gso);snapshotBeforeUpdate();lo
 
   void startHeaderClock(TextView view){final android.os.Handler h=new android.os.Handler(android.os.Looper.getMainLooper());final Runnable[] tick=new Runnable[1];tick[0]=()->{if(!view.isAttachedToWindow())return;view.setText(new SimpleDateFormat("dd/MM/yyyy  HH:mm:ss",Locale.US).format(new Date()));h.postDelayed(tick[0],1000);};view.post(tick[0]);}
   void product(LinearLayout pair,int id){
-    LinearLayout card=col();card.setPadding(dp(9),dp(8),dp(9),dp(8));card.setBackground(shape(surface,15));
+    LinearLayout card=row();card.setGravity(Gravity.CENTER_VERTICAL);card.setPadding(dp(11),dp(10),dp(11),dp(10));card.setBackground(shape(surface,15));
     String photo=getPreferences(0).getString("menu_image_"+id,"");
-    if(!photo.isEmpty()){ImageView photoView=new ImageView(this);try{loadMenuPhoto(photoView,photo);photoView.setScaleType(ImageView.ScaleType.CENTER_CROP);add(card,photoView,40,40);}catch(Exception e){add(card,chip(icons[id],0xfffff3db,blue),35,35);}}
-    else{TextView icon=chip(icons[id],0xfffff3db,blue);icon.setTextSize(18);add(card,icon,35,35);}gap(card,5);
-    TextView name=text(names[id],14,ink,true);name.setMaxLines(2);name.setMinHeight(dp(34));add(card,name,-1,-2);
-    add(card,text(money(prices[id]),14,gold,true),-1,-2);
-    int available=unlimited(id)?Integer.MAX_VALUE:stock(id);TextView stockLabel=text(unlimited(id)?"Kuah · tanpa had unit":"Stok: "+available+(available==0?" · HABIS":""),11,available==0?0xffb54743:blue,true);add(card,stockLabel,-1,-2);gap(card,5);
-    LinearLayout controls=row();TextView minus=chip("−",0xffc83f46,Color.WHITE),number=text(""+qty[id],15,ink,true),plus=chip("+",blue,Color.WHITE);number.setGravity(Gravity.CENTER);
-    controls.addView(minus,new LinearLayout.LayoutParams(0,dp(32),1));controls.addView(number,new LinearLayout.LayoutParams(0,dp(32),1));controls.addView(plus,new LinearLayout.LayoutParams(0,dp(32),1));add(card,controls,-1,-2);
+    if(!photo.isEmpty()){ImageView photoView=new ImageView(this);try{loadMenuPhoto(photoView,photo);photoView.setScaleType(ImageView.ScaleType.CENTER_CROP);add(card,photoView,58,58);}catch(Exception e){add(card,chip(icons[id],0xfffff3db,blue),52,52);}}
+    else{TextView icon=chip(icons[id],0xfffff3db,blue);icon.setTextSize(20);add(card,icon,52,52);}
+    LinearLayout info=col();info.setPadding(dp(11),0,dp(8),0);TextView name=text(names[id],15,ink,true);name.setMaxLines(2);add(info,name,-1,-2);gap(info,3);add(info,text(money(prices[id]),14,gold,true),-1,-2);
+    int available=unlimited(id)?Integer.MAX_VALUE:stock(id);TextView stockLabel=text(unlimited(id)?"Kuah · tanpa had unit":"Stok: "+available+(available==0?" · HABIS":""),11,available==0?0xffff4d4d:blue,true);add(info,stockLabel,-1,-2);card.addView(info,new LinearLayout.LayoutParams(0,-2,1));
+    LinearLayout controls=row();controls.setGravity(Gravity.CENTER_VERTICAL);TextView minus=chip("−",0xffc83f46,Color.WHITE),number=text(""+qty[id],16,ink,true),plus=chip("+",blue,Color.WHITE);minus.setGravity(Gravity.CENTER);number.setGravity(Gravity.CENTER);plus.setGravity(Gravity.CENTER);
+    add(controls,minus,45,42);add(controls,number,44,42);add(controls,plus,45,42);add(card,controls,-2,-2);
     number.setClickable(true);number.setOnClickListener(v->editOrderQuantity(id));
     minus.setOnClickListener(v->{qty[id]=Math.max(0,qty[id]-1);draw();});
-    plus.setAlpha(available<=qty[id]?.35f:1f);plus.setEnabled(available>qty[id]);
-    plus.setOnClickListener(v->stockLimit(id,1));
-    if(id<3){gap(card,5);LinearLayout presets=row();for(int n:new int[]{10,20,30}){TextView p=chip("+"+n,0xfffff3db,blue);p.setEnabled(available>qty[id]);p.setAlpha(available<=qty[id]?.35f:1f);LinearLayout.LayoutParams pp=new LinearLayout.LayoutParams(0,dp(26),1);pp.setMargins(dp(1),0,dp(1),0);presets.addView(p,pp);p.setOnClickListener(v->stockLimit(id,n));}add(card,presets,-1,-2);}
-    LinearLayout.LayoutParams cp=new LinearLayout.LayoutParams(0,-2,1);cp.setMargins(dp(2),0,dp(2),0);pair.addView(card,cp);
+    plus.setAlpha(available<=qty[id]?.35f:1f);plus.setEnabled(available>qty[id]);plus.setOnClickListener(v->stockLimit(id,1));
+    LinearLayout.LayoutParams cp=new LinearLayout.LayoutParams(-1,-2);cp.setMargins(dp(2),0,dp(2),0);pair.addView(card,cp);
   }
   void editOrderQuantity(int id){
     EditText input=new EditText(this);input.setSingleLine(true);input.setInputType(android.text.InputType.TYPE_CLASS_NUMBER);input.setText(""+qty[id]);input.setSelectAllOnFocus(true);input.setHint("Masukkan kuantiti");
