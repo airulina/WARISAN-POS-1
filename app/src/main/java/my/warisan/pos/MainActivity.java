@@ -239,21 +239,23 @@ googleSignInClient = GoogleSignIn.getClient(this, gso);snapshotBeforeUpdate();lo
     if(!remark.trim().isEmpty())b.append("--------------------------------\nRemark:\n").append(remark.trim()).append("\n");
     b.append("================================\n").append(centerReceipt("TELAH DIBAYAR")).append(ownerReceipt()).append("\n");return b.toString();}
   void showSupplierReceipt(String printed,int group,int original,int deduction,int paid,String remark){
-    ScrollView scroll=new ScrollView(this);scroll.setVerticalScrollBarEnabled(false);int receiptText=0xff26384c,receiptMuted=0xff66788a;
-    // Receipt itself stays white/printer-style. Only the surrounding app/dialog follows the dark theme.
-    LinearLayout sheet=col();sheet.setPadding(dp(18),dp(12),dp(18),dp(14));sheet.setBackgroundColor(Color.WHITE);scroll.addView(sheet);
+    // Dark rounded preview frame + white printer-style receipt with breathing room.
+    LinearLayout previewFrame=col();previewFrame.setPadding(dp(12),dp(4),dp(12),dp(8));previewFrame.setBackground(shape(cream,20));
+    ScrollView scroll=new ScrollView(this);scroll.setVerticalScrollBarEnabled(false);scroll.setFillViewport(true);previewFrame.addView(scroll,new LinearLayout.LayoutParams(-1,-2));
+    int receiptText=0xff26384c,receiptMuted=0xff66788a;
+    LinearLayout sheet=col();sheet.setPadding(dp(20),dp(14),dp(20),dp(16));sheet.setBackground(shape(Color.WHITE,10));scroll.addView(sheet);
     ImageView logo=new ImageView(this);logo.setImageResource(R.drawable.warisan_logo);makeCircle(logo);LinearLayout logoRow=row();logoRow.setGravity(Gravity.CENTER);add(logoRow,logo,74,74);add(sheet,logoRow,-1,-2);gap(sheet,5);
     TextView brand=text(getPreferences(0).getString("shop_name","WARISAN FROZEN"),17,blue,true);brand.setGravity(Gravity.CENTER);add(sheet,brand,-1,-2);
     String phone=getPreferences(0).getString("receipt_phone","");TextView contact=text(phone.isEmpty()?"No. telefon belum diisi":"Tel: "+phone,11,receiptMuted,false);contact.setGravity(Gravity.CENTER);add(sheet,contact,-1,-2);
     String email=getPreferences(0).getString("receipt_email","");if(!email.isEmpty()){TextView mail=text(email,11,receiptMuted,false);mail.setGravity(Gravity.CENTER);add(sheet,mail,-1,-2);}
     receiptRule(sheet);TextView title=text("RESIT BAYARAN PEMBEKAL",14,blue,true);title.setGravity(Gravity.CENTER);add(sheet,title,-1,-2);gap(sheet,9);
-    receiptRow(sheet,"Tarikh",new SimpleDateFormat("dd/MM/yyyy HH:mm",Locale.US).format(new Date()),false);receiptRule(sheet);
+    receiptRowLight(sheet,"Tarikh",new SimpleDateFormat("dd/MM/yyyy HH:mm",Locale.US).format(new Date()),false);receiptRule(sheet);
     String details=supplierItemsText(group);if(!details.isEmpty()){TextView dl=text("PECAHAN STOK",11,receiptMuted,true);add(sheet,dl,-1,-2);gap(sheet,4);for(String lineText:details.split("\\n")){TextView dv=text(lineText,12,receiptText,false);add(sheet,dv,-1,-2);gap(sheet,3);}receiptRule(sheet);}
-    receiptRow(sheet,"Jumlah asal",money(original),false);gap(sheet,7);receiptRow(sheet,"Jumlah tolakan",money(deduction),false);receiptRule(sheet);receiptRow(sheet,"JUMLAH DIBAYAR",money(paid),true);
+    receiptRowLight(sheet,"Jumlah asal",money(original),false);gap(sheet,7);receiptRowLight(sheet,"Jumlah tolakan",money(deduction),false);receiptRule(sheet);receiptRowLight(sheet,"JUMLAH DIBAYAR",money(paid),true);
     if(!remark.trim().isEmpty()){receiptRule(sheet);TextView rl=text("REMARK",11,receiptMuted,true);add(sheet,rl,-1,-2);gap(sheet,4);TextView rv=text(remark.trim(),13,receiptText,false);add(sheet,rv,-1,-2);}
     receiptRule(sheet);TextView status=text("TELAH DIBAYAR",13,blue,true);status.setGravity(Gravity.CENTER);add(sheet,status,-1,-2);
     String owner=ownerDisplay();if(!owner.isEmpty()){gap(sheet,8);TextView owned=text("DIMILIKI OLEH : "+owner,10,receiptMuted,true);owned.setGravity(Gravity.CENTER);add(sheet,owned,-1,-2);}
-    AlertDialog dialog=darkBuilder().setTitle("PREVIEW RESIT PEMBEKAL").setView(scroll).setPositiveButton("Cetak resit",(d,w)->print(printed)).setNeutralButton("Share",(d,w)->shareReceiptImage(sheet,"resit-pembekal")).setNegativeButton("Tutup",null).create();applyDarkReportDialog(dialog);
+    AlertDialog dialog=darkBuilder().setTitle("PREVIEW RESIT PEMBEKAL").setView(previewFrame).setPositiveButton("Cetak resit",(d,w)->print(printed)).setNeutralButton("Share",(d,w)->shareReceiptImage(sheet,"resit-pembekal")).setNegativeButton("Tutup",null).create();applyDarkReportDialog(dialog);
   }
   void previewSupplierReceipt(){int original=17500,deduction=2500,paid=15000;String remark="Contoh remark / alasan tolakan";showSupplierReceipt(supplierReceipt(-1,original,deduction,paid,remark),-1,original,deduction,paid,remark);}
   void paySupplier(){paySupplier(-1,"Sate");}
@@ -776,6 +778,10 @@ googleSignInClient = GoogleSignIn.getClient(this, gso);snapshotBeforeUpdate();lo
   void receiptRule(LinearLayout sheet){View rule=new View(this);rule.setBackgroundColor(0xffe5e7e2);LinearLayout.LayoutParams lp=params(-1,1);lp.setMargins(0,dp(13),0,dp(13));sheet.addView(rule,lp);}
   void receiptRow(LinearLayout sheet,String label,String value,boolean highlight){
     LinearLayout r=row();int receiptText=ink,receiptMuted=muted;TextView left=text(label,highlight?17:13,highlight?blue:receiptMuted,highlight);TextView right=text(value,highlight?20:13,highlight?blue:receiptText,true);
+    r.addView(left,new LinearLayout.LayoutParams(0,-2,1));add(r,right,-2,-2);add(sheet,r,-1,-2);
+  }
+  void receiptRowLight(LinearLayout sheet,String label,String value,boolean highlight){
+    LinearLayout r=row();int receiptText=0xff26384c,receiptMuted=0xff66788a;TextView left=text(label,highlight?17:13,highlight?blue:receiptMuted,highlight);TextView right=text(value,highlight?20:13,highlight?blue:receiptText,true);
     r.addView(left,new LinearLayout.LayoutParams(0,-2,1));add(r,right,-2,-2);add(sheet,r,-1,-2);
   }
   void previewReceipt(String printed,int[] purchased,String method,int due,int order,int tendered){
