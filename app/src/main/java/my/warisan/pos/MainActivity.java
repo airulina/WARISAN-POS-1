@@ -166,9 +166,8 @@ googleSignInClient = GoogleSignIn.getClient(this, gso);snapshotBeforeUpdate();lo
   void startHeaderClock(TextView view){final android.os.Handler h=new android.os.Handler(android.os.Looper.getMainLooper());final Runnable[] tick=new Runnable[1];tick[0]=()->{if(!view.isAttachedToWindow())return;view.setText(new SimpleDateFormat("dd/MM/yyyy  HH:mm:ss",Locale.US).format(new Date()));h.postDelayed(tick[0],1000);};view.post(tick[0]);}
   void product(LinearLayout pair,int id){
     LinearLayout card=row();card.setGravity(Gravity.CENTER_VERTICAL);card.setPadding(dp(11),dp(10),dp(11),dp(10));card.setBackground(shape(surface,15));
-    String photo=getPreferences(0).getString("menu_image_"+id,"");
-    if(!photo.isEmpty()){ImageView photoView=new ImageView(this);try{loadMenuPhoto(photoView,photo);photoView.setScaleType(ImageView.ScaleType.CENTER_CROP);add(card,photoView,58,58);}catch(Exception e){add(card,chip(icons[id],0xff203f61,gold),52,52);}}
-    else{TextView icon=chip(icons[id],0xff203f61,gold);icon.setTextSize(20);add(card,icon,52,52);}
+    // Menu sengaja guna ikon ringan sahaja. Logo kedai kekal pada header/resit.
+    TextView icon=chip(icons[id],0xff203f61,gold);icon.setTextSize(20);icon.setGravity(Gravity.CENTER);add(card,icon,52,52);
     LinearLayout info=col();info.setPadding(dp(11),0,dp(8),0);TextView name=text(names[id],15,ink,true);name.setMaxLines(2);add(info,name,-1,-2);gap(info,3);add(info,text(money(prices[id]),14,gold,true),-1,-2);
     int available=unlimited(id)?Integer.MAX_VALUE:stock(id);TextView stockLabel=text(unlimited(id)?"Kuah · tanpa had unit":"Stok: "+available+(available==0?" · HABIS":""),11,available==0?0xffff4d4d:blue,true);add(info,stockLabel,-1,-2);card.addView(info,new LinearLayout.LayoutParams(0,-2,1));
     LinearLayout controls=row();controls.setGravity(Gravity.CENTER_VERTICAL);TextView minus=chip("−",0xffc83f46,Color.WHITE),number=text(""+qty[id],16,ink,true),plus=chip("+",blue,Color.WHITE);minus.setGravity(Gravity.CENTER);number.setGravity(Gravity.CENTER);plus.setGravity(Gravity.CENTER);
@@ -189,9 +188,12 @@ googleSignInClient = GoogleSignIn.getClient(this, gso);snapshotBeforeUpdate();lo
     if(count()==0){TextView empty=text("Belum ada pesanan. Pilih menu di atas.",13,muted,false);empty.setPadding(0,dp(13),0,dp(13));add(basket,empty,-1,-2);return;}
     for(int i=0;i<qty.length;i++)if(qty[i]>0){final int id=i;LinearLayout r=row();r.addView(text(names[i]+" × "+qty[i],14,ink,true),new LinearLayout.LayoutParams(0,dp(39),1));add(r,text(money(qty[i]*prices[i]),13,blue,true),-2,-2);TextView minus=chip("−",0xffc83f46,Color.WHITE);LinearLayout.LayoutParams m=params(32,30);m.leftMargin=dp(8);r.addView(minus,m);minus.setOnClickListener(v->{qty[id]--;draw();});add(basket,r,-1,-2);}
   }
-  void addNavigation(LinearLayout screen){LinearLayout nav=row();nav.setBackgroundColor(cream);nav.setPadding(dp(5),dp(7),dp(5),dp(9));String[] labels={"MENU","ORDER","STOK","GRAF","DUIT","SETTING"};int[] pages={0,11,1,2,3,4};
-    for(int i=0;i<labels.length;i++){final int page=pages[i];boolean selected=(activePage==page)||(page==4&&activePage>=4&&activePage!=11);TextView tab=text(labels[i],10,selected?Color.rgb(19,24,34):Color.WHITE,true);tab.setGravity(Gravity.CENTER);tab.setBackground(shape(selected?gold:Color.rgb(20,58,101),9));LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(0,dp(47),1);p.setMargins(dp(2),0,dp(2),0);nav.addView(tab,p);tab.setOnClickListener(v->{activePage=page;draw();});}add(screen,nav,-1,-2);}
-  void heading(String title,String subtitle){LinearLayout top=row();top.addView(text(title,24,blue,true),new LinearLayout.LayoutParams(0,-2,1));TextView clock=text("",10,gold,true);clock.setGravity(Gravity.RIGHT|Gravity.CENTER_VERTICAL);add(top,clock,-2,-2);startHeaderClock(clock);add(body,top,-1,-2);add(body,text(subtitle,12,muted,false),-1,-2);gap(body,18);}
+  void addNavigation(LinearLayout screen){LinearLayout nav=row();nav.setBackgroundColor(cream);nav.setPadding(dp(7),dp(7),dp(7),dp(9));String[] labels={"MENU","ORDER","STOK","DUIT","SETTING"};int[] pages={0,11,1,3,4};
+    for(int i=0;i<labels.length;i++){final int page=pages[i];boolean selected=(activePage==page)||(page==3&&activePage==2)||(page==4&&activePage>=4&&activePage!=11);TextView tab=text(labels[i],10,selected?Color.rgb(19,24,34):Color.WHITE,true);tab.setGravity(Gravity.CENTER);tab.setBackground(shape(selected?gold:Color.rgb(20,58,101),11));LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(0,dp(49),1);p.setMargins(dp(3),0,dp(3),0);nav.addView(tab,p);tab.setOnClickListener(v->{activePage=page;draw();});}add(screen,nav,-1,-2);}
+  void heading(String title,String subtitle){
+    LinearLayout brand=row();brand.setGravity(Gravity.CENTER_VERTICAL);ImageView logo=new ImageView(this);logo.setImageResource(R.drawable.warisan_logo);makeCircle(logo);add(brand,logo,44,44);LinearLayout brandText=col();brandText.setPadding(dp(9),0,0,0);add(brandText,text("WARISAN POS",18,blue,true),-1,-2);add(brandText,text("KIOS WARISAN  ·  SISTEM JUALAN",9,muted,true),-1,-2);brand.addView(brandText,new LinearLayout.LayoutParams(0,-2,1));TextView clock=text("",9,gold,true);clock.setGravity(Gravity.RIGHT|Gravity.CENTER_VERTICAL);add(brand,clock,-2,-2);startHeaderClock(clock);add(body,brand,-1,-2);gap(body,15);
+    add(body,text(title,23,ink,true),-1,-2);add(body,text(subtitle,12,muted,false),-1,-2);gap(body,16);
+  }
   void action(String label,Runnable callback){TextView button=text(label+"   ›",15,blue,true);button.setPadding(dp(16),dp(14),dp(14),dp(14));button.setBackground(shape(surface,12));add(body,button,-1,-2);gap(body,9);button.setOnClickListener(v->callback.run());}
   void metric(LinearLayout row,String title,String value,int highlight,Runnable tap){LinearLayout card=col();card.setPadding(dp(12),dp(12),dp(9),dp(12));card.setBackground(shape(surface,13));TextView name=text(title,11,muted,true);name.setMaxLines(2);add(card,name,-1,-2);gap(card,8);TextView figure=text(value,value.startsWith("RM")?16:20,highlight,true);figure.setMaxLines(1);figure.setEllipsize(android.text.TextUtils.TruncateAt.END);add(card,figure,-1,-2);LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(0,dp(94),1);p.setMargins(dp(3),0,dp(3),0);row.addView(card,p);if(tap!=null)card.setOnClickListener(v->tap.run());}
   boolean legacySupplierRestock(JSONObject e){
@@ -288,7 +290,8 @@ googleSignInClient = GoogleSignIn.getClient(this, gso);snapshotBeforeUpdate();lo
         else{TextView old=chip("REKOD LAMA · PAPARAN SAHAJA",0xff31485f,muted);old.setGravity(Gravity.CENTER);add(card,old,-1,34);}
         add(body,card,-1,-2);gap(body,8);}
       action("Lihat ringkasan stok tarikh dipilih",()->stockBalance());action("Rekod stok rosak",()->damageHistory());
-    }else if(activePage==2){heading("Graf jualan","Pilih tarikh untuk lihat rekod jualan harian.");
+    }else if(activePage==2){heading("Detail Jualan","Graf dan pecahan jualan kini berada di bawah bahagian DUIT.");
+      action("‹  Kembali ke DUIT",()->{activePage=3;draw();});
       action("Tarikh: "+selectedDay+"   ▼",()->chooseSalesDay());
       int days=daysInMonth(selectedMonth);int[] totals=new int[days];String[] labels=new String[days];
       for(int i=0;i<days;i++){String key=selectedMonth+String.format(Locale.US,"-%02d",i+1);totals[i]=getPreferences(0).getInt("sales_"+key,0);labels[i]=(i+1==1||(i+1)%5==0)?""+(i+1):"";}
@@ -309,7 +312,7 @@ googleSignInClient = GoogleSignIn.getClient(this, gso);snapshotBeforeUpdate();lo
       int startCost=productCostBetween(cashDailyMode?period:period+"-01",cashDailyMode?period:period+"-31");
       int supplierPaid=supplierPaidTotal(period,cashDailyMode),fuel=cashCategoryTotal(period,cashDailyMode,"Minyak kereta"),rent=cashCategoryTotal(period,cashDailyMode,"Sewa"),charcoal=cashCategoryTotal(period,cashDailyMode,"Arang"),materials=cashCategoryTotal(period,cashDailyMode,"Barang plastik","Bahan lain");
       add(body,text("OPERASI PERNIAGAAN",12,muted,true),-1,-2);gap(body,7);
-      LinearLayout top=row();metric(top,cashDailyMode?"JUALAN HARI INI":"JUALAN POS",money(sale),blue,null);metric(top,"UNTUNG BERSIH JUALAN",money(profit),profit>=0?gold:0xffff6b6b,null);add(body,top,-1,-2);gap(body,8);
+      LinearLayout top=row();metric(top,cashDailyMode?"JUALAN HARI INI  ›":"JUALAN POS  ›",money(sale),blue,()->{selectedDay=cashDailyMode?selectedCashDay:date();selectedMonth=selectedDay.substring(0,7);activePage=2;draw();});metric(top,"UNTUNG BERSIH JUALAN",money(profit),profit>=0?gold:0xffff6b6b,null);add(body,top,-1,-2);gap(body,8);
       LinearLayout costRow=row();metric(costRow,"KOS BARANG TERJUAL",money(startCost),ink,null);metric(costRow,"BAYARAN PEMBEKAL",money(supplierPaid),gold,null);add(body,costRow,-1,-2);gap(body,8);
       LinearLayout op1=row();metric(op1,"MINYAK KERETA",money(fuel),ink,null);metric(op1,"SEWA",money(rent),ink,null);add(body,op1,-1,-2);gap(body,8);
       LinearLayout op2=row();metric(op2,"ARANG",money(charcoal),ink,null);metric(op2,"BAHAN LAIN",money(materials),ink,null);add(body,op2,-1,-2);gap(body,8);
@@ -324,7 +327,7 @@ googleSignInClient = GoogleSignIn.getClient(this, gso);snapshotBeforeUpdate();lo
       LinearLayout real=row();metric(real,"BAKI TOTAL DUIT · SEBENAR",money(totalMoneyBalance()),gold,null);add(body,real,-1,-2);gap(body,8);
       add(body,text("Baki sebenar = semua jualan + duit masuk − duit keluar yang telah dibayar − pengeluaran peribadi. Bayaran order direkod ikut tarikh bayaran diterima.",11,muted,false),-1,-2);
     }else if(activePage==4){
-      heading("Setting","WarisanPOS 3.15 · Tetapan kedai dan data.");
+      heading("Setting","WarisanPOS 3.16 · Tetapan kedai dan data.");
       action("👤  Account",()->{activePage=5;draw();});
       action("🧾  Bill / Resit",()->{activePage=7;draw();});
        action("💳  Payment / DuitNow",()->{activePage=10;draw();});
