@@ -293,14 +293,36 @@ googleSignInClient = GoogleSignIn.getClient(this, gso);snapshotBeforeUpdate();lo
   }
   void addSalesBreakdown(String start,String end){
     int[] sold=soldNetBetween(start,end);int total=saleTotalBetween(start,end),allQty=0;for(int n:sold)allQty+=n;
-    LinearLayout card=col();card.setPadding(dp(12),dp(12),dp(12),dp(12));card.setBackground(shape(surface,14));
-    add(card,text("PECAHAN JUALAN · NILAI",13,ink,true),-1,-2);gap(card,8);add(card,new SalesPieChart(sold),-1,220);add(body,card,-1,-2);gap(body,10);
-    LinearLayout detail=col();detail.setPadding(dp(12),dp(12),dp(12),dp(12));detail.setBackground(shape(surface,14));add(detail,text("DETAIL JUALAN MENGIKUT PRODUK",13,ink,true),-1,-2);gap(detail,8);
+    LinearLayout pieCard=col();pieCard.setPadding(dp(12),dp(12),dp(12),dp(12));pieCard.setBackground(shape(surface,14));
+    add(pieCard,text("PECAHAN JUALAN · NILAI",13,ink,true),-1,-2);gap(pieCard,8);add(pieCard,new SalesPieChart(sold),-1,dp(220));add(body,pieCard,-1,-2);gap(body,10);
+
+    LinearLayout detail=col();detail.setPadding(dp(12),dp(12),dp(12),dp(12));detail.setBackground(shape(surface,14));
+    add(detail,text("DETAIL JUALAN MENGIKUT PRODUK",13,ink,true),-1,-2);gap(detail,8);
+    LinearLayout head=row();head.setGravity(Gravity.CENTER_VERTICAL);
+    TextView h1=text("MENU",10,muted,true);TextView h2=text("KUANTITI",10,muted,true);TextView h3=text("JUMLAH / %",10,muted,true);
+    head.addView(h1,new LinearLayout.LayoutParams(0,dp(28),1.35f));head.addView(h2,new LinearLayout.LayoutParams(0,dp(28),.8f));head.addView(h3,new LinearLayout.LayoutParams(0,dp(28),1.15f));add(detail,head,-1,dp(28));
     int sateQty=0,sateValue=0;
-    for(int i=0;i<names.length;i++){if(sold[i]<=0)continue;int value=sold[i]*prices[i];if(i<3){sateQty+=sold[i];sateValue+=value;}double pct=total<=0?0:(value*100.0/total);LinearLayout r=row();r.setGravity(Gravity.CENTER_VERTICAL);TextView nm=text(icons[i]+"  "+names[i],12,ink,true);r.addView(nm,new LinearLayout.LayoutParams(0,-2,1));add(r,text(sold[i]+(i<3?" cucuk":i==5?" mangkuk":" unit"),11,muted,true),-2,-2);TextView val=text(money(value)+"  ·  "+String.format(Locale.US,"%.1f%%",pct),11,gold,true);val.setGravity(Gravity.RIGHT);add(r,val,dp(125),-2);add(detail,r,-1,-2);gap(detail,7);}
+    for(int i=0;i<names.length;i++){
+      if(sold[i]<=0)continue;
+      int value=sold[i]*prices[i];if(i<3){sateQty+=sold[i];sateValue+=value;}
+      double pct=total<=0?0:(value*100.0/total);
+      LinearLayout r=row();r.setGravity(Gravity.CENTER_VERTICAL);r.setPadding(0,dp(4),0,dp(4));
+      TextView nm=text(icons[i]+"  "+names[i],11,ink,true);nm.setSingleLine(true);nm.setEllipsize(android.text.TextUtils.TruncateAt.END);
+      String unit=i<3?" cucuk":i==5?" mangkuk":" unit";
+      TextView qty=text(sold[i]+unit,10,muted,true);qty.setGravity(Gravity.CENTER);
+      TextView val=text(money(value)+"\n"+String.format(Locale.US,"%.1f%%",pct),10,gold,true);val.setGravity(Gravity.RIGHT|Gravity.CENTER_VERTICAL);
+      r.addView(nm,new LinearLayout.LayoutParams(0,dp(46),1.35f));r.addView(qty,new LinearLayout.LayoutParams(0,dp(46),.8f));r.addView(val,new LinearLayout.LayoutParams(0,dp(46),1.15f));
+      add(detail,r,-1,dp(46));
+    }
     if(allQty==0)add(detail,text("Belum ada item terjual untuk tempoh ini.",12,muted,false),-1,-2);
+    LinearLayout totalRow=row();totalRow.setPadding(0,dp(7),0,0);TextView tl=text("JUMLAH",11,blue,true);totalRow.addView(tl,new LinearLayout.LayoutParams(0,-2,1));add(totalRow,text(allQty+" item  ·  "+money(total),11,blue,true),-2,-2);add(detail,totalRow,-1,-2);
     add(body,detail,-1,-2);gap(body,10);
-    if(sateQty>0){LinearLayout sate=col();sate.setPadding(dp(12),dp(12),dp(12),dp(12));sate.setBackground(shape(surface,14));add(sate,text("DETAIL SATE · PECAHAN",13,ink,true),-1,-2);gap(sate,7);for(int i=0;i<3;i++){if(sold[i]<=0)continue;double pct=sateValue<=0?0:(sold[i]*prices[i]*100.0/sateValue);add(sate,text(names[i]+"   "+sold[i]+" cucuk   ·   "+money(sold[i]*prices[i])+"   ·   "+String.format(Locale.US,"%.1f%%",pct),12,ink,false),-1,-2);gap(sate,5);}add(sate,text("Jumlah sate: "+sateQty+" cucuk  ·  "+money(sateValue),12,gold,true),-1,-2);add(body,sate,-1,-2);gap(body,10);}
+
+    if(sateQty>0){
+      LinearLayout sate=col();sate.setPadding(dp(12),dp(12),dp(12),dp(12));sate.setBackground(shape(surface,14));add(sate,text("DETAIL SATE · PECAHAN",13,ink,true),-1,-2);gap(sate,7);
+      for(int i=0;i<3;i++){if(sold[i]<=0)continue;double pct=sateValue<=0?0:(sold[i]*prices[i]*100.0/sateValue);LinearLayout r=row();r.setGravity(Gravity.CENTER_VERTICAL);TextView a=text(names[i],11,ink,true);r.addView(a,new LinearLayout.LayoutParams(0,dp(38),1));add(r,text(sold[i]+" cucuk",10,muted,true),dp(78),dp(38));TextView v=text(money(sold[i]*prices[i])+" · "+String.format(Locale.US,"%.1f%%",pct),10,gold,true);v.setGravity(Gravity.RIGHT|Gravity.CENTER_VERTICAL);add(r,v,dp(120),dp(38));add(sate,r,-1,dp(38));}
+      add(sate,text("Jumlah sate: "+sateQty+" cucuk  ·  "+money(sateValue),11,blue,true),-1,-2);add(body,sate,-1,-2);gap(body,10);
+    }
   }
   void addPaymentBreakdown(String start,String end){
     int cash=paymentTotalBetween(start,end,"tunai"),qr=paymentTotalBetween(start,end,"qr"),total=saleTotalBetween(start,end);
@@ -311,6 +333,28 @@ googleSignInClient = GoogleSignIn.getClient(this, gso);snapshotBeforeUpdate();lo
     JSONArray list=entries("stock_sales");LinearLayout card=col();card.setPadding(dp(12),dp(12),dp(12),dp(12));card.setBackground(shape(surface,14));add(card,text("TRANSAKSI TERKINI",13,ink,true),-1,-2);gap(card,7);int shown=0;
     for(int i=list.length()-1;i>=0&&shown<8;i--){JSONObject e=list.optJSONObject(i);if(e==null||e.optBoolean("refunded",false))continue;String d=entryDay(e);if(d.compareTo(start)<0||d.compareTo(end)>0)continue;String tm=e.optString("time","");String clock=tm.length()>=16?tm.substring(11):tm;LinearLayout r=row();add(r,text(clock,11,muted,true),dp(52),-2);TextView desc=text(saleItemsText(e).replace("\n"," · "),11,ink,false);desc.setMaxLines(1);desc.setEllipsize(android.text.TextUtils.TruncateAt.END);r.addView(desc,new LinearLayout.LayoutParams(0,-2,1));add(r,text(money(saleTotal(e)),11,gold,true),-2,-2);add(card,r,-1,-2);gap(card,6);shown++;}
     if(shown==0)add(card,text("Tiada transaksi untuk tempoh ini.",12,muted,false),-1,-2);add(body,card,-1,-2);gap(body,10);
+  }
+
+  boolean cashCategoryMatches(JSONObject e,String category){
+    String c=e.optString("category","");
+    if("Bayaran Pembekal".equals(category))return c.startsWith("Bayaran Pembekal · ");
+    if("Bahan Lain".equals(category))return c.equals("Bahan lain")||c.equals("Barang plastik")||c.equals("Lain-lain");
+    if("Pengeluaran Peribadi".equals(category))return personalCash(e);
+    if("Duit Masuk".equals(category))return e.optInt("amount",0)>0&&!legacySupplierRestock(e);
+    if("Duit Keluar".equals(category))return e.optInt("amount",0)<0&&!legacySupplierRestock(e)&&!personalCash(e);
+    return c.equals(category);
+  }
+  void filteredCashHistory(String title,String category){
+    LinearLayout box=col();box.setPadding(dp(14),dp(14),dp(14),dp(14));ScrollView sc=new ScrollView(this);sc.setFillViewport(true);sc.addView(box);new AlertDialog.Builder(this).setTitle(title).setView(sc).setPositiveButton("Tutup",null).show();
+    JSONArray list=entries("cash_entries");int found=0,total=0;
+    for(int i=list.length()-1;i>=0;i--){JSONObject e=list.optJSONObject(i);if(e==null||!cashCategoryMatches(e,category))continue;found++;int a=e.optInt("amount",0);total+=a;String when=e.optString("time",e.optString("date",""));String cat=e.optString("category",category),note=e.optString("note",e.optString("remark",""));LinearLayout row=col();row.setPadding(dp(10),dp(9),dp(10),dp(9));row.setBackground(shape(surface,10));add(row,text(cat+"   "+money(Math.abs(a)),12,a>=0?0xff46c979:0xffff6b6b,true),-1,-2);add(row,text(when+(note.isEmpty()?"":"\n"+note),10,muted,false),-1,-2);add(box,row,-1,-2);gap(box,6);}
+    if(found==0)add(box,text("Belum ada rekod "+title.toLowerCase(new Locale("ms","MY"))+".",12,muted,false),-1,-2);else{gap(box,6);add(box,text("Jumlah rekod: "+found+"   ·   Nilai: "+money(Math.abs(total)),12,gold,true),-1,-2);}
+  }
+  void supplierHub(){
+    LinearLayout box=col();box.setPadding(dp(14),dp(12),dp(14),dp(12));ScrollView sc=new ScrollView(this);sc.setFillViewport(true);sc.addView(box);AlertDialog dlg=new AlertDialog.Builder(this).setTitle("Bayaran Pembekal").setView(sc).setNegativeButton("Tutup",null).create();
+    int dueSate=supplierDue(-1);LinearLayout sate=col();sate.setPadding(dp(10),dp(10),dp(10),dp(10));sate.setBackground(shape(surface,11));add(sate,text("SATE",13,ink,true),-1,-2);add(sate,text("Baki perlu dibayar  "+money(dueSate),12,dueSate>0?gold:0xff46c979,true),-1,-2);LinearLayout sr=row();TextView sp=chip("TELAH DIBAYAR",blue,Color.WHITE);TextView sh=chip("HISTORY RESIT",0xff294563,Color.WHITE);sr.addView(sp,new LinearLayout.LayoutParams(0,dp(40),1));LinearLayout.LayoutParams hp=new LinearLayout.LayoutParams(0,dp(40),1);hp.leftMargin=dp(6);sr.addView(sh,hp);add(sate,sr,-1,-2);sp.setOnClickListener(v->{dlg.dismiss();paySupplier(-1);});sh.setOnClickListener(v->{dlg.dismiss();supplierReceiptHistory(-1);});add(box,sate,-1,-2);gap(box,8);
+    for(int id=3;id<names.length;id++){if(id==4||getPreferences(0).getBoolean("menu_hidden_"+id,false)||!supplierItem(id))continue;final int sid=id;int due=supplierDue(sid);LinearLayout c=col();c.setPadding(dp(10),dp(10),dp(10),dp(10));c.setBackground(shape(surface,11));add(c,text(names[sid].toUpperCase(new Locale("ms","MY")),13,ink,true),-1,-2);add(c,text("Baki perlu dibayar  "+money(due),12,due>0?gold:0xff46c979,true),-1,-2);LinearLayout rr=row();TextView p=chip("TELAH DIBAYAR",blue,Color.WHITE),h=chip("HISTORY RESIT",0xff294563,Color.WHITE);rr.addView(p,new LinearLayout.LayoutParams(0,dp(40),1));LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(0,dp(40),1);lp.leftMargin=dp(6);rr.addView(h,lp);add(c,rr,-1,-2);p.setOnClickListener(v->{dlg.dismiss();paySupplier(sid);});h.setOnClickListener(v->{dlg.dismiss();supplierReceiptHistory(sid);});add(box,c,-1,-2);gap(box,8);}
+    dlg.show();
   }
   void drawPage(){if(activePage==11){heading("Order belum bayar","Semua order yang sudah confirm tetapi belum dibayar.");JSONArray pending=entries("pending_orders");int open=0;for(int i=0;i<pending.length();i++){JSONObject o=pending.optJSONObject(i);if(o!=null&&!o.optBoolean("paid",false)&&!o.optBoolean("cancelled",false))open++;}if(open==0){LinearLayout empty=col();empty.setPadding(dp(16),dp(18),dp(16),dp(18));empty.setBackground(shape(surface,15));add(empty,text("Tiada order belum bayar.",15,ink,true),-1,-2);gap(empty,5);add(empty,text("Order yang di-Confirm dari MENU akan muncul di sini.",12,muted,false),-1,-2);add(body,empty,-1,-2);}else drawPendingOrders();
       gap(body,12);
@@ -328,16 +372,18 @@ googleSignInClient = GoogleSignIn.getClient(this, gso);snapshotBeforeUpdate();lo
       action("Lihat ringkasan stok tarikh dipilih",()->stockBalance());action("Rekod stok rosak",()->damageHistory());
     }else if(activePage==2){heading("Detail Jualan","Dashboard laporan lengkap · graf, pie, produk, bayaran dan transaksi.");
       action("‹  Kembali ke DUIT",()->{activePage=3;draw();});addReportTabs();
-      String rs=saleReportStart(),re=saleReportEnd();int reportSales=saleTotalBetween(rs,re),reportItems=saleCountBetween(rs,re),reportTx=transactionCountBetween(rs,re);int reportProfit=reportSales-productCostBetween(rs,re)-operatingExpenseTotal(salesReportMode==1?selectedMonth:rs,salesReportMode==0);
+      String rs=saleReportStart(),re=saleReportEnd();int reportSales=saleTotalBetween(rs,re),reportItems=saleCountBetween(rs,re),reportTx=transactionCountBetween(rs,re);int reportOp=0;if(salesReportMode==1)reportOp=operatingExpenseTotal(selectedMonth,false);else if(salesReportMode==0)reportOp=operatingExpenseTotal(rs,true);else{JSONArray ce=entries("cash_entries");for(int i=0;i<ce.length();i++){JSONObject e=ce.optJSONObject(i);if(e==null||legacySupplierRestock(e)||personalCash(e)||stockPurchaseCash(e))continue;String d=entryDay(e);if(d.compareTo(rs)>=0&&d.compareTo(re)<=0&&e.optInt("amount")<0)reportOp-=e.optInt("amount");}}int reportProfit=reportSales-productCostBetween(rs,re)-reportOp;
       LinearLayout summary=row();metric(summary,"JUMLAH JUALAN",money(reportSales),blue,null);metric(summary,"UNTUNG BERSIH",money(reportProfit),reportProfit>=0?0xff46c979:0xffff6b6b,null);add(body,summary,-1,-2);gap(body,7);
       LinearLayout summary2=row();metric(summary2,"JUMLAH ITEM",""+reportItems,0xffb987ff,null);metric(summary2,"TRANSAKSI",""+reportTx,gold,null);add(body,summary2,-1,-2);gap(body,10);
       if(salesReportMode==0){
-        int[] byHour=new int[8];String[] labels={"8am","10am","12pm","2pm","4pm","6pm","8pm","10pm"};JSONArray sales=entries("stock_sales");for(int i=0;i<sales.length();i++){JSONObject e=sales.optJSONObject(i);if(e==null||e.optBoolean("refunded",false)||!selectedDay.equals(entryDay(e)))continue;String t=e.optString("time","");int h=0;try{h=Integer.parseInt(t.substring(11,13));}catch(Exception ignored){}int bucket=Math.max(0,Math.min(7,(h-8)/2));byHour[bucket]+=saleTotal(e);}LinearLayout c=col();c.setPadding(dp(12),dp(12),dp(12),dp(8));c.setBackground(shape(surface,14));add(c,text("GRAF JUALAN · HARI INI",13,ink,true),-1,-2);add(c,new SalesChart(byHour,labels),-1,205);add(body,c,-1,-2);gap(body,10);
+        int[] byHour=new int[8];String[] labels={"8am","10am","12pm","2pm","4pm","6pm","8pm","10pm"};JSONArray sales=entries("stock_sales");for(int i=0;i<sales.length();i++){JSONObject e=sales.optJSONObject(i);if(e==null||e.optBoolean("refunded",false)||!selectedDay.equals(entryDay(e)))continue;String t=e.optString("time","");int h=8;try{h=Integer.parseInt(t.substring(11,13));}catch(Exception ignored){}int bucket=Math.max(0,Math.min(7,(h-8)/2));byHour[bucket]+=saleTotal(e);}LinearLayout c=col();c.setPadding(dp(12),dp(12),dp(12),dp(8));c.setBackground(shape(surface,14));add(c,text("GRAF JUALAN · HARIAN",13,ink,true),-1,-2);add(c,new SalesChart(byHour,labels),-1,dp(205));add(body,c,-1,-2);gap(body,10);
+      }else if(salesReportMode==1){
+        int days=daysInMonth(selectedMonth);int[] totals=new int[days];String[] labels=new String[days];for(int i=0;i<days;i++){String d=selectedMonth+String.format(Locale.US,"-%02d",i+1);totals[i]=saleTotalBetween(d,d);labels[i]=(i==0||(i+1)%5==0||i==days-1)?""+(i+1):"";}LinearLayout c=col();c.setPadding(dp(12),dp(12),dp(12),dp(8));c.setBackground(shape(surface,14));add(c,text("GRAF JUALAN · "+monthLabel(selectedMonth),13,ink,true),-1,-2);add(c,new SalesChart(totals,labels),-1,dp(205));add(body,c,-1,-2);gap(body,10);
       }else{
-        int days=daysInMonth(selectedMonth);int[] totals=new int[days];String[] labels=new String[days];for(int i=0;i<days;i++){String d=selectedMonth+String.format(Locale.US,"-%02d",i+1);totals[i]=saleTotalBetween(d,d);labels[i]=(i==0||(i+1)%5==0||i==days-1)?""+(i+1):"";}LinearLayout c=col();c.setPadding(dp(12),dp(12),dp(12),dp(8));c.setBackground(shape(surface,14));add(c,text(salesReportMode==1?"GRAF JUALAN · "+monthLabel(selectedMonth):"GRAF JUALAN · TARIKH DIPILIH",13,ink,true),-1,-2);add(c,new SalesChart(totals,labels),-1,205);add(body,c,-1,-2);gap(body,10);
+        java.util.ArrayList<Integer> tv=new java.util.ArrayList<>();java.util.ArrayList<String> lv=new java.util.ArrayList<>();try{java.text.SimpleDateFormat f=new java.text.SimpleDateFormat("yyyy-MM-dd",Locale.US);java.util.Calendar a=java.util.Calendar.getInstance(),b=java.util.Calendar.getInstance();a.setTime(f.parse(rs));b.setTime(f.parse(re));int guard=0;while(!a.after(b)&&guard++<93){String d=f.format(a.getTime());tv.add(saleTotalBetween(d,d));lv.add(new java.text.SimpleDateFormat("d/M",Locale.US).format(a.getTime()));a.add(java.util.Calendar.DATE,1);}}catch(Exception ignored){}int[] totals=new int[tv.size()];String[] labels=new String[lv.size()];for(int i=0;i<tv.size();i++){totals[i]=tv.get(i);labels[i]=(i==0||i==tv.size()-1||i%5==0)?lv.get(i):"";}LinearLayout c=col();c.setPadding(dp(12),dp(12),dp(12),dp(8));c.setBackground(shape(surface,14));add(c,text("GRAF JUALAN · TARIKH DIPILIH",13,ink,true),-1,-2);add(c,new SalesChart(totals,labels),-1,dp(205));add(body,c,-1,-2);gap(body,10);
       }
       addSalesBreakdown(rs,re);addPaymentBreakdown(rs,re);addRecentTransactions(rs,re);
-      action("History customer / Refund",()->saleHistory(salesReportMode==0?selectedDay:date()));action("Export laporan Excel / PDF",()->exportMenu());
+      action("History customer / Refund",()->{if(salesReportMode==0)saleHistory(selectedDay);else if(salesReportMode==1)saleHistory(selectedMonth);else new AlertDialog.Builder(this).setTitle("History Tarikh Dipilih").setMessage("History transaksi untuk "+rs+" hingga "+re+" dipaparkan pada bahagian Transaksi Terkini di atas.").setPositiveButton("OK",null).show();});action("Export laporan Excel / PDF",()->exportMenu());
     }else if(activePage==3){heading("Cash Flow / Duit","Audit aliran wang bisnes. Bahagian peribadi dan baki sebenar diletakkan paling bawah.");
       LinearLayout mode=row();TextView daily=chip("HARIAN",cashDailyMode?gold:0xff294563,cashDailyMode?0xff17202c:Color.WHITE),monthlyBtn=chip("BULANAN",!cashDailyMode?gold:0xff294563,!cashDailyMode?0xff17202c:Color.WHITE);daily.setGravity(Gravity.CENTER);monthlyBtn.setGravity(Gravity.CENTER);mode.addView(daily,new LinearLayout.LayoutParams(0,dp(42),1));LinearLayout.LayoutParams mlp=new LinearLayout.LayoutParams(0,dp(42),1);mlp.leftMargin=dp(7);mode.addView(monthlyBtn,mlp);add(body,mode,-1,-2);gap(body,9);daily.setOnClickListener(v->{cashDailyMode=true;draw();});monthlyBtn.setOnClickListener(v->{cashDailyMode=false;draw();});
       if(cashDailyMode)action("Tarikh: "+selectedCashDay+"   ▼",()->chooseCashDay());else action("Bulan: "+monthLabel(selectedMonth)+"   ▼",()->chooseMonth());
@@ -348,21 +394,21 @@ googleSignInClient = GoogleSignIn.getClient(this, gso);snapshotBeforeUpdate();lo
       int supplierPaid=supplierPaidTotal(period,cashDailyMode),fuel=cashCategoryTotal(period,cashDailyMode,"Minyak kereta"),rent=cashCategoryTotal(period,cashDailyMode,"Sewa"),charcoal=cashCategoryTotal(period,cashDailyMode,"Arang"),materials=cashCategoryTotal(period,cashDailyMode,"Barang plastik","Bahan lain");
       add(body,text("OPERASI PERNIAGAAN",12,muted,true),-1,-2);gap(body,7);
       LinearLayout top=row();metric(top,cashDailyMode?"JUALAN HARI INI  ›":"JUALAN POS  ›",money(sale),blue,()->{selectedDay=cashDailyMode?selectedCashDay:date();selectedMonth=selectedDay.substring(0,7);activePage=2;draw();});metric(top,"UNTUNG BERSIH JUALAN  ›",money(profit),profit>=0?gold:0xffff6b6b,()->{selectedDay=cashDailyMode?selectedCashDay:date();selectedMonth=selectedDay.substring(0,7);salesReportMode=cashDailyMode?0:1;activePage=2;draw();});add(body,top,-1,-2);gap(body,8);
-      LinearLayout costRow=row();metric(costRow,"KOS BARANG TERJUAL  ›",money(startCost),ink,()->{selectedDay=cashDailyMode?selectedCashDay:date();selectedMonth=selectedDay.substring(0,7);salesReportMode=cashDailyMode?0:1;activePage=2;draw();});metric(costRow,"BAYARAN PEMBEKAL  ›",money(supplierPaid),gold,()->cashHistory());add(body,costRow,-1,-2);gap(body,8);
-      LinearLayout op1=row();metric(op1,"MINYAK KERETA  ›",money(fuel),ink,()->cashHistory());metric(op1,"SEWA  ›",money(rent),ink,()->cashHistory());add(body,op1,-1,-2);gap(body,8);
-      LinearLayout op2=row();metric(op2,"ARANG  ›",money(charcoal),ink,()->cashHistory());metric(op2,"BAHAN LAIN  ›",money(materials),ink,()->cashHistory());add(body,op2,-1,-2);gap(body,8);
-      LinearLayout flow=row();metric(flow,"DUIT MASUK LAIN",money(cash[0]),blue,null);metric(flow,"DUIT KELUAR DIREKOD",money(cash[1]),ink,null);add(body,flow,-1,-2);gap(body,8);
+      LinearLayout costRow=row();metric(costRow,"KOS BARANG TERJUAL  ›",money(startCost),ink,()->{selectedDay=cashDailyMode?selectedCashDay:date();selectedMonth=selectedDay.substring(0,7);salesReportMode=cashDailyMode?0:1;activePage=2;draw();});metric(costRow,"BAYARAN PEMBEKAL  ›",money(supplierPaid),gold,()->supplierHub());add(body,costRow,-1,-2);gap(body,8);
+      LinearLayout op1=row();metric(op1,"MINYAK KERETA  ›",money(fuel),ink,()->filteredCashHistory("Minyak Kereta","Minyak kereta"));metric(op1,"SEWA  ›",money(rent),ink,()->filteredCashHistory("Sewa","Sewa"));add(body,op1,-1,-2);gap(body,8);
+      LinearLayout op2=row();metric(op2,"ARANG  ›",money(charcoal),ink,()->filteredCashHistory("Arang","Arang"));metric(op2,"BAHAN LAIN  ›",money(materials),ink,()->filteredCashHistory("Bahan Lain","Bahan Lain"));add(body,op2,-1,-2);gap(body,8);
+      LinearLayout flow=row();metric(flow,"DUIT MASUK LAIN  ›",money(cash[0]),blue,()->filteredCashHistory("Duit Masuk","Duit Masuk"));metric(flow,"DUIT KELUAR DIREKOD  ›",money(cash[1]),ink,()->filteredCashHistory("Duit Keluar","Duit Keluar"));add(body,flow,-1,-2);gap(body,8);
       LinearLayout loss=row();metric(loss,cashDailyMode?"STOK ROSAK · HARI":"STOK ROSAK · BULAN",money(lossValue),0xffb54743,()->damageHistory());add(body,loss,-1,-2);gap(body,12);
       addSupplierPaymentCard("SATE",-1);for(int supplierId=3;supplierId<names.length;supplierId++){if(supplierId==4||getPreferences(0).getBoolean("menu_hidden_"+supplierId,false)||!supplierItem(supplierId))continue;addSupplierPaymentCard(names[supplierId].toUpperCase(new Locale("ms","MY")),supplierId);}
       LinearLayout controls=row();metric(controls,"+ CATAT","Masuk",blue,()->cashEntry(true));metric(controls,"− CATAT","Keluar",ink,()->cashEntry(false));add(body,controls,-1,-2);gap(body,10);
       action(cashDailyMode?"Lihat audit transaksi tarikh dipilih":"Lihat audit transaksi bulan dipilih",()->cashHistory());gap(body,3);action("🧾  CLOSING HARIAN / PRINT REPORT",()->dailyClosing(date()));
       if(!cashDailyMode){gap(body,8);CashDonutChart cashChart=new CashDonutChart(pm);add(body,cashChart,-1,270);gap(body,8);action("Pecahan harian graf",()->cashDaily(pm));}
       gap(body,16);add(body,text("KEDUDUKAN DUIT SEBENAR",12,muted,true),-1,-2);gap(body,7);
-      LinearLayout personalRow=row();metric(personalRow,"PENGELUARAN PERIBADI",money(personal),0xffffb74d,null);metric(personalRow,"BAKI DUIT BISNES",money(businessCashBalance()),blue,null);add(body,personalRow,-1,-2);gap(body,8);
-      LinearLayout real=row();metric(real,"BAKI TOTAL DUIT · SEBENAR",money(totalMoneyBalance()),gold,null);add(body,real,-1,-2);gap(body,8);
+      LinearLayout personalRow=row();metric(personalRow,"PENGELUARAN PERIBADI  ›",money(personal),0xffffb74d,()->filteredCashHistory("Pengeluaran Peribadi","Pengeluaran Peribadi"));metric(personalRow,"BAKI DUIT BISNES  ›",money(businessCashBalance()),blue,()->new AlertDialog.Builder(this).setTitle("Baki Duit Bisnes").setMessage("Baki bisnes mengira semua jualan dan aliran tunai bisnes, tanpa menolak pengeluaran peribadi.").setPositiveButton("OK",null).show());add(body,personalRow,-1,-2);gap(body,8);
+      LinearLayout real=row();metric(real,"BAKI TOTAL DUIT · SEBENAR  ›",money(totalMoneyBalance()),gold,()->new AlertDialog.Builder(this).setTitle("Baki Total Duit Sebenar").setMessage("Baki sebenar = semua jualan + duit masuk − duit keluar yang telah dibayar − pengeluaran peribadi.").setPositiveButton("OK",null).show());add(body,real,-1,-2);gap(body,8);
       add(body,text("Baki sebenar = semua jualan + duit masuk − duit keluar yang telah dibayar − pengeluaran peribadi. Bayaran order direkod ikut tarikh bayaran diterima.",11,muted,false),-1,-2);
     }else if(activePage==4){
-      heading("Setting","WarisanPOS 3.17 · Tetapan kedai dan data.");
+      heading("Setting","WarisanPOS 3.19 · Tetapan kedai dan data.");
       action("👤  Account",()->{activePage=5;draw();});
       action("🧾  Bill / Resit",()->{activePage=7;draw();});
        action("💳  Payment / DuitNow",()->{activePage=10;draw();});
