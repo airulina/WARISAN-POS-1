@@ -345,20 +345,20 @@ googleSignInClient = GoogleSignIn.getClient(this, gso);snapshotBeforeUpdate();lo
     return c.equals(category);
   }
   void filteredCashHistory(String title,String category){
-    LinearLayout box=col();box.setPadding(dp(16),dp(12),dp(16),dp(12));box.setBackgroundColor(bg);
-    ScrollView sc=new ScrollView(this);sc.setFillViewport(true);sc.setBackgroundColor(bg);sc.addView(box);
+    LinearLayout box=col();box.setPadding(dp(16),dp(12),dp(16),dp(12));box.setBackgroundColor(navy);
+    ScrollView sc=new ScrollView(this);sc.setFillViewport(true);sc.setBackgroundColor(navy);sc.addView(box);
     JSONArray list=entries("cash_entries");int found=0,total=0;
     for(int i=list.length()-1;i>=0;i--){JSONObject e=list.optJSONObject(i);if(e==null||!cashCategoryMatches(e,category))continue;found++;int a=e.optInt("amount",0);total+=a;String when=e.optString("time",e.optString("date",""));String cat=e.optString("category",category),note=e.optString("note",e.optString("remark",""));LinearLayout row=col();row.setPadding(dp(12),dp(10),dp(12),dp(10));row.setBackground(shape(surface,12));add(row,text(cat+"   "+money(Math.abs(a)),12,a>=0?0xff46c979:0xffff6b6b,true),-1,-2);add(row,text(when+(note.isEmpty()?"":"\n"+note),10,muted,false),-1,-2);add(box,row,-1,-2);gap(box,7);}
     if(found==0)add(box,text("Belum ada rekod "+title.toLowerCase(new Locale("ms","MY"))+".",12,muted,false),-1,-2);else{gap(box,6);add(box,text("Jumlah rekod: "+found+"   ·   Nilai: "+money(Math.abs(total)),12,gold,true),-1,-2);}
     AlertDialog dlg=new AlertDialog.Builder(this).setTitle(title).setView(sc).setPositiveButton("TUTUP",null).create();
-    dlg.setOnShowListener(x->{dlg.getWindow().setBackgroundDrawable(shape(bg,16));int id=getResources().getIdentifier("alertTitle","id","android");TextView t=dlg.findViewById(id);if(t!=null)t.setTextColor(ink);dlg.getButton(AlertDialog.BUTTON_POSITIVE).setTextColor(gold);});
+    dlg.setOnShowListener(x->{dlg.getWindow().setBackgroundDrawable(shape(navy,16));int id=getResources().getIdentifier("alertTitle","id","android");TextView t=dlg.findViewById(id);if(t!=null)t.setTextColor(ink);dlg.getButton(AlertDialog.BUTTON_POSITIVE).setTextColor(gold);});
     dlg.show();
   }
   void supplierHub(){
-    LinearLayout box=col();box.setPadding(dp(14),dp(12),dp(14),dp(12));box.setBackgroundColor(bg);ScrollView sc=new ScrollView(this);sc.setFillViewport(true);sc.setBackgroundColor(bg);sc.addView(box);AlertDialog dlg=new AlertDialog.Builder(this).setTitle("Bayaran Pembekal").setView(sc).setNegativeButton("Tutup",null).create();
+    LinearLayout box=col();box.setPadding(dp(14),dp(12),dp(14),dp(12));box.setBackgroundColor(navy);ScrollView sc=new ScrollView(this);sc.setFillViewport(true);sc.setBackgroundColor(navy);sc.addView(box);AlertDialog dlg=new AlertDialog.Builder(this).setTitle("Bayaran Pembekal").setView(sc).setNegativeButton("Tutup",null).create();
     int dueSate=supplierDue(-1);LinearLayout sate=col();sate.setPadding(dp(10),dp(10),dp(10),dp(10));sate.setBackground(shape(surface,11));add(sate,text("SATE",13,ink,true),-1,-2);add(sate,text("Baki perlu dibayar  "+money(dueSate),12,dueSate>0?gold:0xff46c979,true),-1,-2);LinearLayout sr=row();TextView sp=chip("TELAH DIBAYAR",blue,Color.WHITE);TextView sh=chip("HISTORY RESIT",0xff294563,Color.WHITE);sr.addView(sp,new LinearLayout.LayoutParams(0,dp(40),1));LinearLayout.LayoutParams hp=new LinearLayout.LayoutParams(0,dp(40),1);hp.leftMargin=dp(6);sr.addView(sh,hp);add(sate,sr,-1,-2);sp.setOnClickListener(v->{dlg.dismiss();paySupplier(-1,"Sate");});sh.setOnClickListener(v->{dlg.dismiss();supplierReceiptHistory(-1,"Sate");});add(box,sate,-1,-2);gap(box,8);
     for(int id=3;id<names.length;id++){if(id==4||getPreferences(0).getBoolean("menu_hidden_"+id,false)||!supplierItem(id))continue;final int sid=id;int due=supplierDue(sid);LinearLayout c=col();c.setPadding(dp(10),dp(10),dp(10),dp(10));c.setBackground(shape(surface,11));add(c,text(names[sid].toUpperCase(new Locale("ms","MY")),13,ink,true),-1,-2);add(c,text("Baki perlu dibayar  "+money(due),12,due>0?gold:0xff46c979,true),-1,-2);LinearLayout rr=row();TextView p=chip("TELAH DIBAYAR",blue,Color.WHITE),h=chip("HISTORY RESIT",0xff294563,Color.WHITE);rr.addView(p,new LinearLayout.LayoutParams(0,dp(40),1));LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(0,dp(40),1);lp.leftMargin=dp(6);rr.addView(h,lp);add(c,rr,-1,-2);p.setOnClickListener(v->{dlg.dismiss();paySupplier(sid,names[sid]);});h.setOnClickListener(v->{dlg.dismiss();supplierReceiptHistory(sid,names[sid]);});add(box,c,-1,-2);gap(box,8);}
-    dlg.setOnShowListener(x->{dlg.getWindow().setBackgroundDrawable(shape(bg,16));int id=getResources().getIdentifier("alertTitle","id","android");TextView t=dlg.findViewById(id);if(t!=null)t.setTextColor(ink);dlg.getButton(AlertDialog.BUTTON_NEGATIVE).setTextColor(gold);});
+    dlg.setOnShowListener(x->{dlg.getWindow().setBackgroundDrawable(shape(navy,16));int id=getResources().getIdentifier("alertTitle","id","android");TextView t=dlg.findViewById(id);if(t!=null)t.setTextColor(ink);dlg.getButton(AlertDialog.BUTTON_NEGATIVE).setTextColor(gold);});
     dlg.show();
   }
   void drawPage(){if(activePage==11){heading("Order belum bayar","Semua order yang sudah confirm tetapi belum dibayar.");JSONArray pending=entries("pending_orders");int open=0;for(int i=0;i<pending.length();i++){JSONObject o=pending.optJSONObject(i);if(o!=null&&!o.optBoolean("paid",false)&&!o.optBoolean("cancelled",false))open++;}if(open==0){LinearLayout empty=col();empty.setPadding(dp(16),dp(18),dp(16),dp(18));empty.setBackground(shape(surface,15));add(empty,text("Tiada order belum bayar.",15,ink,true),-1,-2);gap(empty,5);add(empty,text("Order yang di-Confirm dari MENU akan muncul di sini.",12,muted,false),-1,-2);add(body,empty,-1,-2);}else drawPendingOrders();
@@ -413,7 +413,7 @@ googleSignInClient = GoogleSignIn.getClient(this, gso);snapshotBeforeUpdate();lo
       LinearLayout real=row();metric(real,"BAKI TOTAL DUIT · SEBENAR  ›",money(totalMoneyBalance()),gold,()->new AlertDialog.Builder(this).setTitle("Baki Total Duit Sebenar").setMessage("Baki sebenar = semua jualan + duit masuk − duit keluar yang telah dibayar − pengeluaran peribadi.").setPositiveButton("OK",null).show());add(body,real,-1,-2);gap(body,8);
       add(body,text("Baki sebenar = semua jualan + duit masuk − duit keluar yang telah dibayar − pengeluaran peribadi. Bayaran order direkod ikut tarikh bayaran diterima.",11,muted,false),-1,-2);
     }else if(activePage==4){
-      heading("Setting","WarisanPOS 3.21 · Tetapan kedai dan data.");
+      heading("Setting","WarisanPOS 3.22 · Tetapan kedai dan data.");
       action("👤  Account",()->{activePage=5;draw();});
       action("🧾  Bill / Resit",()->{activePage=7;draw();});
        action("💳  Payment / DuitNow",()->{activePage=10;draw();});
