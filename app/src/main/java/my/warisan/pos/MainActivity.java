@@ -155,7 +155,7 @@ GoogleSignInOptions gso = new GoogleSignInOptions.Builder(GoogleSignInOptions.DE
         .requestIdToken(getString(R.string.default_web_client_id))
         .requestEmail()
         .build();
-googleSignInClient = GoogleSignIn.getClient(this, gso);snapshotBeforeUpdate();loadMenu();clearCurrentNasiDamageOnce();applyCorrection20260926();applySupplierReceiptDetailFix20260926();applyBusinessDayRepair20260929();repairPaidDistributionSales20260930();selectedDay=date();selectedMonth=selectedDay.substring(0,7);rangeStart=selectedDay;selectedStockDay=selectedDay;selectedCashDay=selectedDay;if(b!=null){int[] saved=b.getIntArray("cart");if(saved!=null)System.arraycopy(saved,0,qty,0,Math.min(saved.length,qty.length));activePage=b.getInt("page",0);selectedDay=b.getString("selectedDay",selectedDay);selectedMonth=selectedDay.substring(0,7);rangeStart=b.getString("rangeStart",rangeStart);selectedStockDay=b.getString("selectedStockDay",selectedStockDay);selectedCashDay=b.getString("selectedCashDay",selectedCashDay);cashDailyMode=b.getBoolean("cashDailyMode",cashDailyMode);}draw();}
+googleSignInClient = GoogleSignIn.getClient(this, gso);snapshotBeforeUpdate();loadMenu();clearCurrentNasiDamageOnce();applyCorrection20260926();applySupplierReceiptDetailFix20260926();applyBusinessDayRepair20260929();repairDistributionBusinessDay20260929();repairPaidDistributionSales20260930();selectedDay=date();selectedMonth=selectedDay.substring(0,7);rangeStart=selectedDay;selectedStockDay=selectedDay;selectedCashDay=selectedDay;if(b!=null){int[] saved=b.getIntArray("cart");if(saved!=null)System.arraycopy(saved,0,qty,0,Math.min(saved.length,qty.length));activePage=b.getInt("page",0);selectedDay=b.getString("selectedDay",selectedDay);selectedMonth=selectedDay.substring(0,7);rangeStart=b.getString("rangeStart",rangeStart);selectedStockDay=b.getString("selectedStockDay",selectedStockDay);selectedCashDay=b.getString("selectedCashDay",selectedCashDay);cashDailyMode=b.getBoolean("cashDailyMode",cashDailyMode);}draw();}
   @Override protected void onSaveInstanceState(Bundle b){b.putIntArray("cart",qty);b.putInt("page",activePage);b.putString("selectedDay",selectedDay);b.putString("rangeStart",rangeStart);b.putString("selectedStockDay",selectedStockDay);b.putString("selectedCashDay",selectedCashDay);b.putBoolean("cashDailyMode",cashDailyMode);super.onSaveInstanceState(b);}
   void draw(){
     cachedStock=null;
@@ -565,6 +565,33 @@ googleSignInClient = GoogleSignIn.getClient(this, gso);snapshotBeforeUpdate();lo
   String nextDay(String day){try{SimpleDateFormat f=new SimpleDateFormat("yyyy-MM-dd",Locale.US);Calendar c=Calendar.getInstance();c.setTime(f.parse(day));c.add(Calendar.DATE,1);return f.format(c.getTime());}catch(Exception e){return date();}}
   String previousDay(String day){try{SimpleDateFormat f=new SimpleDateFormat("yyyy-MM-dd",Locale.US);Calendar c=Calendar.getInstance();c.setTime(f.parse(day));c.add(Calendar.DATE,-1);return f.format(c.getTime());}catch(Exception e){return day;}}
   void applyBusinessDayRepair20260929(){android.content.SharedPreferences p=getPreferences(0);if(p.getBoolean("fix_business_day_20260929",false))return;try{String today=date();if(!"2026-09-29".equals(today)){p.edit().putBoolean("fix_business_day_20260929",true).commit();return;}String oldDay="2026-09-28";String[] keys={"stock_sales","pending_orders","cash_entries","stock_entries","stock_damage","stock_distribution"};android.content.SharedPreferences.Editor ed=p.edit();for(String key:keys){JSONArray list=entries(key);boolean changed=false;for(int i=0;i<list.length();i++){JSONObject e=list.optJSONObject(i);if(e==null)continue;if(today.equals(entryDay(e))){e.put("businessDay",oldDay);changed=true;}}if(changed)ed.putString(key,list.toString());}int salesToday=p.getInt("sales_"+today,0),salesOld=p.getInt("sales_"+oldDay,0);if(salesToday>0){ed.putInt("sales_"+oldDay,salesOld+salesToday);ed.putInt("sales_"+today,0);}int ordersToday=p.getInt("orders_"+today,0),ordersOld=p.getInt("orders_"+oldDay,0);if(ordersToday>0){ed.putInt("orders_"+oldDay,ordersOld+ordersToday);ed.putInt("orders_"+today,0);}if(p.getBoolean("pos_session_open",false)&&today.equals(p.getString("pos_session_day","")))ed.putString("pos_session_day",oldDay);ed.putBoolean("fix_business_day_20260929",true);ed.commit();}catch(Exception e){}}
+  void repairDistributionBusinessDay20260929(){
+    android.content.SharedPreferences p=getPreferences(0);
+    if(p.getBoolean("fix_edar_day_20260929_v1",false))return;
+    try{
+      JSONArray dist=entries("stock_distribution");boolean distChanged=false;
+      for(int i=0;i<dist.length();i++){
+        JSONObject e=dist.optJSONObject(i);if(e==null)continue;
+        String t=e.optString("time","");
+        if("2026-09-28".equals(entryDay(e))&&t.startsWith("2026-09-29")){
+          e.put("businessDay","2026-09-29");distChanged=true;
+        }
+      }
+      JSONArray sales=entries("stock_sales");boolean salesChanged=false;
+      for(int i=0;i<sales.length();i++){
+        JSONObject e=sales.optJSONObject(i);if(e==null||!"edar".equals(e.optString("source","")))continue;
+        String t=e.optString("time","");
+        if("2026-09-28".equals(entryDay(e))&&t.startsWith("2026-09-29")){
+          e.put("businessDay","2026-09-29");salesChanged=true;
+        }
+      }
+      android.content.SharedPreferences.Editor ed=p.edit();
+      if(distChanged)ed.putString("stock_distribution",dist.toString());
+      if(salesChanged)ed.putString("stock_sales",sales.toString());
+      ed.putBoolean("fix_edar_day_20260929_v1",true).commit();
+    }catch(Exception ignored){}
+  }
+
   void repairPaidDistributionSales20260930(){
     android.content.SharedPreferences p=getPreferences(0);
     if(p.getBoolean("fix_paid_edar_sales_20260930_v3",false))return;
@@ -606,7 +633,18 @@ googleSignInClient = GoogleSignIn.getClient(this, gso);snapshotBeforeUpdate();lo
   int edarPaidTotal(String day){int n=0;JSONArray list=entries("stock_sales");for(int i=0;i<list.length();i++){JSONObject e=list.optJSONObject(i);if(e!=null&&!e.optBoolean("refunded",false)&&day.equals(entryDay(e))&&"edar".equals(e.optString("source","")))n+=saleTotal(e);}return n;}
   String receiptPair(String left,String right){left=left==null?"":left;right=right==null?"":right;int width=32;if(left.length()+right.length()+1>width){int max=Math.max(1,width-right.length()-1);if(left.length()>max)left=left.substring(0,max);}int spaces=Math.max(1,width-left.length()-right.length());StringBuilder b=new StringBuilder(left);for(int i=0;i<spaces;i++)b.append(' ');return b.append(right).append("\n").toString();}
   String soldClosingText(String day){int[] sold=soldNetBetween(day,day);int[][] paid=closingItemPayments(day);StringBuilder b=new StringBuilder();for(int i=0;i<Math.min(sold.length,names.length);i++){if(sold[i]<=0)continue;String unit=i<3?" cucuk":i==5?" mangkuk":" unit";b.append(names[i]).append("\n");b.append(receiptPair("  Kuantiti",sold[i]+unit));if(paid[i][0]>0)b.append(receiptPair("  Tunai",money(paid[i][0])));if(paid[i][1]>0)b.append(receiptPair("  QR",money(paid[i][1])));if(paid[i][2]>0)b.append(receiptPair("  EDAR",money(paid[i][2])));b.append("\n");}return b.toString();}
-  void addClosingSoldRows(LinearLayout box,String day){int[] sold=soldNetBetween(day,day);int[][] paid=closingItemPayments(day);int dark=0xff26384c,light=0xff66788a;LinearLayout head=row();String[] h={"ITEM","KUANTITI","TUNAI","QR"};float[] wt={1.45f,1f,1f,1f};for(int j=0;j<4;j++){TextView v=text(h[j],10,light,true);v.setGravity(j==0?Gravity.LEFT:Gravity.RIGHT);head.addView(v,new LinearLayout.LayoutParams(0,dp(28),wt[j]));}add(box,head,-1,28);boolean any=false;int tq=0,tc=0,tqrm=0;for(int i=0;i<Math.min(sold.length,names.length);i++){if(sold[i]<=0)continue;any=true;tq+=sold[i];tc+=paid[i][0];tqrm+=paid[i][1];String unit=i<3?" cucuk":i==5?" mangkuk":" unit";LinearLayout r=row();String[] vals={names[i],sold[i]+unit,money(paid[i][0]),money(paid[i][1])};for(int j=0;j<4;j++){TextView v=text(vals[j],10,dark,j==0);v.setGravity(j==0?Gravity.LEFT:Gravity.RIGHT);v.setSingleLine(true);v.setEllipsize(android.text.TextUtils.TruncateAt.END);r.addView(v,new LinearLayout.LayoutParams(0,dp(34),wt[j]));}add(box,r,-1,34);}if(!any){receiptRowLight(box,"Item terjual","Tiada",false);return;}LinearLayout totalRow=row();String[] vals={"JUMLAH",tq+" item",money(tc),money(tqrm)};for(int j=0;j<4;j++){TextView v=text(vals[j],10,blue,true);v.setGravity(j==0?Gravity.LEFT:Gravity.RIGHT);totalRow.addView(v,new LinearLayout.LayoutParams(0,dp(36),wt[j]));}add(box,totalRow,-1,36);}
+  void addClosingSoldRows(LinearLayout box,String day){
+    int[] sold=soldNetBetween(day,day);int[][] paid=closingItemPayments(day);int dark=0xff26384c,light=0xff66788a;
+    LinearLayout head=row();String[] h={"ITEM","QTY","TUNAI","QR","EDAR"};float[] wt={1.55f,.75f,.92f,.92f,.92f};
+    for(int j=0;j<h.length;j++){TextView v=text(h[j],9,light,true);v.setGravity(j==0?Gravity.LEFT:Gravity.RIGHT);head.addView(v,new LinearLayout.LayoutParams(0,dp(28),wt[j]));}add(box,head,-1,28);
+    boolean any=false;int tq=0,tc=0,tqr=0,te=0;
+    for(int i=0;i<Math.min(sold.length,names.length);i++){if(sold[i]<=0)continue;any=true;tq+=sold[i];tc+=paid[i][0];tqr+=paid[i][1];te+=paid[i][2];
+      String unit=i<3?"c":i==5?"m":"u";LinearLayout r=row();String[] vals={names[i],sold[i]+unit,money(paid[i][0]),money(paid[i][1]),money(paid[i][2])};
+      for(int j=0;j<vals.length;j++){TextView v=text(vals[j],9,dark,j==0);v.setGravity(j==0?Gravity.LEFT:Gravity.RIGHT);v.setSingleLine(true);v.setEllipsize(android.text.TextUtils.TruncateAt.END);r.addView(v,new LinearLayout.LayoutParams(0,dp(34),wt[j]));}add(box,r,-1,34);}
+    if(!any){receiptRowLight(box,"Item terjual","Tiada",false);return;}
+    LinearLayout totalRow=row();String[] vals={"JUMLAH",tq+"",money(tc),money(tqr),money(te)};
+    for(int j=0;j<vals.length;j++){TextView v=text(vals[j],9,blue,true);v.setGravity(j==0?Gravity.LEFT:Gravity.RIGHT);totalRow.addView(v,new LinearLayout.LayoutParams(0,dp(36),wt[j]));}add(box,totalRow,-1,36);
+  }
   String posClosingReceipt(String day,int opening,int sales,int cash,int qr,int tx,int outstanding,int balance,int supplierPaid,int supplierOutstanding,int oil,int rent){
     sales=saleTotalBetween(day,day);cash=paymentTotalBetween(day,day,"Tunai");qr=paymentTotalBetween(day,day,"QR");int edar=edarPaidTotal(day);
     StringBuilder b=new StringBuilder();String shop=getPreferences(0).getString("shop_name","WARISAN FROZEN");b.append(centerReceipt(shop));String phone=getPreferences(0).getString("receipt_phone","");if(!phone.isEmpty())b.append(centerReceipt("Tel: "+phone));
@@ -627,7 +665,41 @@ googleSignInClient = GoogleSignIn.getClient(this, gso);snapshotBeforeUpdate();lo
 
   void closingHistory(){JSONArray list=entries("pos_closings");if(list.length()==0){message("Belum ada History Closing.");return;}ArrayList<JSONObject> rows=new ArrayList<>();for(int i=list.length()-1;i>=0;i--){JSONObject e=list.optJSONObject(i);if(e!=null)rows.add(e);}String[] labels=new String[rows.size()];for(int i=0;i<rows.size();i++){JSONObject e=rows.get(i);labels[i]=entryDay(e)+"   ·   "+money(e.optInt("closingBalance",0));}darkBuilder().setTitle("History Closing").setItems(labels,(d,pos)->{JSONObject e=rows.get(pos);String day=entryDay(e);int opening=e.optInt("opening"),sales=e.optInt("sales"),cash=e.optInt("cash"),qr=e.optInt("qr"),tx=e.optInt("transactions"),out=e.optInt("outstandingCarryForward"),balance=e.optInt("closingBalance"),supplierPaid=e.optInt("supplierPaid",supplierPaidTotal(day,true)),supplierOutstanding=e.optInt("supplierOutstanding",supplierDue()),oil=e.optInt("oil",closingOil(day)),rent=e.optInt("rent",closingRent(day));sales=saleTotalBetween(day,day);cash=paymentTotalBetween(day,day,"Tunai");qr=paymentTotalBetween(day,day,"QR");String receipt=posClosingReceipt(day,opening,sales,cash,qr,tx,out,balance,supplierPaid,supplierOutstanding,oil,rent);showConfirmedClosingReport(day,receipt);}).setNegativeButton("Tutup",null).show();}
   void distributeStock(int id){int price=distributionPrice(id);if(price<=0){message("Produk ini belum ditetapkan untuk Edar.");return;}int available=stock(id);if(available<=0){message("Stok "+names[id]+" tidak cukup untuk Edar.");return;}EditText input=new EditText(this);input.setInputType(android.text.InputType.TYPE_CLASS_NUMBER);input.setHint("Kuantiti · maksimum "+available);styleInput(input);darkBuilder().setTitle("EDAR · "+names[id]).setMessage("Harga edar "+money(price)+" / unit. Stok akan keluar dari baki kedai dan masuk History Edar sebagai BELUM BAYAR.").setView(input).setPositiveButton("EDAR",(d,w)->{try{int n=Integer.parseInt(input.getText().toString().trim());if(n<=0||n>stock(id))throw new Exception();JSONObject e=new JSONObject();e.put("time",timestamp());e.put("businessDay",businessDay());e.put("item",id);e.put("qty",n);e.put("returned",0);e.put("unitPrice",price);e.put("paid",false);JSONArray list=entries("stock_distribution");list.put(e);if(!getPreferences(0).edit().putString("stock_distribution",list.toString()).commit())throw new Exception();draw();message(n+" "+names[id]+" direkod sebagai EDAR · BELUM BAYAR.");}catch(Exception e){message("Kuantiti Edar tidak sah.");}}).setNegativeButton("Batal",null).show();}
-  void distributionHistory(){JSONArray list=entries("stock_distribution");ScrollView scroll=new ScrollView(this);LinearLayout panel=col();panel.setPadding(dp(14),dp(12),dp(14),dp(14));panel.setBackgroundColor(cream);scroll.addView(panel);int shown=0;for(int i=list.length()-1;i>=0;i--){JSONObject e=list.optJSONObject(i);if(e==null)continue;shown++;final int index=i;int id=e.optInt("item",-1),q=e.optInt("qty"),ret=e.optInt("returned"),sold=Math.max(0,q-ret),price=e.optInt("unitPrice"),due=sold*price;boolean paid=e.optBoolean("paid",false);LinearLayout c=col();c.setPadding(dp(11),dp(10),dp(11),dp(10));c.setBackground(shape(surface,12));String nm=id>=0&&id<names.length?names[id]:"Produk";add(c,text(nm+" · "+entryDay(e),14,ink,true),-1,-2);add(c,text("Edar "+q+"   ·   Pulang "+ret+"   ·   Terjual "+sold,12,muted,false),-1,-2);add(c,text("Perlu bayar  "+money(due)+"   ·   "+(paid?"SUDAH BAYAR":"BELUM BAYAR"),12,paid?0xff46c979:gold,true),-1,-2);if(!paid){gap(c,6);LinearLayout rr=row();TextView back=chip("STOK PULANG",0xff294563,Color.WHITE),pay=chip("BAYAR",blue,Color.WHITE);rr.addView(back,new LinearLayout.LayoutParams(0,dp(38),1));LinearLayout.LayoutParams pp=new LinearLayout.LayoutParams(0,dp(38),1);pp.leftMargin=dp(6);rr.addView(pay,pp);back.setOnClickListener(v->returnDistributedStock(index));pay.setOnClickListener(v->payDistribution(index));add(c,rr,-1,-2);}add(panel,c,-1,-2);gap(panel,7);}if(shown==0)add(panel,text("Belum ada rekod Edar.",14,muted,false),-1,-2);AlertDialog dlg=darkBuilder().setTitle("HISTORY EDAR").setView(scroll).setPositiveButton("Tutup",null).create();applyDarkReportDialog(dlg);}
+  void distributionHistory(){
+    JSONArray list=entries("stock_distribution");
+    ScrollView scroll=new ScrollView(this);LinearLayout panel=col();
+    panel.setPadding(dp(10),dp(10),dp(10),dp(14));panel.setBackgroundColor(cream);scroll.addView(panel);
+
+    LinearLayout head=row();head.setPadding(dp(8),dp(8),dp(8),dp(8));head.setBackground(shape(0xff203b57,10));
+    String[] hh={"ITEM / TARIKH","EDAR","PULANG","TERJUAL"};
+    float[] hw={2.25f,.72f,.82f,.88f};
+    for(int j=0;j<hh.length;j++){TextView v=text(hh[j],9,Color.WHITE,true);v.setGravity(j==0?Gravity.LEFT:Gravity.CENTER);head.addView(v,new LinearLayout.LayoutParams(0,dp(32),hw[j]));}
+    add(panel,head,-1,32);gap(panel,5);
+
+    int shown=0;
+    for(int i=list.length()-1;i>=0;i--){
+      JSONObject e=list.optJSONObject(i);if(e==null)continue;shown++;final int index=i;
+      int id=e.optInt("item",-1),q=e.optInt("qty"),ret=e.optInt("returned"),sold=Math.max(0,q-ret),price=e.optInt("unitPrice"),due=sold*price;
+      boolean paid=e.optBoolean("paid",false);String nm=id>=0&&id<names.length?names[id]:"Produk";
+
+      LinearLayout card=col();card.setPadding(dp(8),dp(8),dp(8),dp(8));card.setBackground(shape(surface,10));
+      LinearLayout r=row();
+      String[] vals={nm+"\n"+entryDay(e),String.valueOf(q),String.valueOf(ret),String.valueOf(sold)};
+      for(int j=0;j<vals.length;j++){TextView v=text(vals[j],j==0?11:12,j==0?ink:muted,j==0);v.setGravity(j==0?Gravity.LEFT:Gravity.CENTER);r.addView(v,new LinearLayout.LayoutParams(0,dp(45),hw[j]));}
+      add(card,r,-1,45);
+
+      LinearLayout payrow=row();payrow.setPadding(0,dp(3),0,0);
+      TextView amount=text("BAYARAN  "+money(due),11,paid?0xff46c979:gold,true);
+      TextView status=text(paid?"SUDAH BAYAR":"BELUM BAYAR",11,paid?0xff46c979:gold,true);status.setGravity(Gravity.RIGHT);
+      payrow.addView(amount,new LinearLayout.LayoutParams(0,dp(30),1));payrow.addView(status,new LinearLayout.LayoutParams(0,dp(30),1));
+      add(card,payrow,-1,30);
+
+      if(!paid){LinearLayout rr=row();TextView back=chip("STOK PULANG",0xff294563,Color.WHITE),pay=chip("BAYAR",blue,Color.WHITE);rr.addView(back,new LinearLayout.LayoutParams(0,dp(38),1));LinearLayout.LayoutParams pp=new LinearLayout.LayoutParams(0,dp(38),1);pp.leftMargin=dp(6);rr.addView(pay,pp);back.setOnClickListener(v->returnDistributedStock(index));pay.setOnClickListener(v->payDistribution(index));add(card,rr,-1,38);}
+      add(panel,card,-1,-2);gap(panel,6);
+    }
+    if(shown==0)add(panel,text("Belum ada rekod Edar.",14,muted,false),-1,-2);
+    AlertDialog dlg=darkBuilder().setTitle("HISTORY EDAR").setView(scroll).setPositiveButton("Tutup",null).create();applyDarkReportDialog(dlg);
+  }
   void returnDistributedStock(int index){JSONArray list=entries("stock_distribution");JSONObject e=list.optJSONObject(index);if(e==null||e.optBoolean("paid",false)){message("Rekod sudah dibayar atau tidak dijumpai.");return;}int remaining=Math.max(0,e.optInt("qty")-e.optInt("returned"));if(remaining<=0){message("Semua stok Edar sudah dipulangkan.");return;}EditText input=new EditText(this);input.setInputType(android.text.InputType.TYPE_CLASS_NUMBER);input.setHint("Maksimum "+remaining);styleInput(input);darkBuilder().setTitle("STOK PULANG").setMessage("Boleh pulang sehingga "+remaining+" unit. Stok pulang masuk semula ke Baki dan bukan Stok Rosak.").setView(input).setPositiveButton("PULANG",(d,w)->{try{int n=Integer.parseInt(input.getText().toString().trim());if(n<=0||n>remaining)throw new Exception();JSONArray fresh=entries("stock_distribution");JSONObject x=fresh.optJSONObject(index);if(x==null||x.optBoolean("paid",false))throw new Exception();x.put("returned",x.optInt("returned")+n);x.put("returnTime",timestamp());fresh.put(index,x);if(!getPreferences(0).edit().putString("stock_distribution",fresh.toString()).commit())throw new Exception();draw();message(n+" unit stok pulang masuk semula ke Baki.");}catch(Exception ex){message("Kuantiti stok pulang tidak sah.");}}).setNegativeButton("Batal",null).show();}
   void payDistribution(int index){try{JSONArray dist=entries("stock_distribution");JSONObject e=dist.optJSONObject(index);if(e==null||e.optBoolean("paid",false)){message("Rekod Edar ini sudah dibayar.");return;}int id=e.optInt("item"),sold=Math.max(0,e.optInt("qty")-e.optInt("returned")),total=sold*e.optInt("unitPrice"),day=0;if(sold<=0){e.put("paid",true);e.put("paidTime",timestamp());dist.put(index,e);getPreferences(0).edit().putString("stock_distribution",dist.toString()).commit();draw();message("Edar ditutup RM0 kerana semua stok dipulangkan.");return;}String saleDay=entryDay(e);JSONObject sale=new JSONObject();sale.put("time",timestamp());sale.put("businessDay",saleDay);sale.put("paymentDate",date());sale.put("source","edar");sale.put("total",total);sale.put("method","Edar");sale.put("refunded",false);sale.put("costTotal",restockCost(id,sold));JSONArray q=new JSONArray();for(int i=0;i<names.length;i++)q.put(i==id?sold:0);sale.put("qty",q);JSONArray sales=entries("stock_sales");sales.put(sale);e.put("paid",true);e.put("paidTime",timestamp());e.put("saleTotal",total);dist.put(index,e);android.content.SharedPreferences.Editor ed=getPreferences(0).edit().putString("stock_sales",sales.toString()).putString("stock_distribution",dist.toString()).putInt("sales_"+saleDay,getPreferences(0).getInt("sales_"+saleDay,0)+total);if(!ed.commit())throw new Exception();draw();message("Bayaran Edar "+money(total)+" masuk rekod jualan "+saleDay+".");}catch(Exception ex){message("Bayaran Edar gagal direkod.");}}
   String salesReportReceipt(String start,String end){
