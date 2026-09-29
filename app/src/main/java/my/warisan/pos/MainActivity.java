@@ -677,7 +677,7 @@ googleSignInClient = GoogleSignIn.getClient(this, gso);snapshotBeforeUpdate();lo
     LinearLayout head=row();head.setPadding(dp(8),dp(4),dp(8),dp(4));head.setBackground(shape(0xff203b57,10));
     String[] hh={"ITEM / TARIKH","EDAR","PULANG","TERJUAL"};
     float[] hw={2.25f,.72f,.82f,.88f};
-    for(int j=0;j<hh.length;j++){TextView v=text(hh[j],9,Color.WHITE,true);v.setGravity(j==0?Gravity.LEFT:Gravity.CENTER);head.addView(v,new LinearLayout.LayoutParams(0,dp(42),hw[j]));}
+    for(int j=0;j<hh.length;j++){TextView v=text(hh[j],9,Color.WHITE,true);v.setGravity((j==0?Gravity.LEFT:Gravity.CENTER)|Gravity.CENTER_VERTICAL);head.addView(v,new LinearLayout.LayoutParams(0,dp(42),hw[j]));}
     add(panel,head,-1,42);gap(panel,5);
 
     int shown=0;
