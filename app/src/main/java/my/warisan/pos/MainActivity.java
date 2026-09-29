@@ -564,37 +564,41 @@ googleSignInClient = GoogleSignIn.getClient(this, gso);snapshotBeforeUpdate();lo
   int posOpening(){return getPreferences(0).getInt("pos_opening",0);}
   String nextDay(String day){try{SimpleDateFormat f=new SimpleDateFormat("yyyy-MM-dd",Locale.US);Calendar c=Calendar.getInstance();c.setTime(f.parse(day));c.add(Calendar.DATE,1);return f.format(c.getTime());}catch(Exception e){return date();}}
   String previousDay(String day){try{SimpleDateFormat f=new SimpleDateFormat("yyyy-MM-dd",Locale.US);Calendar c=Calendar.getInstance();c.setTime(f.parse(day));c.add(Calendar.DATE,-1);return f.format(c.getTime());}catch(Exception e){return day;}}
-  void applyBusinessDayRepair20260929(){android.content.SharedPreferences p=getPreferences(0);if(p.getBoolean("fix_business_day_20260929",false))return;try{String today=date();if(!"2026-09-29".equals(today)){p.edit().putBoolean("fix_business_day_20260929",true).commit();return;}String oldDay="2026-09-28";String[] keys={"stock_sales","pending_orders","cash_entries","stock_entries","stock_damage","stock_distribution"};android.content.SharedPreferences.Editor ed=p.edit();for(String key:keys){JSONArray list=entries(key);boolean changed=false;for(int i=0;i<list.length();i++){JSONObject e=list.optJSONObject(i);if(e==null)continue;if(today.equals(entryDay(e))){e.put("businessDay",oldDay);changed=true;}}if(changed)ed.putString(key,list.toString());}int salesToday=p.getInt("sales_"+today,0),salesOld=p.getInt("sales_"+oldDay,0);if(salesToday>0){ed.putInt("sales_"+oldDay,salesOld+salesToday);ed.putInt("sales_"+today,0);}int ordersToday=p.getInt("orders_"+today,0),ordersOld=p.getInt("orders_"+oldDay,0);if(ordersToday>0){ed.putInt("orders_"+oldDay,ordersOld+ordersToday);ed.putInt("orders_"+today,0);}if(p.getBoolean("pos_session_open",false)&&today.equals(p.getString("pos_session_day","")))ed.putString("pos_session_day",oldDay);ed.putBoolean("fix_business_day_20260929",true);ed.commit();}catch(Exception e){}}
+  void applyBusinessDayRepair20260929(){
+    // Disabled permanently: older version wrongly moved valid 29/09 records to 28/09.
+    android.content.SharedPreferences p=getPreferences(0);
+    if(!p.getBoolean("fix_business_day_20260929",false))
+      p.edit().putBoolean("fix_business_day_20260929",true).commit();
+  }
   void repairDistributionBusinessDay20260929(){
     android.content.SharedPreferences p=getPreferences(0);
-    if(p.getBoolean("fix_edar_day_20260929_v1",false))return;
+    if(p.getBoolean("fix_edar_day_20260929_v2",false))return;
     try{
-      JSONArray dist=entries("stock_distribution");boolean distChanged=false;
+      JSONArray dist=entries("stock_distribution"),sales=entries("stock_sales");boolean dc=false,sc=false;
+      // Known damaged legacy record: Nasi Impit, Edar 20, Pulang 1, Terjual 19, RM11.40.
+      // It was moved to 28/9 by the old applyBusinessDayRepair20260929().
       for(int i=0;i<dist.length();i++){
         JSONObject e=dist.optJSONObject(i);if(e==null)continue;
-        String t=e.optString("time","");
-        if("2026-09-28".equals(entryDay(e))&&t.startsWith("2026-09-29")){
-          e.put("businessDay","2026-09-29");distChanged=true;
+        int id=e.optInt("item",-1),q=e.optInt("qty",0),ret=e.optInt("returned",0);
+        int total=e.optInt("saleTotal",Math.max(0,q-ret)*e.optInt("unitPrice",0));
+        if(id==3&&q==20&&ret==1&&e.optBoolean("paid",false)&&total==1140&&"2026-09-28".equals(entryDay(e))){
+          e.put("businessDay","2026-09-29");dc=true;
         }
       }
-      JSONArray sales=entries("stock_sales");boolean salesChanged=false;
+      // Move only matching EDAR sale generated from that damaged distribution.
       for(int i=0;i<sales.length();i++){
-        JSONObject e=sales.optJSONObject(i);if(e==null||!"edar".equals(e.optString("source","")))continue;
-        String t=e.optString("time","");
-        if("2026-09-28".equals(entryDay(e))&&t.startsWith("2026-09-29")){
-          e.put("businessDay","2026-09-29");salesChanged=true;
-        }
+        JSONObject e=sales.optJSONObject(i);if(e==null||!"edar".equals(e.optString("source",""))||!"2026-09-28".equals(entryDay(e)))continue;
+        JSONArray q=e.optJSONArray("qty");
+        if(q!=null&&q.optInt(3,0)==19&&saleTotal(e)==1140){e.put("businessDay","2026-09-29");sc=true;}
       }
       android.content.SharedPreferences.Editor ed=p.edit();
-      if(distChanged)ed.putString("stock_distribution",dist.toString());
-      if(salesChanged)ed.putString("stock_sales",sales.toString());
-      ed.putBoolean("fix_edar_day_20260929_v1",true).commit();
+      if(dc)ed.putString("stock_distribution",dist.toString());
+      if(sc)ed.putString("stock_sales",sales.toString());
+      ed.putBoolean("fix_edar_day_20260929_v2",true).commit();
     }catch(Exception ignored){}
   }
 
   void repairPaidDistributionSales20260930(){
-    android.content.SharedPreferences p=getPreferences(0);
-    if(p.getBoolean("fix_paid_edar_sales_20260930_v3",false))return;
     try{
       JSONArray dist=entries("stock_distribution"),sales=entries("stock_sales");boolean changed=false;
       for(int i=0;i<dist.length();i++){
@@ -607,7 +611,7 @@ googleSignInClient = GoogleSignIn.getClient(this, gso);snapshotBeforeUpdate();lo
         JSONObject sale=new JSONObject();sale.put("time",e.optString("paidTime",e.optString("time",timestamp())));sale.put("businessDay",day);sale.put("source","edar");sale.put("total",total);sale.put("method","Edar");sale.put("refunded",false);sale.put("costTotal",restockCost(id,sold));
         JSONArray q=new JSONArray();for(int n=0;n<names.length;n++)q.put(n==id?sold:0);sale.put("qty",q);sales.put(sale);changed=true;
       }
-      p.edit().putString("stock_sales",sales.toString()).putBoolean("fix_paid_edar_sales_20260930_v3",true).commit();
+      if(changed)getPreferences(0).edit().putString("stock_sales",sales.toString()).commit();
     }catch(Exception ignored){}
   }
 
@@ -646,7 +650,7 @@ googleSignInClient = GoogleSignIn.getClient(this, gso);snapshotBeforeUpdate();lo
     for(int j=0;j<vals.length;j++){TextView v=text(vals[j],9,blue,true);v.setGravity(j==0?Gravity.LEFT:Gravity.RIGHT);totalRow.addView(v,new LinearLayout.LayoutParams(0,dp(36),wt[j]));}add(box,totalRow,-1,36);
   }
   String posClosingReceipt(String day,int opening,int sales,int cash,int qr,int tx,int outstanding,int balance,int supplierPaid,int supplierOutstanding,int oil,int rent){
-    sales=saleTotalBetween(day,day);cash=paymentTotalBetween(day,day,"Tunai");qr=paymentTotalBetween(day,day,"QR");int edar=edarPaidTotal(day);
+    sales=saleTotalBetween(day,day);cash=paymentTotalBetween(day,day,"Tunai");qr=paymentTotalBetween(day,day,"QR");int edar=edarPaidTotal(day);int unknown=paymentUnknownBetween(day,day);
     StringBuilder b=new StringBuilder();String shop=getPreferences(0).getString("shop_name","WARISAN FROZEN");b.append(centerReceipt(shop));String phone=getPreferences(0).getString("receipt_phone","");if(!phone.isEmpty())b.append(centerReceipt("Tel: "+phone));
     b.append("--------------------------------\n").append(centerReceipt("RESIT PENUTUPAN POS")).append(receiptPair("Tarikh sesi",day)).append(receiptPair("Baki permulaan",money(opening))).append("--------------------------------\nJUALAN\n").append(soldClosingText(day)).append("--------------------------------\n").append(receiptPair("JUMLAH JUALAN",money(sales))).append(receiptPair("Tunai",money(cash))).append(receiptPair("QR",money(qr)));if(edar>0)b.append(receiptPair("EDAR dibayar",money(edar)));
     b.append("--------------------------------\nPERBELANJAAN OPERASI\n").append(receiptPair("Minyak",money(oil))).append(receiptPair("Sewa",money(rent))).append("--------------------------------\nPEMBEKAL\n").append(receiptPair("Dibayar hari ini",money(supplierPaid))).append(receiptPair("Belum dibayar",money(supplierOutstanding))).append("--------------------------------\n").append(receiptPair("Pesanan belum bayar",String.valueOf(outstanding))).append(receiptPair("BAKI TUNAI POS",money(balance))).append("================================\n").append(centerReceipt("PENUTUPAN DISAHKAN")).append(ownerReceipt()).append("\n");return b.toString();
@@ -670,11 +674,11 @@ googleSignInClient = GoogleSignIn.getClient(this, gso);snapshotBeforeUpdate();lo
     ScrollView scroll=new ScrollView(this);LinearLayout panel=col();
     panel.setPadding(dp(10),dp(10),dp(10),dp(14));panel.setBackgroundColor(cream);scroll.addView(panel);
 
-    LinearLayout head=row();head.setPadding(dp(8),dp(8),dp(8),dp(8));head.setBackground(shape(0xff203b57,10));
+    LinearLayout head=row();head.setPadding(dp(8),dp(4),dp(8),dp(4));head.setBackground(shape(0xff203b57,10));
     String[] hh={"ITEM / TARIKH","EDAR","PULANG","TERJUAL"};
     float[] hw={2.25f,.72f,.82f,.88f};
-    for(int j=0;j<hh.length;j++){TextView v=text(hh[j],9,Color.WHITE,true);v.setGravity(j==0?Gravity.LEFT:Gravity.CENTER);head.addView(v,new LinearLayout.LayoutParams(0,dp(32),hw[j]));}
-    add(panel,head,-1,32);gap(panel,5);
+    for(int j=0;j<hh.length;j++){TextView v=text(hh[j],9,Color.WHITE,true);v.setGravity(j==0?Gravity.LEFT:Gravity.CENTER);head.addView(v,new LinearLayout.LayoutParams(0,dp(42),hw[j]));}
+    add(panel,head,-1,42);gap(panel,5);
 
     int shown=0;
     for(int i=list.length()-1;i>=0;i--){
