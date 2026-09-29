@@ -399,7 +399,7 @@ googleSignInClient = GoogleSignIn.getClient(this, gso);snapshotBeforeUpdate();lo
       int supplierPaid=supplierPaidTotal(period,cashDailyMode),fuel=cashCategoryTotal(period,cashDailyMode,"Minyak kereta"),rent=cashCategoryTotal(period,cashDailyMode,"Sewa"),charcoal=cashCategoryTotal(period,cashDailyMode,"Arang"),materials=cashCategoryTotal(period,cashDailyMode,"Barang plastik","Bahan lain");
       add(body,text("OPERASI PERNIAGAAN",12,muted,true),-1,-2);gap(body,7);
       LinearLayout top=row();metric(top,cashDailyMode?"JUALAN HARI INI  ›":"JUALAN POS  ›",money(sale),blue,()->{selectedDay=cashDailyMode?selectedCashDay:date();selectedMonth=selectedDay.substring(0,7);activePage=2;draw();});metric(top,"UNTUNG BERSIH JUALAN  ›",money(profit),profit>=0?gold:0xffff6b6b,()->{selectedDay=cashDailyMode?selectedCashDay:date();selectedMonth=selectedDay.substring(0,7);salesReportMode=cashDailyMode?0:1;activePage=2;draw();});add(body,top,-1,-2);gap(body,8);
-      LinearLayout costRow=row();metric(costRow,"KOS BARANG TERJUAL  ›",money(startCost),ink,()->{selectedDay=cashDailyMode?selectedCashDay:date();selectedMonth=selectedDay.substring(0,7);salesReportMode=cashDailyMode?0:1;activePage=2;draw();});metric(costRow,"BAYARAN PEMBEKAL  ›",money(supplierPaid),gold,()->supplierHub());add(body,costRow,-1,-2);gap(body,8);
+      LinearLayout costRow=row();metric(costRow,"MODAL BARANG TERJUAL  ›",money(startCost),ink,()->{selectedDay=cashDailyMode?selectedCashDay:date();selectedMonth=selectedDay.substring(0,7);salesReportMode=cashDailyMode?0:1;activePage=2;draw();});metric(costRow,"BAYARAN PEMBEKAL",money(supplierPaid),gold,null);add(body,costRow,-1,-2);gap(body,8);
       LinearLayout op1=row();metric(op1,"MINYAK KERETA  ›",money(fuel),ink,()->filteredCashHistory("Minyak Kereta","Minyak kereta"));metric(op1,"SEWA  ›",money(rent),ink,()->filteredCashHistory("Sewa","Sewa"));add(body,op1,-1,-2);gap(body,8);
       LinearLayout op2=row();metric(op2,"ARANG  ›",money(charcoal),ink,()->filteredCashHistory("Arang","Arang"));metric(op2,"BAHAN LAIN  ›",money(materials),ink,()->filteredCashHistory("Bahan Lain","Bahan Lain"));add(body,op2,-1,-2);gap(body,8);
       LinearLayout flow=row();metric(flow,"DUIT MASUK LAIN  ›",money(cash[0]),blue,()->filteredCashHistory("Duit Masuk","Duit Masuk"));metric(flow,"DUIT KELUAR DIREKOD  ›",money(cash[1]),ink,()->filteredCashHistory("Duit Keluar","Duit Keluar"));add(body,flow,-1,-2);gap(body,8);
@@ -413,7 +413,7 @@ googleSignInClient = GoogleSignIn.getClient(this, gso);snapshotBeforeUpdate();lo
       LinearLayout real=row();metric(real,"BAKI TOTAL DUIT · SEBENAR  ›",money(totalMoneyBalance()),gold,()->new AlertDialog.Builder(this).setTitle("Baki Total Duit Sebenar").setMessage("Baki sebenar = semua jualan + duit masuk − duit keluar yang telah dibayar − pengeluaran peribadi.").setPositiveButton("OK",null).show());add(body,real,-1,-2);gap(body,8);
       add(body,text("Baki sebenar = semua jualan + duit masuk − duit keluar yang telah dibayar − pengeluaran peribadi. Bayaran order direkod ikut tarikh bayaran diterima.",11,muted,false),-1,-2);
     }else if(activePage==4){
-      heading("Setting","WarisanPOS 3.23 · Tetapan kedai dan data.");
+      heading("Setting","WarisanPOS 3.24 · Tetapan kedai dan data.");
       action("👤  Account",()->{activePage=5;draw();});
       action("🧾  Bill / Resit",()->{activePage=7;draw();});
        action("💳  Payment / DuitNow",()->{activePage=10;draw();});
