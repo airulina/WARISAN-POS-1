@@ -66,6 +66,7 @@ private static final int RC_SIGN_IN = 9001;
   final UUID printerUuid=UUID.fromString("00001101-0000-1000-8000-00805F9B34FB");
   String pendingReceipt;
   BranchAccounts branchAccounts;
+  OwnerPassword ownerPassword;
   android.content.SharedPreferences posPrefs(){
     return branchAccounts==null?getPreferences(0):branchAccounts.posPrefs();
   }
@@ -154,12 +155,12 @@ private static final int RC_SIGN_IN = 9001;
       }else p.edit().putBoolean("fix_supplier_receipt_detail_20260926",true).commit();
     }catch(Exception ignored){}
   }
-  @Override public void onCreate(Bundle b){super.onCreate(b);firebaseAuth = FirebaseAuth.getInstance();firestore = FirebaseFirestore.getInstance();branchAccounts=new BranchAccounts(this,firebaseAuth,firestore);
+  @Override public void onCreate(Bundle b){super.onCreate(b);firebaseAuth = FirebaseAuth.getInstance();firestore = FirebaseFirestore.getInstance();branchAccounts=new BranchAccounts(this,firebaseAuth,firestore);ownerPassword=new OwnerPassword(this);
 GoogleSignInOptions gso = new GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
         .requestIdToken(getString(R.string.default_web_client_id))
         .requestEmail()
         .build();
-googleSignInClient = GoogleSignIn.getClient(this, gso);snapshotBeforeUpdate();loadMenu();clearCurrentNasiDamageOnce();applyCorrection20260926();applySupplierReceiptDetailFix20260926();applyBusinessDayRepair20260929();repairDistributionBusinessDay20260929();repairPaidDistributionSales20260930();selectedDay=date();selectedMonth=selectedDay.substring(0,7);rangeStart=selectedDay;selectedStockDay=selectedDay;selectedCashDay=selectedDay;if(b!=null){int[] saved=b.getIntArray("cart");if(saved!=null)System.arraycopy(saved,0,qty,0,Math.min(saved.length,qty.length));activePage=b.getInt("page",0);selectedDay=b.getString("selectedDay",selectedDay);selectedMonth=selectedDay.substring(0,7);rangeStart=b.getString("rangeStart",rangeStart);selectedStockDay=b.getString("selectedStockDay",selectedStockDay);selectedCashDay=b.getString("selectedCashDay",selectedCashDay);cashDailyMode=b.getBoolean("cashDailyMode",cashDailyMode);}draw();}
+googleSignInClient = GoogleSignIn.getClient(this, gso);snapshotBeforeUpdate317();snapshotBeforeUpdate();loadMenu();clearCurrentNasiDamageOnce();applyCorrection20260926();applySupplierReceiptDetailFix20260926();applyBusinessDayRepair20260929();repairDistributionBusinessDay20260929();repairPaidDistributionSales20260930();selectedDay=date();selectedMonth=selectedDay.substring(0,7);rangeStart=selectedDay;selectedStockDay=selectedDay;selectedCashDay=selectedDay;if(b!=null){int[] saved=b.getIntArray("cart");if(saved!=null)System.arraycopy(saved,0,qty,0,Math.min(saved.length,qty.length));activePage=b.getInt("page",0);selectedDay=b.getString("selectedDay",selectedDay);selectedMonth=selectedDay.substring(0,7);rangeStart=b.getString("rangeStart",rangeStart);selectedStockDay=b.getString("selectedStockDay",selectedStockDay);selectedCashDay=b.getString("selectedCashDay",selectedCashDay);cashDailyMode=b.getBoolean("cashDailyMode",cashDailyMode);}draw();}
   @Override protected void onSaveInstanceState(Bundle b){b.putIntArray("cart",qty);b.putInt("page",activePage);b.putString("selectedDay",selectedDay);b.putString("rangeStart",rangeStart);b.putString("selectedStockDay",selectedStockDay);b.putString("selectedCashDay",selectedCashDay);b.putBoolean("cashDailyMode",cashDailyMode);super.onSaveInstanceState(b);}
   void draw(){
     cachedStock=null;
@@ -182,7 +183,8 @@ googleSignInClient = GoogleSignIn.getClient(this, gso);snapshotBeforeUpdate();lo
       if(signed==null)action("Sign in Google",()->startActivityForResult(googleSignInClient.getSignInIntent(),RC_SIGN_IN));
       else {
         action("Pilih branch Owner",()->branchAccounts.chooseBranch());
-        action("Daftar Owner baharu",()->branchAccounts.registerOwner());
+        if(branchAccounts.hasLegacyRecords())action("Guna Owner lama / data asal",()->branchAccounts.linkLegacyOwner());
+        else if(!branchAccounts.configured())action("Daftar Owner pertama kali",()->branchAccounts.registerOwner());
         action("Terima jemputan pekerja",()->branchAccounts.showInvitations());
         action("Log out Google",()->{firebaseAuth.signOut();googleSignInClient.signOut().addOnCompleteListener(task->draw());});
       }
@@ -485,6 +487,7 @@ googleSignInClient = GoogleSignIn.getClient(this, gso);snapshotBeforeUpdate();lo
       heading(english()?"Settings":"Setting",english()?"WarisanPOS 3.39 · Complete POS & report audit.":"WarisanPOS 3.39 · Audit penuh POS & report.");
       action("🌐  "+(english()?"Language · English":"Bahasa · Bahasa Melayu"),()->chooseLanguage());
       action("👤  Account",()->{activePage=5;draw();});
+      if(!branchAccounts.staff())action("🔐  Password Owner",()->ownerPassword.change());
       action("🧾  Bill / Resit",()->{activePage=7;draw();});
        action("💳  Payment / DuitNow",()->{activePage=10;draw();});
       action("🍽  Pengurusan Menu",()->{activePage=6;draw();});
@@ -494,6 +497,7 @@ googleSignInClient = GoogleSignIn.getClient(this, gso);snapshotBeforeUpdate();lo
       heading("Account","Akaun, backup cloud dan salinan pada telefon.");
       action("‹  Kembali ke Setting",()->{activePage=4;draw();});
       add(body,text("ACCOUNT",11,muted,true),-1,-2);gap(body,7);
+      if(!branchAccounts.staff())action(ownerPassword.isSet()?"🔐  Tukar Password Owner":"🔐  Tetapkan Password Owner",()->ownerPassword.change());
       if(branchAccounts.active())add(body,text("Branch: "+branchAccounts.summary(),13,gold,true),-1,-2);
       FirebaseUser user=firebaseAuth.getCurrentUser();
       if(user==null){
@@ -1482,7 +1486,41 @@ googleSignInClient = GoogleSignIn.getClient(this, gso);snapshotBeforeUpdate();lo
     }
   }
   void backupPicker(boolean restore){Intent intent=new Intent(restore?Intent.ACTION_OPEN_DOCUMENT:Intent.ACTION_CREATE_DOCUMENT);intent.addCategory(Intent.CATEGORY_OPENABLE);intent.setType(restore?"*/*":"application/json");if(!restore)intent.putExtra(Intent.EXTRA_TITLE,"WarisanPOS-Backup-"+date()+".json");try{startActivityForResult(intent,restore?IMPORT_BACKUP:EXPORT_BACKUP);}catch(Exception e){message("Pilihan fail tidak dapat dibuka");}}
-  JSONObject backupJson()throws JSONException{JSONObject root=new JSONObject(),data=new JSONObject();root.put("app","my.warisan.pos");root.put("format",1);root.put("created",timestamp());for(Map.Entry<String,?> e:posPrefs().getAll().entrySet()){Object value=e.getValue();JSONObject item=new JSONObject();String type=value instanceof Integer?"int":value instanceof Long?"long":value instanceof Float?"float":value instanceof Boolean?"boolean":value instanceof Set?"set":"string";item.put("type",type);item.put("value",value instanceof Set?new JSONArray((Set<?>)value):value);data.put(e.getKey(),item);}root.put("preferences",data);return root;}
+  JSONObject backupJson()throws JSONException{return backupJsonFor(posPrefs());}
+  JSONObject backupJsonFor(android.content.SharedPreferences source)throws JSONException{
+    JSONObject root=new JSONObject(),data=new JSONObject();
+    root.put("app","my.warisan.pos");root.put("format",1);root.put("created",timestamp());
+    for(Map.Entry<String,?> e:source.getAll().entrySet()){
+      Object value=e.getValue();JSONObject item=new JSONObject();
+      String type=value instanceof Integer?"int":value instanceof Long?"long":value instanceof Float?"float":value instanceof Boolean?"boolean":value instanceof Set?"set":"string";
+      item.put("type",type);
+      item.put("value",value instanceof Set?new JSONArray((Set<?>)value):value);
+      data.put(e.getKey(),item);
+    }
+    root.put("preferences",data);return root;
+  }
+  void snapshotBeforeUpdate317(){
+    // On-device recovery copies are made BEFORE any update migration or cloud recovery.
+    // Data stays in original SharedPreferences; no clear/delete, no automatic restore.
+    android.content.SharedPreferences safeguard=getSharedPreferences("warisan_upgrade_safeguard",MODE_PRIVATE);
+    if(safeguard.getBoolean("snapshot_317_done",false))return;
+    try{
+      android.content.SharedPreferences legacy=getPreferences(0);
+      if(!legacy.getAll().isEmpty()){
+        java.io.File file=new java.io.File(getFilesDir(),"before-update-317-legacy.json");
+        if(!file.exists())try(java.io.FileOutputStream out=new java.io.FileOutputStream(file)){
+          out.write(backupJsonFor(legacy).toString().getBytes(StandardCharsets.UTF_8));out.getFD().sync();
+        }
+      }
+      if(branchAccounts!=null&&branchAccounts.active()&&posPrefs()!=legacy&&!posPrefs().getAll().isEmpty()){
+        java.io.File file=new java.io.File(getFilesDir(),"before-update-317-branch.json");
+        if(!file.exists())try(java.io.FileOutputStream out=new java.io.FileOutputStream(file)){
+          out.write(backupJson().toString().getBytes(StandardCharsets.UTF_8));out.getFD().sync();
+        }
+      }
+      safeguard.edit().putBoolean("snapshot_317_done",true).commit();
+    }catch(Exception e){message("Salinan sebelum kemas kini gagal. Sila backup ke telefon dahulu.");}
+  }
   com.google.firebase.firestore.DocumentReference branchCloudBackup(){
     if(branchAccounts!=null&&branchAccounts.active())
       return firestore.collection("workspaces").document(branchAccounts.ownerUid())
@@ -1698,6 +1736,16 @@ googleSignInClient = GoogleSignIn.getClient(this, gso);snapshotBeforeUpdate();lo
   }
 
   void snapshotBeforeUpdate(){if(posPrefs().getInt("data_version",0)>=20)return;try{if(!posPrefs().getAll().isEmpty()){java.io.File file=new java.io.File(getFilesDir(),"before-update-20.json");if(!file.exists())try(java.io.FileOutputStream out=new java.io.FileOutputStream(file)){out.write(backupJson().toString().getBytes(StandardCharsets.UTF_8));out.getFD().sync();}}posPrefs().edit().putInt("data_version",20).commit();}catch(Exception e){message("Salinan sebelum update gagal. Eksport backup melalui Setting.");}}
-  void recoverInternal(){String[] files={"before-update-20.json","before-restore.json"};darkBuilder().setTitle("Pilih salinan dalaman").setItems(new String[]{"Sebelum update 3.15","Sebelum pemulihan terakhir"},(d,index)->{java.io.File file=new java.io.File(getFilesDir(),files[index]);if(!file.exists()){message("Salinan ini belum tersedia");return;}readBackup(Uri.fromFile(file));}).setNegativeButton("Batal",null).show();}
+  void recoverInternal(){
+    String[] files={"before-update-317-legacy.json","before-update-317-branch.json","before-update-20.json","before-restore.json"};
+    String[] labels={"Data asal sebelum update v3.17","Data branch sebelum update v3.17","Sebelum update 3.15","Sebelum pemulihan terakhir"};
+    darkBuilder().setTitle("Pilih salinan dalaman")
+      .setMessage("Pemulihan adalah pilihan manual. Update app tidak memulihkan atau mengosongkan data sendiri.")
+      .setItems(labels,(d,index)->{
+        java.io.File file=new java.io.File(getFilesDir(),files[index]);
+        if(!file.exists()){message("Salinan ini belum tersedia");return;}
+        readBackup(Uri.fromFile(file));
+      }).setNegativeButton("Batal",null).show();
+  }
 
 }
