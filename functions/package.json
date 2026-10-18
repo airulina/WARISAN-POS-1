@@ -1,0 +1,17 @@
+{
+  "name": "warisan-pos-backend",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Owner-authenticated worker provisioning (Firebase Cloud Functions)",
+  "engines": {
+    "node": "22"
+  },
+  "main": "index.js",
+  "scripts": {
+    "lint": "node --check index.js"
+  },
+  "dependencies": {
+    "firebase-admin": "^13.4.0",
+    "firebase-functions": "^6.4.0"
+  }
+}
