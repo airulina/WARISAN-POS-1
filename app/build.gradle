@@ -11,8 +11,8 @@ android {
         applicationId 'my.warisan.pos'
         minSdk 23
         targetSdk 35
-        versionCode 21
-        versionName '3.17'
+        versionCode 22
+        versionName '3.18'
     }
 
     signingConfigs {
@@ -35,5 +35,6 @@ dependencies {
     implementation platform('com.google.firebase:firebase-bom:34.4.0')
     implementation 'com.google.firebase:firebase-auth'
     implementation 'com.google.firebase:firebase-firestore'
+    implementation 'com.google.firebase:firebase-functions'
     implementation 'com.google.android.gms:play-services-auth:21.4.0'
 }
