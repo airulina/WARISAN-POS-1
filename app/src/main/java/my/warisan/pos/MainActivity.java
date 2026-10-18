@@ -67,6 +67,8 @@ private static final int RC_SIGN_IN = 9001;
   String pendingReceipt;
   BranchAccounts branchAccounts;
   OwnerPassword ownerPassword;
+  StaffSecurity staffSecurity;
+  FirebaseFirestore firestoreForStaff(){return firestore;}
   android.content.SharedPreferences posPrefs(){
     return branchAccounts==null?getPreferences(0):branchAccounts.posPrefs();
   }
@@ -155,7 +157,7 @@ private static final int RC_SIGN_IN = 9001;
       }else p.edit().putBoolean("fix_supplier_receipt_detail_20260926",true).commit();
     }catch(Exception ignored){}
   }
-  @Override public void onCreate(Bundle b){super.onCreate(b);firebaseAuth = FirebaseAuth.getInstance();firestore = FirebaseFirestore.getInstance();branchAccounts=new BranchAccounts(this,firebaseAuth,firestore);ownerPassword=new OwnerPassword(this);
+  @Override public void onCreate(Bundle b){super.onCreate(b);firebaseAuth = FirebaseAuth.getInstance();firestore = FirebaseFirestore.getInstance();branchAccounts=new BranchAccounts(this,firebaseAuth,firestore);ownerPassword=new OwnerPassword(this);staffSecurity=new StaffSecurity(this);
 GoogleSignInOptions gso = new GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
         .requestIdToken(getString(R.string.default_web_client_id))
         .requestEmail()
@@ -180,7 +182,10 @@ googleSignInClient = GoogleSignIn.getClient(this, gso);snapshotBeforeUpdate317()
     if(branchAccounts!=null&&branchAccounts.blocked()){
       heading("WARISAN POS","Log masuk sebagai Owner atau terima jemputan pekerja.");
       FirebaseUser signed=firebaseAuth.getCurrentUser();
-      if(signed==null)action("Sign in Google",()->startActivityForResult(googleSignInClient.getSignInIntent(),RC_SIGN_IN));
+      if(signed==null){
+        action("Owner · Log masuk Google",()->startActivityForResult(googleSignInClient.getSignInIntent(),RC_SIGN_IN));
+        action("Pekerja · Email + Password",()->staffSecurity.loginEmployee());
+      }
       else {
         action("Pilih branch Owner",()->branchAccounts.chooseBranch());
         if(branchAccounts.hasLegacyRecords())action("Guna Owner lama / data asal",()->branchAccounts.linkLegacyOwner());
@@ -190,12 +195,16 @@ googleSignInClient = GoogleSignIn.getClient(this, gso);snapshotBeforeUpdate317()
       }
       return;
     }
-    if(branchAccounts!=null&&branchAccounts.staff()&&activePage!=0&&activePage!=11&&activePage!=5)activePage=0;
+    if(branchAccounts!=null&&branchAccounts.staff()
+      &&activePage!=0&&activePage!=11&&activePage!=5&&activePage!=12)activePage=0;
     if(activePage!=0){drawPage();addNavigation(screen);return;}
     LinearLayout header=row();ImageView logo=new ImageView(this);logo.setImageResource(R.drawable.warisan_logo);makeCircle(logo);add(header,logo,49,49);
     LinearLayout heading=col();heading.setPadding(dp(10),0,0,0);add(heading,text("WARISAN POS",21,blue,true),-1,-2);LinearLayout sub=row();sub.addView(text("KIOS WARISAN  ·  SISTEM JUALAN",10,muted,true),new LinearLayout.LayoutParams(0,-2,1));TextView liveClock=text("",10,gold,true);liveClock.setGravity(Gravity.RIGHT|Gravity.CENTER_VERTICAL);add(sub,liveClock,-2,-2);add(heading,sub,-1,-2);startHeaderClock(liveClock);header.addView(heading,new LinearLayout.LayoutParams(0,-2,1));
     add(body,header,-1,-2);gap(body,18);
-    LinearLayout title=row();title.addView(text("Pilih menu",20,ink,true),new LinearLayout.LayoutParams(0,-2,1));TextView historyButton=chip("HISTORY",0xff203f61,gold);add(title,historyButton,-2,-2);historyButton.setOnClickListener(v->saleHistoryChooseDate());LinearLayout.LayoutParams hp=(LinearLayout.LayoutParams)historyButton.getLayoutParams();if(!branchAccounts.staff()){TextView addMenuButton=chip("+ MENU",blue,Color.WHITE);LinearLayout.LayoutParams amp=params(-2,-2);amp.leftMargin=dp(6);title.addView(addMenuButton,amp);addMenuButton.setOnClickListener(v->addMenu());}items=chip("0 item",0xff203f61,gold);LinearLayout.LayoutParams itemLp=params(-2,-2);itemLp.leftMargin=dp(7);title.addView(items,itemLp);add(body,title,-1,-2);
+    LinearLayout title=row();title.addView(text("Pilih menu",20,ink,true),new LinearLayout.LayoutParams(0,-2,1));TextView historyButton=chip("HISTORY",0xff203f61,gold);add(title,historyButton,-2,-2);historyButton.setOnClickListener(v->{
+      if(branchAccounts.staff())saleHistory(businessDay());
+      else saleHistoryChooseDate();
+    });LinearLayout.LayoutParams hp=(LinearLayout.LayoutParams)historyButton.getLayoutParams();if(!branchAccounts.staff()){TextView addMenuButton=chip("+ MENU",blue,Color.WHITE);LinearLayout.LayoutParams amp=params(-2,-2);amp.leftMargin=dp(6);title.addView(addMenuButton,amp);addMenuButton.setOnClickListener(v->addMenu());}items=chip("0 item",0xff203f61,gold);LinearLayout.LayoutParams itemLp=params(-2,-2);itemLp.leftMargin=dp(7);title.addView(items,itemLp);add(body,title,-1,-2);
     add(body,text("Tekan + untuk tambah pesanan",12,muted,false),-1,-2);gap(body,13);
     ArrayList<Integer> visibleMenu=new ArrayList<>();for(int i=0;i<names.length;i++){boolean manuallyHidden=posPrefs().getBoolean("menu_hidden_"+i,false);boolean hasStock=unlimited(i)||stock(i)>0;if(!manuallyHidden&&hasStock)visibleMenu.add(i);}for(int id:visibleMenu){LinearLayout line=row();product(line,id);add(body,line,-1,-2);gap(body,9);}
     // "Pesanan semasa" removed from MENU because confirmed orders are managed in ORDER.
@@ -232,7 +241,7 @@ googleSignInClient = GoogleSignIn.getClient(this, gso);snapshotBeforeUpdate317()
     if(count()==0){TextView empty=text("Belum ada pesanan. Pilih menu di atas.",13,muted,false);empty.setPadding(0,dp(13),0,dp(13));add(basket,empty,-1,-2);return;}
     for(int i=0;i<qty.length;i++)if(qty[i]>0){final int id=i;LinearLayout r=row();r.addView(text(names[i]+" × "+qty[i],14,ink,true),new LinearLayout.LayoutParams(0,dp(39),1));add(r,text(money(qty[i]*prices[i]),13,blue,true),-2,-2);TextView minus=chip("−",0xffc83f46,Color.WHITE);LinearLayout.LayoutParams m=params(32,30);m.leftMargin=dp(8);r.addView(minus,m);minus.setOnClickListener(v->{qty[id]--;draw();});add(basket,r,-1,-2);}
   }
-  void addNavigation(LinearLayout screen){LinearLayout nav=row();nav.setBackgroundColor(cream);nav.setPadding(dp(7),dp(7),dp(7),dp(9));String[] labels=branchAccounts.staff()?new String[]{"MENU","ORDER","ACCOUNT"}:(english()?new String[]{"MENU","ORDERS","STOCK","CASH","SETTINGS"}:new String[]{"MENU","ORDER","STOK","DUIT","SETTING"});int[] pages=branchAccounts.staff()?new int[]{0,11,5}:new int[]{0,11,1,3,4};
+  void addNavigation(LinearLayout screen){LinearLayout nav=row();nav.setBackgroundColor(cream);nav.setPadding(dp(7),dp(7),dp(7),dp(9));String[] labels=branchAccounts.staff()?new String[]{"MENU","ORDER","HARI INI","ACCOUNT"}:(english()?new String[]{"MENU","ORDERS","STOCK","CASH","SETTINGS"}:new String[]{"MENU","ORDER","STOK","DUIT","SETTING"});int[] pages=branchAccounts.staff()?new int[]{0,11,12,5}:new int[]{0,11,1,3,4};
     for(int i=0;i<labels.length;i++){final int page=pages[i];boolean selected=(activePage==page)||(page==3&&activePage==2)||(page==4&&activePage>=4&&activePage!=11);TextView tab=text(labels[i],10,selected?Color.rgb(19,24,34):Color.WHITE,true);tab.setGravity(Gravity.CENTER);tab.setBackground(shape(selected?gold:Color.rgb(20,58,101),11));LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(0,dp(49),1);p.setMargins(dp(3),0,dp(3),0);nav.addView(tab,p);tab.setOnClickListener(v->{activePage=page;draw();});}add(screen,nav,-1,-2);}
   void heading(String title,String subtitle){
     LinearLayout brand=row();brand.setGravity(Gravity.CENTER_VERTICAL);ImageView logo=new ImageView(this);logo.setImageResource(R.drawable.warisan_logo);makeCircle(logo);add(brand,logo,44,44);LinearLayout brandText=col();brandText.setPadding(dp(9),0,0,0);add(brandText,text("WARISAN POS",18,blue,true),-1,-2);add(brandText,text("KIOS WARISAN  ·  SISTEM JUALAN",9,muted,true),-1,-2);brand.addView(brandText,new LinearLayout.LayoutParams(0,-2,1));TextView clock=text("",9,gold,true);clock.setGravity(Gravity.RIGHT|Gravity.CENTER_VERTICAL);add(brand,clock,-2,-2);startHeaderClock(clock);add(body,brand,-1,-2);gap(body,15);
@@ -431,7 +440,23 @@ googleSignInClient = GoogleSignIn.getClient(this, gso);snapshotBeforeUpdate317()
     dlg.setOnShowListener(x->{dlg.getWindow().setBackgroundDrawable(shape(cream,16));int id=getResources().getIdentifier("alertTitle","id","android");TextView t=dlg.findViewById(id);if(t!=null)t.setTextColor(ink);dlg.getButton(AlertDialog.BUTTON_NEGATIVE).setTextColor(gold);});
     dlg.show();
   }
-  void drawPage(){if(activePage==11){heading("Order belum bayar","Semua order yang sudah confirm tetapi belum dibayar.");JSONArray pending=entries("pending_orders");int open=0;for(int i=0;i<pending.length();i++){JSONObject o=pending.optJSONObject(i);if(o!=null&&!o.optBoolean("paid",false)&&!o.optBoolean("cancelled",false))open++;}if(open==0){LinearLayout empty=col();empty.setPadding(dp(16),dp(18),dp(16),dp(18));empty.setBackground(shape(surface,15));add(empty,text("Tiada order belum bayar.",15,ink,true),-1,-2);gap(empty,5);add(empty,text("Order yang di-Confirm dari MENU akan muncul di sini.",12,muted,false),-1,-2);add(body,empty,-1,-2);}else drawPendingOrders();
+  void drawPage(){if(activePage==12){
+      String day=businessDay();
+      heading("Laporan Hari Ini","Paparan pekerja untuk branch "+branchAccounts.branchName());
+      LinearLayout overview=row();
+      metric(overview,"JUALAN HARI INI",money(saleTotalBetween(day,day)),blue,null);
+      metric(overview,"TRANSAKSI HARI INI",String.valueOf(transactionCountBetween(day,day)),gold,null);
+      add(body,overview,-1,-2);gap(body,8);
+      LinearLayout pay=row();
+      metric(pay,"TUNAI",money(sessionCash(day)),0xff46c979,null);
+      metric(pay,"QR",money(sessionQr(day)),blue,null);
+      add(body,pay,-1,-2);gap(body,12);
+      add(body,text("OPENING / CLOSING",13,gold,true),-1,-2);gap(body,7);
+      drawPosSession();
+      action("Cetak laporan harian",()->print(dailyClosingReceipt(day)));
+      action("Transaksi hari ini / Mohon Refund",()->saleHistory(day));
+      action("Semak kelulusan refund",()->staffSecurity.showMyRefunds());
+    }else if(activePage==11){heading("Order belum bayar","Semua order yang sudah confirm tetapi belum dibayar.");JSONArray pending=entries("pending_orders");int open=0;for(int i=0;i<pending.length();i++){JSONObject o=pending.optJSONObject(i);if(o!=null&&!o.optBoolean("paid",false)&&!o.optBoolean("cancelled",false))open++;}if(open==0){LinearLayout empty=col();empty.setPadding(dp(16),dp(18),dp(16),dp(18));empty.setBackground(shape(surface,15));add(empty,text("Tiada order belum bayar.",15,ink,true),-1,-2);gap(empty,5);add(empty,text("Order yang di-Confirm dari MENU akan muncul di sini.",12,muted,false),-1,-2);add(body,empty,-1,-2);}else drawPendingOrders();
       gap(body,12);
     }else if(activePage==1){heading("Stok & restock","Pilih tarikh untuk semak rekod stok. Baki hari sebelumnya dibawa ke hari seterusnya.");
       action("Tarikh stok: "+selectedStockDay+"   ▼",()->chooseStockDay());boolean stockTodayView=businessDay().equals(selectedStockDay);
@@ -495,13 +520,14 @@ googleSignInClient = GoogleSignIn.getClient(this, gso);snapshotBeforeUpdate317()
       action("⚠  Reset",()->{activePage=9;draw();});
     }else if(activePage==5){
       heading("Account","Akaun, backup cloud dan salinan pada telefon.");
-      action("‹  Kembali ke Setting",()->{activePage=4;draw();});
+      action(branchAccounts.staff()?"‹  Kembali ke HARI INI":"‹  Kembali ke Setting",()->{activePage=branchAccounts.staff()?12:4;draw();});
       add(body,text("ACCOUNT",11,muted,true),-1,-2);gap(body,7);
       if(!branchAccounts.staff())action(ownerPassword.isSet()?"🔐  Tukar Password Owner":"🔐  Tetapkan Password Owner",()->ownerPassword.change());
       if(branchAccounts.active())add(body,text("Branch: "+branchAccounts.summary(),13,gold,true),-1,-2);
       FirebaseUser user=firebaseAuth.getCurrentUser();
       if(user==null){
-        action("🔐  Sign in Google",()->{Intent signInIntent=googleSignInClient.getSignInIntent();startActivityForResult(signInIntent,RC_SIGN_IN);});
+        action("Owner · Sign in Google",()->{Intent signInIntent=googleSignInClient.getSignInIntent();startActivityForResult(signInIntent,RC_SIGN_IN);});
+        action("Pekerja · Email + Password",()->staffSecurity.loginEmployee());
       }else{
         String email=user.getEmail()==null?"Google Account":user.getEmail();
         action("☁  "+email,()->message("Google account telah disambungkan."));
@@ -510,13 +536,14 @@ googleSignInClient = GoogleSignIn.getClient(this, gso);snapshotBeforeUpdate317()
       gap(body,7);
       add(body,text("OWNER / BRANCH / PEKERJA",11,gold,true),-1,-2);gap(body,7);
       if(user!=null)branchAccounts.showActions();
-      gap(body,7);add(body,text("BACKUP / PULIHKAN",11,muted,true),-1,-2);gap(body,7);
-      if(user!=null&&!branchAccounts.staff()){action("☁  Backup / Sync ke Google",()->syncToCloud());action("↻  Pulihkan dari Google",()->restoreFromCloud());}
-      else add(body,text("Sign in Google untuk guna backup cloud.",12,muted,false),-1,-2);
-      gap(body,10);add(body,text("DEVICE",11,muted,true),-1,-2);gap(body,7);
-      action("↓  Backup to phone",()->backupPicker(false));
-      action("↑  Restore from phone",()->backupPicker(true));
-      action("↶  Pulihkan salinan sebelum update / pulih",()->recoverInternal());
+      if(!branchAccounts.staff()){
+        gap(body,7);add(body,text("BACKUP / PULIHKAN",11,muted,true),-1,-2);gap(body,7);
+        if(user!=null){action("☁  Backup / Sync ke Google",()->syncToCloud());action("↻  Pulihkan dari Google",()->restoreFromCloud());}
+        gap(body,10);add(body,text("DEVICE",11,muted,true),-1,-2);gap(body,7);
+        action("↓  Backup to phone",()->backupPicker(false));
+        action("↑  Restore from phone",()->backupPicker(true));
+        action("↶  Pulihkan salinan sebelum update / pulih",()->recoverInternal());
+      }
     }else if(activePage==6){
       heading("Pengurusan Menu","Tambah, edit, gambar dan padam menu.");
       action("‹  Kembali ke Setting",()->{activePage=4;draw();});
@@ -1206,8 +1233,14 @@ googleSignInClient = GoogleSignIn.getClient(this, gso);snapshotBeforeUpdate317()
   String saleItemsText(JSONObject sale){
     JSONArray q=sale.optJSONArray("qty");StringBuilder b=new StringBuilder();if(q!=null)for(int i=0;i<Math.min(q.length(),names.length);i++){int n=q.optInt(i);if(n>0){if(b.length()>0)b.append("\n");b.append(names[i]).append(" × ").append(n).append("  ·  ").append(money(n*prices[i]));}}return b.length()==0?"Tiada butiran item":b.toString();
   }
-  void saleHistoryChooseDate(){pickDay("Pilih tarikh history",date(),value->saleHistory(value));}
+  void saleHistoryChooseDate(){
+    if(branchAccounts.staff()){saleHistory(businessDay());return;}
+    pickDay("Pilih tarikh history",date(),value->saleHistory(value));
+  }
   void saleHistory(String day){
+    if(branchAccounts.staff()&&!businessDay().equals(day)){
+      message("Pekerja hanya boleh lihat transaksi hari ini.");return;
+    }
     JSONArray sales=entries("stock_sales");ScrollView scroll=new ScrollView(this);scroll.setVerticalScrollBarEnabled(false);LinearLayout panel=col();panel.setPadding(dp(14),dp(14),dp(14),dp(14));panel.setBackgroundColor(cream);scroll.addView(panel);
     LinearLayout hero=col();hero.setPadding(dp(14),dp(12),dp(14),dp(12));hero.setBackground(shape(0xff102f4d,14));add(hero,text("HISTORY CUSTOMER",20,ink,true),-1,-2);add(hero,text(day,12,gold,true),-1,-2);add(hero,text("Tekan transaksi untuk lihat pembelian atau buat refund.",11,muted,false),-1,-2);add(panel,hero,-1,-2);gap(panel,10);
     int found=0;for(int i=sales.length()-1;i>=0;i--){JSONObject sale=sales.optJSONObject(i);if(sale==null||!day.equals(entryDay(sale)))continue;found++;final int saleIndex=i;int total=saleTotal(sale);boolean refunded=sale.optBoolean("refunded",false);
