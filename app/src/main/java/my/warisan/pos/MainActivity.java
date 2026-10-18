@@ -1250,17 +1250,30 @@ googleSignInClient = GoogleSignIn.getClient(this, gso);snapshotBeforeUpdate317()
   }
   void saleDetailRefund(int saleIndex){
     JSONArray sales=entries("stock_sales");JSONObject sale=sales.optJSONObject(saleIndex);if(sale==null)return;int total=saleTotal(sale);LinearLayout box=col();box.setPadding(dp(16),dp(12),dp(16),0);box.setBackgroundColor(cream);add(box,text(saleItemsText(sale),14,ink,false),-1,-2);gap(box,10);add(box,text("Jumlah bayaran: "+money(total),16,blue,true),-1,-2);add(box,text("Refund penuh akan direkod sebagai DUIT KELUAR dan item dipindahkan ke rekod STOK ROSAK dengan alasan Refund Customer.",11,muted,false),-1,-2);
-    AlertDialog dialog=darkBuilder().setView(box).setPositiveButton("REFUND PENUH",null).setNegativeButton("BATAL",null).create();dialog.setOnShowListener(v->{styleDarkDialogNow(dialog);Button ok=dialog.getButton(AlertDialog.BUTTON_POSITIVE);ok.setTextColor(0xffff6b6b);dialog.getButton(AlertDialog.BUTTON_NEGATIVE).setTextColor(gold);ok.setOnClickListener(x->{refundSale(saleIndex);dialog.dismiss();});});dialog.show();
+    AlertDialog dialog=darkBuilder().setView(box).setPositiveButton(branchAccounts.staff()?"MOHON REFUND":"REFUND PENUH",null).setNegativeButton("BATAL",null).create();dialog.setOnShowListener(v->{styleDarkDialogNow(dialog);Button ok=dialog.getButton(AlertDialog.BUTTON_POSITIVE);ok.setTextColor(0xffff6b6b);dialog.getButton(AlertDialog.BUTTON_NEGATIVE).setTextColor(gold);ok.setOnClickListener(x->{
+      if(branchAccounts.staff())staffSecurity.requestRefund(saleIndex);
+      else refundSale(saleIndex);
+      dialog.dismiss();
+    });});dialog.show();
   }
   void refundSale(int saleIndex){
+    if(branchAccounts.staff()){
+      message("Refund pekerja memerlukan kelulusan Owner.");return;
+    }
+    refundSaleAuthorized(saleIndex,"OWNER");
+  }
+  boolean refundSaleAuthorized(int saleIndex,String approvalId){
+    if(branchAccounts.staff()&&(approvalId==null||approvalId.isEmpty()||"OWNER".equals(approvalId)))return false;
     try{
-      JSONArray sales=entries("stock_sales");JSONObject sale=sales.optJSONObject(saleIndex);if(sale==null||sale.optBoolean("refunded",false)){message("Transaksi ini sudah direfund.");return;}int refund=saleTotal(sale);JSONArray q=sale.optJSONArray("qty");String now=timestamp();
+      JSONArray sales=entries("stock_sales");JSONObject sale=sales.optJSONObject(saleIndex);if(sale==null||sale.optBoolean("refunded",false)){message("Transaksi ini sudah direfund.");return false;}int refund=saleTotal(sale);JSONArray q=sale.optJSONArray("qty");String now=timestamp();
       JSONArray damage=entries("stock_damage");if(q!=null)for(int i=0;i<Math.min(q.length(),names.length);i++){int n=q.optInt(i);if(n<=0||unlimited(i))continue;JSONObject d=new JSONObject();d.put("time",now);d.put("item",i);d.put("name",names[i]);d.put("qty",n);d.put("cost",restockCost(i,n));d.put("unitCost",costUnit(i));d.put("pack",costPack(i));d.put("note","Refund Customer");d.put("refund",true);damage.put(d);}
       JSONArray cash=entries("cash_entries");JSONObject out=new JSONObject();out.put("time",now);out.put("businessDay",entryDay(sale));out.put("month",entryDay(sale).substring(0,7));out.put("amount",-refund);out.put("category","Refund Customer");out.put("note","Refund transaksi "+sale.optString("time"));cash.put(out);
-      sale.put("refunded",true);sale.put("refundTime",now);sale.put("refundAmount",refund);sales.put(saleIndex,sale);
+      sale.put("refunded",true);sale.put("refundTime",now);sale.put("refundAmount",refund);
+      sale.put("refundApprovalId",approvalId);sales.put(saleIndex,sale);
       android.content.SharedPreferences.Editor ed=posPrefs().edit().putString("stock_sales",sales.toString()).putString("stock_damage",damage.toString()).putString("cash_entries",cash.toString());if(!ed.commit())throw new IOException();
       draw();message("Refund "+money(refund)+" direkod. Duit keluar dan stok rosak telah dikemas kini.");
-    }catch(Exception e){message("Refund gagal direkod.");}
+      return true;
+    }catch(Exception e){message("Refund gagal direkod.");return false;}
   }
   void receiptRule(LinearLayout sheet){View rule=new View(this);rule.setBackgroundColor(0xffe5e7e2);LinearLayout.LayoutParams lp=params(-1,1);lp.setMargins(0,dp(13),0,dp(13));sheet.addView(rule,lp);}
   void receiptRow(LinearLayout sheet,String label,String value,boolean highlight){
