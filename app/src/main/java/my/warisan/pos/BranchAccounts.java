@@ -156,7 +156,8 @@ final class BranchAccounts {
         loc.put("ownerUid",ownerId);loc.put("name",name);loc.put("createdAt",new Date());
         workspace.get().addOnSuccessListener(existing->{
           if(existing.exists()){
-            host.message("Owner sudah didaftarkan. Guna Tukar Branch untuk akses semula.");return;
+            // Updating or signing in again must never create a second Owner account.
+            chooseBranch();return;
           }
           WriteBatch batch=db.batch();batch.set(workspace,root);batch.set(first,loc);
           batch.commit().addOnSuccessListener(done->{
