@@ -919,7 +919,7 @@ googleSignInClient = GoogleSignIn.getClient(this, gso);snapshotBeforeUpdate();lo
     add(panel,text("CATATAN HARIAN",12,muted,true),-1,-2);gap(panel,7);boolean any=false;
     for(int d=0;d<days;d++){String day=month+String.format(Locale.US,"-%02d",d+1);int orders=posPrefs().getInt("orders_"+day,0);if(daily[d]==0&&orders==0)continue;any=true;LinearLayout card=col();card.setPadding(dp(12),dp(9),dp(12),dp(9));card.setBackground(shape(surface,10));add(card,text(day,12,ink,true),-1,-2);add(card,text("Sale "+money(daily[d])+"   •   "+orders+" order",12,gold,true),-1,-2);add(panel,card,-1,-2);gap(panel,6);}
     if(!any)add(panel,text("Belum ada jualan untuk bulan ini.",12,muted,false),-1,-2);
-    AlertDialog dlg=darkBuilder().setTitle("Catatan jualan harian").setView(scroll).setPositiveButton("PRINT",(d,w)->print(salesDailyPrintText(month))).setNeutralButton("Tukar bulan",(d,w)->chooseMonth()).setNegativeButton("Tutup",null).create();applyDarkReportDialog(dlg);
+    AlertDialog dlg=darkBuilder().setTitle("Catatan jualan harian").setView(scroll).setPositiveButton("PRINT",(d,w)->WarisanPrinting.monthA4(this,month)).setNeutralButton("Tukar bulan",(d,w)->chooseMonth()).setNegativeButton("Tutup",null).create();applyDarkReportDialog(dlg);
   }
   int daysInMonth(String key){try{Calendar c=Calendar.getInstance();c.setTime(new SimpleDateFormat("yyyy-MM-dd",Locale.US).parse(key+"-01"));return c.getActualMaximum(Calendar.DAY_OF_MONTH);}catch(Exception e){return 31;}}
   void chooseMonth(){Calendar now=Calendar.getInstance();String[] labels=new String[12],keys=new String[12];
@@ -1289,22 +1289,45 @@ googleSignInClient = GoogleSignIn.getClient(this, gso);snapshotBeforeUpdate();lo
   void editShopInfo(String key,String title,String fallback){EditText input=new EditText(this);input.setSingleLine(!"company_hq".equals(key));input.setText(posPrefs().getString(key,fallback));input.setHint(title);styleInput(input);darkBuilder().setTitle(title).setView(input).setPositiveButton("Simpan",(d,w)->{posPrefs().edit().putString(key,input.getText().toString().trim()).apply();message(title+" disimpan");}).setNegativeButton("Batal",null).show();}
   void previewTestReceipt(boolean directPrint){int[] sample=new int[names.length];if(sample.length>0)sample[0]=10;int due=sample.length>0?prices[0]*10:0;String printed=receipt("Tunai",due,1,due);if(directPrint){print(printed);return;}previewReceipt(printed,sample,"Tunai",due,1,due);}
   void choosePrinter(){
-    if(android.os.Build.VERSION.SDK_INT>=31&&checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT)!=PackageManager.PERMISSION_GRANTED){
-      requestPermissions(new String[]{Manifest.permission.BLUETOOTH_CONNECT},REQUEST_BLUETOOTH);return;
+    ArrayList<BluetoothDevice> devices=new ArrayList<>();
+    BluetoothAdapter adapter=BluetoothAdapter.getDefaultAdapter();
+    boolean permissionOk=Build.VERSION.SDK_INT<31
+      ||checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT)==PackageManager.PERMISSION_GRANTED;
+    if(permissionOk&&adapter!=null&&adapter.isEnabled()){
+      try{devices.addAll(adapter.getBondedDevices());}catch(SecurityException ignored){}
     }
-    try{
-      BluetoothAdapter adapter=BluetoothAdapter.getDefaultAdapter();
-      if(adapter==null){message("Telefon ini tiada Bluetooth");return;}
-      if(!adapter.isEnabled()){message("Hidupkan Bluetooth dan pair printer dalam Settings dahulu");return;}
-      ArrayList<BluetoothDevice> devices=new ArrayList<>(adapter.getBondedDevices());
-      if(devices.isEmpty()){message("Pair printer Bluetooth dalam Settings dahulu");return;}
-      String[] labels=new String[devices.size()];
-      for(int i=0;i<devices.size();i++)labels[i]=devices.get(i).getName()+" · "+devices.get(i).getAddress();
-      darkBuilder().setTitle("Pilih printer yang sudah dipair").setItems(labels,(d,index)->{
-        posPrefs().edit().putString("printer",devices.get(index).getAddress()).apply();message("Printer dipilih: "+devices.get(index).getName());
+    ArrayList<String> labels=new ArrayList<>();
+    labels.add("A4 / Warna / WiFi (Android Print Service)");
+    if(!permissionOk)labels.add("Benarkan Bluetooth dan cari printer thermal");
+    else if(adapter!=null&&!adapter.isEnabled())labels.add("Hidupkan Bluetooth untuk printer thermal");
+    for(BluetoothDevice d:devices){
+      String name;
+      try{name=d.getName();}catch(SecurityException e){name="Bluetooth";}
+      labels.add("THERMAL RESIT · "+name);
+    }
+    final boolean allowed=permissionOk,bluetoothOff=permissionOk&&adapter!=null&&!adapter.isEnabled();
+    darkBuilder().setTitle("Pilih jenis printer").setMessage("A4/warna guna cetakan Android. Thermal guna Bluetooth ESC/POS. Jenis kertas tidak boleh dikenal pasti dengan tepat untuk semua model.")
+      .setItems(labels.toArray(new String[0]),(dialog,index)->{
+        if(index==0){
+          getPreferences(0).edit().putString("printer_mode","system").remove("printer").apply();
+          message("Printer A4 / WiFi dipilih. Pilih printer dalam dialog Android.");
+          if(pendingReceipt!=null){String saved=pendingReceipt;pendingReceipt=null;WarisanPrinting.textA4(this,saved,"Warisan POS Resit");}
+          return;
+        }
+        if(!allowed){
+          if(Build.VERSION.SDK_INT>=31)requestPermissions(new String[]{Manifest.permission.BLUETOOTH_CONNECT},REQUEST_BLUETOOTH);
+          return;
+        }
+        if(bluetoothOff){message("Hidupkan Bluetooth dalam tetapan telefon.");return;}
+        int offset=1;
+        int dIndex=index-offset;
+        if(dIndex<0||dIndex>=devices.size())return;
+        BluetoothDevice selected=devices.get(dIndex);
+        getPreferences(0).edit().putString("printer",selected.getAddress())
+          .putString("printer_mode","thermal").apply();
+        message("Printer thermal dipilih.");
         if(pendingReceipt!=null){String saved=pendingReceipt;pendingReceipt=null;print(saved);}
       }).setNegativeButton("Batal",null).show();
-    }catch(SecurityException e){message("Benarkan akses Bluetooth untuk memilih printer");}
   }
   @Override public void onRequestPermissionsResult(int request,String[] permissions,int[] results){
     super.onRequestPermissionsResult(request,permissions,results);
@@ -1325,7 +1348,7 @@ googleSignInClient = GoogleSignIn.getClient(this, gso);snapshotBeforeUpdate();lo
       int bits=0;
       for(int bit=0;bit<8;bit++){
         int x=bx*8+bit,c=image.getPixel(x,y);
-        int gray=(Color.red(c)*30+Color.blue(c)*59+Color.blue(c)*11)/100;
+        int gray=(Color.red(c)*30+Color.green(c)*59+Color.blue(c)*11)/100;
         int dx=x-96,dy=y-96;
         if(dx*dx+dy*dy<90*90&&gray<115+dither[y%4][x%4]*6)bits|=128>>bit;
       }
@@ -1335,25 +1358,55 @@ googleSignInClient = GoogleSignIn.getClient(this, gso);snapshotBeforeUpdate();lo
     image.recycle();square.recycle();source.recycle();
   }
   void print(String receipt){
-    String address=posPrefs().getString("printer","");
-    if(address.isEmpty()){pendingReceipt=receipt;darkBuilder().setTitle("Printer tidak dijumpai").setMessage("Order / bayaran sudah disimpan. Anda boleh pilih printer atau teruskan tanpa print. Proses tidak akan dibatalkan.").setPositiveButton("PILIH PRINTER",(d,w)->choosePrinter()).setNegativeButton("TERUSKAN TANPA PRINT",(d,w)->{pendingReceipt=null;}).show();return;}
+    String address=getPreferences(0).getString("printer","");
+    String mode=getPreferences(0).getString("printer_mode",address.isEmpty()?"system":"thermal");
+    if(!"thermal".equals(mode)){
+      // Android's PrintManager detects installed A4/Wi-Fi/color print services.
+      WarisanPrinting.textA4(this,receipt,"Warisan POS Resit");
+      return;
+    }
+    if(address.isEmpty()){
+      pendingReceipt=receipt;
+      darkBuilder().setTitle("Pilih printer thermal")
+        .setMessage("Belum ada printer thermal dipilih. Order dan bayaran tidak dibatalkan.")
+        .setPositiveButton("PILIH PRINTER",(d,w)->choosePrinter())
+        .setNegativeButton("TANPA CETAK",(d,w)->pendingReceipt=null).show();
+      return;
+    }
     new Thread(()->{
       BluetoothSocket socket=null;
       try{
+        if(Build.VERSION.SDK_INT>=31&&checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT)!=PackageManager.PERMISSION_GRANTED)
+          throw new SecurityException("Benarkan akses Bluetooth dahulu melalui Setting → Bill / Resit.");
         BluetoothAdapter adapter=BluetoothAdapter.getDefaultAdapter();
-        if(adapter==null||!adapter.isEnabled())throw new Exception("Bluetooth belum dihidupkan");
+        if(adapter==null||!adapter.isEnabled())throw new IOException("Bluetooth belum hidup");
         socket=adapter.getRemoteDevice(address).createRfcommSocketToServiceRecord(printerUuid);
-        socket.connect();OutputStream out=socket.getOutputStream();
-        out.write(new byte[]{27,64});printLogo(out);
-        int split=receipt.indexOf('\n');
-        out.write(new byte[]{27,97,1,27,69,1}); // tajuk di tengah dan tebal
-        out.write(receipt.substring(0,split+1).getBytes(StandardCharsets.US_ASCII));
+        socket.connect();
+        OutputStream out=socket.getOutputStream();
+        out.write(new byte[]{27,64});  // ESC @ printer reset
+        // Text FIRST and logo opt-in only, avoiding old behaviour where printer stopped after raster logo.
+        int cut=receipt.indexOf('\n');
+        String title=cut>=0?receipt.substring(0,cut+1):receipt+"\n";
+        String detail=cut>=0?receipt.substring(cut+1):"";
+        out.write(new byte[]{27,97,1,27,69,1});
+        out.write(title.getBytes("windows-1252"));
         out.write(new byte[]{27,69,0,27,97,0});
-        out.write(receipt.substring(split+1).getBytes(StandardCharsets.US_ASCII));
+        out.write(detail.getBytes("windows-1252"));
+        out.write(new byte[]{10,10,10});
         out.flush();
-        runOnUiThread(()->message("Resit berjaya dihantar"));
-      }catch(Exception e){String error=e.getMessage();runOnUiThread(()->darkBuilder().setTitle("Cetakan gagal").setMessage((error==null?"Printer tidak dapat disambungkan.":error)+"\n\nOrder / bayaran kekal disimpan. Anda boleh teruskan tanpa print.").setPositiveButton("TERUSKAN",null).show());}
-      finally{if(socket!=null)try{socket.close();}catch(Exception ignored){}}
+        // Logo remains optional: many older low-memory ESC/POS printers choke on large raster data.
+        if(getPreferences(0).getBoolean("printer_logo",false)){
+          try{printLogo(out);out.flush();}catch(Exception ignored){}
+        }
+        runOnUiThread(()->message("Resit dihantar kepada printer thermal"));
+      }catch(Exception e){
+        String reason=e.getMessage();
+        runOnUiThread(()->darkBuilder().setTitle("Cetakan gagal")
+          .setMessage((reason==null?"Sambungan printer gagal.":reason)+
+            "\n\nOrder/bayaran telah disimpan. Pilih printer lain atau cuba cetak semula.")
+          .setPositiveButton("PILIH PRINTER",(d,w)->{pendingReceipt=receipt;choosePrinter();})
+          .setNegativeButton("Tutup",null).show());
+      }finally{if(socket!=null)try{socket.close();}catch(Exception ignored){}}
     }).start();
   }
 
