@@ -57,7 +57,7 @@ final class BranchAccounts {
        && !identity.getString("branchId","").isEmpty()
        && !identity.getString("ownerUid","").isEmpty();
   }
-  boolean blocked(){return configured()&&!active();}
+  boolean blocked(){return !active()&&(configured()||!hasLegacyRecords());}
   boolean staff(){return active()&&"STAFF".equals(identity.getString("role",""));}
   boolean owner(){return active()&&"OWNER".equals(identity.getString("role",""));}
   String ownerUid(){return identity.getString("ownerUid","");}
@@ -123,11 +123,14 @@ final class BranchAccounts {
     }
     if(owner()){
       host.action("+ Tambah Branch",()->createBranch());
-      host.action("+ Daftar / jemput pekerja",()->inviteStaff());
+      host.action("+ Daftar pekerja · Email + Password",()->host.staffSecurity.createEmployee());
+      host.action("Refund menunggu kelulusan Owner",()->host.staffSecurity.ownerReview());
       host.action("Tukar Branch",()->chooseBranch());
     }
-    host.action("Semak jemputan pekerja (Google)",()->showInvitations());
-    host.action("Pilih branch pekerja yang sedia ada",()->chooseBranch());
+    if(staff()){
+      host.action("Semak status refund saya",()->host.staffSecurity.showMyRefunds());
+    }
+    if(!active())host.action("Login Pekerja · Email + Password",()->host.staffSecurity.loginEmployee());
   }
   EditText entry(String hint){
     EditText e=new EditText(host);e.setSingleLine(true);e.setHint(hint);host.styleInput(e);return e;
@@ -212,23 +215,8 @@ final class BranchAccounts {
       }).setNegativeButton("Batal",null).show();
   }
   void inviteStaff(){
-    if(!owner()){host.message("Owner sahaja boleh daftar pekerja.");return;}
-    EditText email=entry("Email Google pekerja");
-    host.darkBuilder().setTitle("Daftar / Jemput Pekerja")
-      .setMessage("Pekerja install APK yang sama dan Sign in menggunakan email Google yang dijemput. Jangan kongsi password Owner.")
-      .setView(email).setPositiveButton("Jemput",(d,w)->{
-        String address=email.getText().toString().trim().toLowerCase(Locale.ROOT);
-        if(!android.util.Patterns.EMAIL_ADDRESS.matcher(address).matches()){
-          host.message("Alamat email tidak sah.");return;
-        }
-        Map<String,Object> invite=new HashMap<>();
-        invite.put("email",address);invite.put("ownerUid",ownerUid());
-        invite.put("branchId",branchId());invite.put("branchName",branchName());
-        invite.put("role","STAFF");invite.put("active",true);invite.put("createdAt",new Date());
-        db.collection("staffInvites").add(invite)
-           .addOnSuccessListener(doc->host.message("Jemputan disimpan. Pekerja perlu login guna email yang sama."))
-           .addOnFailureListener(e->host.message("Jemputan gagal: "+e.getMessage()));
-      }).setNegativeButton("Batal",null).show();
+    if(host.staffSecurity!=null)host.staffSecurity.createEmployee();
+    else host.message("Sila log masuk sebagai Owner.");
   }
   void showInvitations(){
     FirebaseUser u=user();if(u==null||u.getEmail()==null){host.message("Sign in Google dahulu.");return;}
