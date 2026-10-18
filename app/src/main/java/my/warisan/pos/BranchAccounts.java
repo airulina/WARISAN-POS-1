@@ -204,21 +204,24 @@ final class BranchAccounts {
   }
   void chooseBranch(){
     FirebaseUser u=user();if(u==null){host.message("Sign in Google dahulu");return;}
-    if(!owner()){
-      showInvitations();
-      return;
-    }
-    String ownerId=ownerUid();
-    db.collection(ROOT).document(ownerId).collection("branches").get()
-      .addOnSuccessListener(result->{
-        ArrayList<String> labels=new ArrayList<>(),ids=new ArrayList<>();
-        for(QueryDocumentSnapshot doc:result){
-          labels.add(doc.getString("name"));ids.add(doc.getId());
-        }
-        if(labels.isEmpty()){host.message("Belum ada branch");return;}
-        host.darkBuilder().setTitle("Pilih Branch").setItems(labels.toArray(new String[0]),(d,which)->
-          setSession(u.getUid(),ownerId,ids.get(which),labels.get(which),"OWNER"))
-          .setNegativeButton("Batal",null).show();
-      }).addOnFailureListener(e->host.message("Gagal senaraikan branch: "+e.getMessage()));
+    // A new phone or restored installation can find the Owner's branches by Google UID.
+    db.collection(ROOT).document(u.getUid()).get().addOnSuccessListener(doc->{
+      if(!doc.exists()){
+        showInvitations();return;
+      }
+      String ownerId=u.getUid();
+      db.collection(ROOT).document(ownerId).collection("branches").get()
+        .addOnSuccessListener(result->{
+          ArrayList<String> labels=new ArrayList<>(),ids=new ArrayList<>();
+          for(QueryDocumentSnapshot branch:result){
+            labels.add(branch.getString("name"));ids.add(branch.getId());
+          }
+          if(labels.isEmpty()){host.message("Belum ada branch");return;}
+          host.darkBuilder().setTitle("Pilih Branch Owner")
+            .setItems(labels.toArray(new String[0]),(d,which)->
+               setSession(u.getUid(),ownerId,ids.get(which),labels.get(which),"OWNER"))
+            .setNegativeButton("Batal",null).show();
+        }).addOnFailureListener(e->host.message("Gagal senaraikan branch: "+e.getMessage()));
+    }).addOnFailureListener(e->host.message("Gagal semak branch: "+e.getMessage()));
   }
 }
