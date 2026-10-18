@@ -31,6 +31,20 @@ final class BranchAccounts {
   final FirebaseFirestore db;
   final SharedPreferences identity;
   static final String ROOT="workspaces";
+  static final String LEGACY_BRANCH="utama_legacy";
+  boolean hasLegacyRecords(){
+    // Ignore housekeeping flags: they do not mean a shop has real data.
+    for(String key:host.getPreferences(Context.MODE_PRIVATE).getAll().keySet()){
+      if(key.startsWith("sales_")||key.startsWith("orders_")||
+        key.startsWith("price_")||key.startsWith("cost_")||
+        key.startsWith("supplier_")||key.startsWith("menu_")||
+        key.equals("stock_entries")||key.equals("stock_sales")||
+        key.equals("stock_damage")||key.equals("cash_entries")||
+        key.equals("pending_orders")||key.equals("custom_menu")||
+        key.equals("shop_name")||key.equals("company_name"))return true;
+    }
+    return false;
+  }
   BranchAccounts(MainActivity host,FirebaseAuth auth,FirebaseFirestore db){
     this.host=host;this.auth=auth;this.db=db;
     this.identity=host.getSharedPreferences("warisan_identity",Context.MODE_PRIVATE);
@@ -56,6 +70,9 @@ final class BranchAccounts {
   SharedPreferences posPrefs(){
     // Existing Warisan POS data is untouched until an owner explicitly registers a branch.
     if(!active())return host.getPreferences(Context.MODE_PRIVATE);
+    // The legacy owner's first branch stays on the EXACT original preferences file.
+    // No data copy, reset, or migration occurs during app upgrade or branch activation.
+    if(owner()&&LEGACY_BRANCH.equals(branchId()))return host.getPreferences(Context.MODE_PRIVATE);
     return host.getSharedPreferences("warisan_branch_"+branchId(),Context.MODE_PRIVATE);
   }
   void setSession(String uid,String ownerUid,String branchId,String branchName,String role){
@@ -80,18 +97,30 @@ final class BranchAccounts {
     e.commit();
   }
   void afterLogin(){
-    // Revalidate old branch session on a different Google account.
     FirebaseUser u=user();
     if(u==null)return;
     if(active()){host.loadMenu();host.draw();return;}
-    host.activePage=5;host.draw();
-    host.message("Log masuk berjaya. Pilih daftar Owner atau jemputan pekerja.");
+    // Do not require any registration after reinstalling an APK update.
+    // Reconnect to existing Firestore Owner branches, or offer one-tap use of legacy data.
+    db.collection(ROOT).document(u.getUid()).get().addOnSuccessListener(doc->{
+      if(doc.exists())chooseBranch();
+      else {
+        host.activePage=5;host.draw();
+        if(hasLegacyRecords())host.message("Data lama masih ada. Tekan 'Guna data lama sebagai Owner' di Account.");
+      }
+    }).addOnFailureListener(e->{
+      host.activePage=5;host.draw();
+      host.message("Data POS lama kekal. Sambungan Google boleh dicuba semula kemudian.");
+    });
   }
   void showActions(){
     FirebaseUser u=user();
     if(u==null){host.message("Sign in Google dahulu di halaman Account");return;}
     host.action("Branch aktif: "+summary(),()->chooseBranch());
-    if(!configured() || !active())host.action("Daftar sebagai Owner baharu",()->registerOwner());
+    if(!configured() || !active()){
+      if(hasLegacyRecords())host.action("Guna data lama sebagai Owner (tanpa daftar semula)",()->linkLegacyOwner());
+      else host.action("Daftar Owner pertama kali",()->registerOwner());
+    }
     if(owner()){
       host.action("+ Tambah Branch",()->createBranch());
       host.action("+ Daftar / jemput pekerja",()->inviteStaff());
@@ -104,6 +133,9 @@ final class BranchAccounts {
     EditText e=new EditText(host);e.setSingleLine(true);e.setHint(hint);host.styleInput(e);return e;
   }
   void registerOwner(){
+    if(hasLegacyRecords()){
+      linkLegacyOwner();return;
+    }
     FirebaseUser u=user();
     if(u==null){host.message("Sign in Google untuk daftar Owner.");return;}
     LinearLayout form=host.col();form.setPadding(host.dp(18),0,host.dp(18),0);
@@ -135,6 +167,32 @@ final class BranchAccounts {
         }).addOnFailureListener(e->host.message("Gagal semak Owner: "+e.getMessage()));
       }).setNegativeButton("Batal",null).show();
   }
+  void linkLegacyOwner(){
+    FirebaseUser u=user();
+    if(u==null){host.message("Sign in Google dahulu untuk hubungkan Owner lama.");return;}
+    if(!hasLegacyRecords()){
+      host.message("Tiada rekod lama pada telefon. Gunakan Daftar Owner pertama kali.");return;
+    }
+    String ownerId=u.getUid();
+    DocumentReference workspace=db.collection(ROOT).document(ownerId);
+    DocumentReference branch=workspace.collection("branches").document(LEGACY_BRANCH);
+    workspace.get().addOnSuccessListener(existing->{
+      if(existing.exists()){chooseBranch();return;}
+      host.darkBuilder().setTitle("Guna Warisan POS lama sebagai Owner?")
+        .setMessage("Tak perlu isi nama bisnes atau daftar semula. Jualan, stok, order dan duit akan terus dibaca daripada data asal telefon ini. Data tidak disalin atau dipadam.")
+        .setPositiveButton("Gunakan akaun lama",(dialog,which)->{
+          Map<String,Object> root=new HashMap<>(),loc=new HashMap<>();
+          root.put("ownerUid",ownerId);root.put("name","WARISAN POS");root.put("createdAt",new Date());
+          loc.put("ownerUid",ownerId);loc.put("name","Branch Utama");loc.put("legacyDeviceData",true);loc.put("createdAt",new Date());
+          WriteBatch batch=db.batch();batch.set(workspace,root);batch.set(branch,loc);
+          batch.commit().addOnSuccessListener(done->{
+            setSession(ownerId,ownerId,LEGACY_BRANCH,"Branch Utama","OWNER");
+            host.message("Owner lama aktif. Semua data tempatan asal dikekalkan.");
+          }).addOnFailureListener(e->host.message("Gagal hubungkan Owner: "+e.getMessage()+". Data lama masih selamat."));
+        }).setNegativeButton("Batal",null).show();
+    }).addOnFailureListener(e->host.message("Gagal semak Owner. Data POS lama tidak diubah."));
+  }
+
   void createBranch(){
     if(!owner()){host.message("Owner sahaja boleh tambah branch.");return;}
     EditText name=entry("Contoh: Warisan Banting");
@@ -207,7 +265,14 @@ final class BranchAccounts {
     // A new phone or restored installation can find the Owner's branches by Google UID.
     db.collection(ROOT).document(u.getUid()).get().addOnSuccessListener(doc->{
       if(!doc.exists()){
-        showInvitations();return;
+        if(hasLegacyRecords()){
+          host.darkBuilder().setTitle("Akaun lama dikesan")
+            .setMessage("Gunakan data Warisan POS sedia ada sebagai Owner, tanpa daftar dari awal?")
+            .setPositiveButton("Owner lama",(d,w)->linkLegacyOwner())
+            .setNeutralButton("Jemputan pekerja",(d,w)->showInvitations())
+            .setNegativeButton("Batal",null).show();
+        }else showInvitations();
+        return;
       }
       String ownerId=u.getUid();
       db.collection(ROOT).document(ownerId).collection("branches").get()
