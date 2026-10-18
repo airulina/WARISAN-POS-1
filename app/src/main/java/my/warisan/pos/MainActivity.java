@@ -222,7 +222,7 @@ googleSignInClient = GoogleSignIn.getClient(this, gso);snapshotBeforeUpdate317()
     // Menu sengaja guna ikon ringan sahaja. Logo kedai kekal pada header/resit.
     TextView icon=chip(icons[id],0xff203f61,gold);icon.setTextSize(20);icon.setGravity(Gravity.CENTER);add(card,icon,52,52);
     LinearLayout info=col();info.setPadding(dp(11),0,dp(8),0);TextView name=text(names[id],15,ink,true);name.setMaxLines(2);add(info,name,-1,-2);gap(info,3);add(info,text(money(prices[id]),14,gold,true),-1,-2);
-    int available=unlimited(id)?Integer.MAX_VALUE:stock(id);TextView stockLabel=text(unlimited(id)?"Kuah · tanpa had unit":"Stok: "+available+(available==0?" · HABIS":""),11,available==0?0xffff4d4d:blue,true);add(info,stockLabel,-1,-2);card.addView(info,new LinearLayout.LayoutParams(0,-2,1));
+    int available=unlimited(id)?Integer.MAX_VALUE:stock(id);TextView stockLabel=text(branchAccounts.staff()?(available>0?"Tersedia":"HABIS"):(unlimited(id)?"Kuah · tanpa had unit":"Stok: "+available+(available==0?" · HABIS":"")),11,available==0?0xffff4d4d:blue,true);add(info,stockLabel,-1,-2);card.addView(info,new LinearLayout.LayoutParams(0,-2,1));
     LinearLayout controls=row();controls.setGravity(Gravity.CENTER_VERTICAL);TextView minus=chip("−",0xffc83f46,Color.WHITE),number=text(""+qty[id],16,ink,true),plus=chip("+",blue,Color.WHITE);minus.setGravity(Gravity.CENTER);number.setGravity(Gravity.CENTER);plus.setGravity(Gravity.CENTER);
     add(controls,minus,45,42);add(controls,number,44,42);add(controls,plus,45,42);add(card,controls,-2,-2);
     number.setClickable(true);number.setOnClickListener(v->editOrderQuantity(id));
@@ -440,6 +440,22 @@ googleSignInClient = GoogleSignIn.getClient(this, gso);snapshotBeforeUpdate317()
     dlg.setOnShowListener(x->{dlg.getWindow().setBackgroundDrawable(shape(cream,16));int id=getResources().getIdentifier("alertTitle","id","android");TextView t=dlg.findViewById(id);if(t!=null)t.setTextColor(ink);dlg.getButton(AlertDialog.BUTTON_NEGATIVE).setTextColor(gold);});
     dlg.show();
   }
+  String staffDailyReceipt(String day){
+    StringBuilder report=new StringBuilder();
+    report.append(centerReceipt(posPrefs().getString("shop_name","WARISAN POS")))
+      .append("--------------------------------\n")
+      .append(centerReceipt("LAPORAN HARI INI"))
+      .append(receiptPair("Tarikh",day))
+      .append(receiptPair("Branch",branchAccounts.branchName()))
+      .append("--------------------------------\n")
+      .append(receiptPair("Jualan",money(saleTotalBetween(day,day))))
+      .append(receiptPair("Tunai",money(sessionCash(day))))
+      .append(receiptPair("QR",money(sessionQr(day))))
+      .append(receiptPair("Transaksi",String.valueOf(transactionCountBetween(day,day))))
+      .append("--------------------------------\n")
+      .append(centerReceipt("WARISAN POS")).append("\n");
+    return report.toString();
+  }
   void drawPage(){if(activePage==12){
       String day=businessDay();
       heading("Laporan Hari Ini","Paparan pekerja untuk branch "+branchAccounts.branchName());
@@ -453,7 +469,7 @@ googleSignInClient = GoogleSignIn.getClient(this, gso);snapshotBeforeUpdate317()
       add(body,pay,-1,-2);gap(body,12);
       add(body,text("OPENING / CLOSING",13,gold,true),-1,-2);gap(body,7);
       drawPosSession();
-      action("Cetak laporan harian",()->print(dailyClosingReceipt(day)));
+      action("Cetak laporan harian",()->print(staffDailyReceipt(day)));
       action("Transaksi hari ini / Mohon Refund",()->saleHistory(day));
       action("Semak kelulusan refund",()->staffSecurity.showMyRefunds());
     }else if(activePage==11){heading("Order belum bayar","Semua order yang sudah confirm tetapi belum dibayar.");JSONArray pending=entries("pending_orders");int open=0;for(int i=0;i<pending.length();i++){JSONObject o=pending.optJSONObject(i);if(o!=null&&!o.optBoolean("paid",false)&&!o.optBoolean("cancelled",false))open++;}if(open==0){LinearLayout empty=col();empty.setPadding(dp(16),dp(18),dp(16),dp(18));empty.setBackground(shape(surface,15));add(empty,text("Tiada order belum bayar.",15,ink,true),-1,-2);gap(empty,5);add(empty,text("Order yang di-Confirm dari MENU akan muncul di sini.",12,muted,false),-1,-2);add(body,empty,-1,-2);}else drawPendingOrders();
