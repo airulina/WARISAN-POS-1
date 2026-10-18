@@ -57,7 +57,9 @@ final class BranchAccounts {
        && !identity.getString("branchId","").isEmpty()
        && !identity.getString("ownerUid","").isEmpty();
   }
-  boolean blocked(){return !active()&&(configured()||!hasLegacyRecords());}
+  // Fail closed: a fresh worker install must never get Owner tabs just because
+  // a legacy migration or app housekeeping created records in local storage.
+  boolean blocked(){return !active();}
   boolean staff(){return active()&&"STAFF".equals(identity.getString("role",""));}
   boolean owner(){return active()&&"OWNER".equals(identity.getString("role",""));}
   String ownerUid(){return identity.getString("ownerUid","");}
