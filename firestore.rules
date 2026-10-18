@@ -1,0 +1,73 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+    function owner(ownerUid) {
+      return signedIn() && request.auth.uid == ownerUid;
+    }
+    function verifiedEmail() {
+      return signedIn() && request.auth.token.email_verified == true;
+    }
+    function inviteMatch(inviteId, ownerUid, branchId) {
+      return exists(/databases/$(database)/documents/staffInvites/$(inviteId))
+        && get(/databases/$(database)/documents/staffInvites/$(inviteId)).data.ownerUid == ownerUid
+        && get(/databases/$(database)/documents/staffInvites/$(inviteId)).data.branchId == branchId
+        && get(/databases/$(database)/documents/staffInvites/$(inviteId)).data.email == request.auth.token.email
+        && get(/databases/$(database)/documents/staffInvites/$(inviteId)).data.active == true;
+    }
+    function member(ownerUid, branchId) {
+      return signedIn()
+        && exists(/databases/$(database)/documents/workspaces/$(ownerUid)/branches/$(branchId)/members/$(request.auth.uid))
+        && get(/databases/$(database)/documents/workspaces/$(ownerUid)/branches/$(branchId)/members/$(request.auth.uid)).data.active == true;
+    }
+
+    // Backward-compatible Google backup for older single-store accounts.
+    match /users/{uid}/warisanpos/{document} {
+      allow read, write: if owner(uid);
+    }
+    match /workspaces/{ownerUid} {
+      allow read: if owner(ownerUid);
+      allow create: if owner(ownerUid)
+        && request.resource.data.ownerUid == ownerUid;
+      allow update, delete: if owner(ownerUid);
+
+      match /branches/{branchId} {
+        allow read: if owner(ownerUid) || member(ownerUid, branchId);
+        allow create: if owner(ownerUid)
+          && request.resource.data.ownerUid == ownerUid;
+        allow update, delete: if owner(ownerUid);
+
+        match /members/{userUid} {
+          allow get, list: if owner(ownerUid) || (signedIn() && request.auth.uid == userUid);
+          allow create: if owner(ownerUid) ||
+            (verifiedEmail() && request.auth.uid == userUid
+              && request.resource.data.uid == userUid
+              && request.resource.data.email == request.auth.token.email
+              && request.resource.data.role == 'STAFF'
+              && request.resource.data.active == true
+              && request.resource.data.invitationId is string
+              && inviteMatch(request.resource.data.invitationId,ownerUid,branchId));
+          allow update, delete: if owner(ownerUid);
+        }
+        // Only Owner can restore/overwrite a full POS backup.
+        // Shared transactions will be introduced later as append-only documents.
+        match /backups/{document} {
+          allow read, write: if owner(ownerUid);
+        }
+      }
+    }
+    match /staffInvites/{inviteId} {
+      allow create: if signedIn()
+        && request.resource.data.ownerUid == request.auth.uid
+        && request.resource.data.role == 'STAFF'
+        && request.resource.data.email is string
+        && request.resource.data.active == true;
+      allow get, list: if signedIn() &&
+        (resource.data.ownerUid == request.auth.uid ||
+          (verifiedEmail() && resource.data.email == request.auth.token.email));
+      allow update, delete: if owner(resource.data.ownerUid);
+    }
+  }
+}
