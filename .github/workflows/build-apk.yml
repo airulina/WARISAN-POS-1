@@ -47,8 +47,9 @@ jobs:
             -storepass android \
             -keypass android
 
-      - name: Build APK
-        run: gradle assembleDebug --no-daemon
+      - name: Validate Firebase Functions JavaScript
+        run: node --check functions/index.js
+
       - name: Build APK
         run: gradle assembleDebug --no-daemon
 
