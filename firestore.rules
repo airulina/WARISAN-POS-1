@@ -51,6 +51,49 @@ service cloud.firestore {
               && inviteMatch(request.resource.data.invitationId,ownerUid,branchId));
           allow update, delete: if owner(ownerUid);
         }
+        // Refund requests: staff may request; ONLY Owner may approve/deny.
+        // Staff may claim an approved refund once and finalize its status.
+        match /refundRequests/{requestId} {
+          allow get, list: if owner(ownerUid) ||
+            (member(ownerUid,branchId) && resource.data.employeeUid == request.auth.uid);
+          allow create: if member(ownerUid,branchId)
+            && request.resource.data.ownerUid == ownerUid
+            && request.resource.data.branchId == branchId
+            && request.resource.data.employeeUid == request.auth.uid
+            && request.resource.data.employeeEmail == request.auth.token.email
+            && request.resource.data.status == "PENDING"
+            && request.resource.data.amount is int
+            && request.resource.data.amount > 0
+            && request.resource.data.businessDay is string
+            && request.resource.data.saleFingerprint is string
+            && request.resource.data.receipt is string
+            && request.resource.data.keys().hasOnly([
+              "ownerUid", "branchId", "employeeUid", "employeeEmail",
+              "businessDay","saleFingerprint","receipt","amount","status","requestedAt"
+            ]);
+          allow update: if
+            (owner(ownerUid)
+              && resource.data.status == "PENDING"
+              && request.resource.data.status in ["APPROVED", "DENIED"]
+              && request.resource.data.decidedBy == request.auth.uid
+              && request.resource.data.diff(resource.data).affectedKeys()
+                .hasOnly(["status","decidedBy","decidedAt"]))
+            ||
+            (member(ownerUid,branchId)
+              && resource.data.employeeUid == request.auth.uid
+              && resource.data.status == "APPROVED"
+              && request.resource.data.status == "CLAIMED"
+              && request.resource.data.diff(resource.data).affectedKeys()
+                .hasOnly(["status","claimedAt"]))
+            ||
+            (member(ownerUid,branchId)
+              && resource.data.employeeUid == request.auth.uid
+              && resource.data.status == "CLAIMED"
+              && request.resource.data.status == "COMPLETED"
+              && request.resource.data.diff(resource.data).affectedKeys()
+                .hasOnly(["status","completedAt"]));
+          allow delete: if false;
+        }
         // Only Owner can restore/overwrite a full POS backup.
         // Shared transactions will be introduced later as append-only documents.
         match /backups/{document} {
@@ -58,16 +101,19 @@ service cloud.firestore {
         }
       }
     }
+    // Only Firebase Admin SDK (Cloud Function) may create/change staffProfiles.
+    match /staffProfiles/{uid} {
+      allow get: if signedIn() && request.auth.uid == uid;
+      allow list: if false;
+      allow write: if false;
+    }
+    // Legacy Gmail invitation creation is disabled for new deployments.
+    // Staff accounts must be provisioned by an authenticated Owner through Cloud Functions.
     match /staffInvites/{inviteId} {
-      allow create: if signedIn()
-        && request.resource.data.ownerUid == request.auth.uid
-        && request.resource.data.role == 'STAFF'
-        && request.resource.data.email is string
-        && request.resource.data.active == true;
       allow get, list: if signedIn() &&
         (resource.data.ownerUid == request.auth.uid ||
-          (verifiedEmail() && resource.data.email == request.auth.token.email));
-      allow update, delete: if owner(resource.data.ownerUid);
+        resource.data.email == request.auth.token.email);
+      allow create, update, delete: if false;
     }
   }
 }
