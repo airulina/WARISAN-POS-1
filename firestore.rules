@@ -106,6 +106,29 @@ service cloud.firestore {
           .hasOnly(["sales","transactions","cash","qr","lastPaymentId","businessDay","updatedAt"]);
     }
 
+    function staffRefundDay(ownerUid,branchId) {
+      let id = request.resource.data.lastRefundId;
+      let receipt = afterLiveOrder(ownerUid,branchId,id);
+      let approval = getAfter(/databases/$(database)/documents/workspaces/$(ownerUid)/branches/$(branchId)/refundRequests/$(receipt.refundApprovalId)).data;
+      return member(ownerUid,branchId)
+        && receipt.status == "REFUNDED"
+        && receipt.actorUid == request.auth.uid
+        && receipt.refundBy == request.auth.uid
+        && approval.employeeUid == request.auth.uid
+        && approval.status == "CLAIMED"
+        && approval.amount == receipt.total
+        && request.resource.data.sales == resource.data.get("sales",0) - receipt.total
+        && request.resource.data.transactions == resource.data.get("transactions",0)
+        && request.resource.data.cash == resource.data.get("cash",0)
+           - (receipt.method == "Tunai" ? receipt.total : 0)
+        && request.resource.data.qr == resource.data.get("qr",0)
+           - (receipt.method == "Tunai" ? 0 : receipt.total)
+        && request.resource.data.sales >= 0
+        && request.resource.data.cash >= 0
+        && request.resource.data.qr >= 0
+        && request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(["sales","cash","qr","lastRefundId","updatedAt"]);
+    }
     // Backward-compatible Google backup for older single-store accounts.
     match /users/{uid}/warisanpos/{document} {
       allow read, write: if owner(uid);
@@ -157,7 +180,7 @@ service cloud.firestore {
             && request.resource.data.qr == (afterLiveOrder(ownerUid,branchId,request.resource.data.lastPaymentId).method == "Tunai" ?
               0 : request.resource.data.sales)
           );
-          allow update: if owner(ownerUid) || staffPayDay(ownerUid,branchId);
+          allow update: if owner(ownerUid) || staffPayDay(ownerUid,branchId) || staffRefundDay(ownerUid,branchId);
           allow delete: if false;
         }
         match /liveOrders/{orderId} {
@@ -185,7 +208,39 @@ service cloud.firestore {
                     && afterInventory(ownerUid,branchId).lastOrderId == orderId
                     && afterInventory(ownerUid,branchId).lastStockAction == "CANCEL")
                  || (request.resource.data.status == "PAID"
-                    && afterDay(ownerUid,branchId,resource.data.day).lastPaymentId == orderId)));
+                    && afterDay(ownerUid,branchId,resource.data.day).lastPaymentId == orderId)))
+            || (member(ownerUid,branchId)
+              && resource.data.actorUid == request.auth.uid
+              && resource.data.status == "PAID"
+              && request.resource.data.status == "REFUNDED"
+              && request.resource.data.refundBy == request.auth.uid
+              && request.resource.data.refundApprovalId is string
+              && request.resource.data.diff(resource.data).affectedKeys()
+                .hasOnly(["status","refundBy","refundApprovalId","refundedAt"])
+              && getAfter(/databases/$(database)/documents/workspaces/$(ownerUid)/branches/$(branchId)/refundRequests/$(request.resource.data.refundApprovalId)).data.status == "CLAIMED"
+              && afterDay(ownerUid,branchId,resource.data.day).lastRefundId == orderId);
+          allow delete: if false;
+        }
+        match /liveSessions/{dayId} {
+          allow get, list: if owner(ownerUid) || member(ownerUid,branchId);
+          allow create: if owner(ownerUid) ||
+            (member(ownerUid,branchId)
+              && request.resource.data.ownerUid == ownerUid
+              && request.resource.data.branchId == branchId
+              && request.resource.data.day == dayId
+              && (request.resource.data.openedBy == request.auth.uid
+                || request.resource.data.closedBy == request.auth.uid));
+          allow update: if owner(ownerUid) ||
+            (member(ownerUid,branchId)
+              && resource.data.ownerUid == ownerUid
+              && resource.data.branchId == branchId
+              && request.resource.data.ownerUid == ownerUid
+              && request.resource.data.branchId == branchId
+              && request.resource.data.day == dayId
+              && request.resource.data.diff(resource.data).affectedKeys()
+                .hasOnly(["open","opening","closing","openedBy","closedBy","updatedAt"])
+              && (request.resource.data.openedBy == request.auth.uid
+                || request.resource.data.closedBy == request.auth.uid));
           allow delete: if false;
         }
         // Refund requests: staff may request; ONLY Owner may approve/deny.
