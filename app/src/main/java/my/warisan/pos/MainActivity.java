@@ -458,10 +458,10 @@ selectedDay=date();selectedMonth=selectedDay.substring(0,7);rangeStart=selectedD
       .append(receiptPair("Tarikh",day))
       .append(receiptPair("Branch",branchAccounts.branchName()))
       .append("--------------------------------\n")
-      .append(receiptPair("Jualan",money(saleTotalBetween(day,day))))
-      .append(receiptPair("Tunai",money(sessionCash(day))))
-      .append(receiptPair("QR",money(sessionQr(day))))
-      .append(receiptPair("Transaksi",String.valueOf(transactionCountBetween(day,day))))
+      .append(receiptPair("Jualan",money(live.enabled()?(int)live.sales():saleTotalBetween(day,day))))
+      .append(receiptPair("Tunai",money(live.enabled()?(int)live.cash():sessionCash(day))))
+      .append(receiptPair("QR",money(live.enabled()?(int)live.qr():sessionQr(day))))
+      .append(receiptPair("Transaksi",String.valueOf(live.enabled()?live.transactions():transactionCountBetween(day,day))))
       .append("--------------------------------\n")
       .append(centerReceipt("WARISAN POS")).append("\n");
     return report.toString();
@@ -568,6 +568,8 @@ selectedDay=date();selectedMonth=selectedDay.substring(0,7);rangeStart=selectedD
       if(branchAccounts.active()){
         if(branchAccounts.owner()){
           action("☁  Live branch / Semak jualan sekarang",()->live.showDashboard());
+          action("🏪  Pantau semua branch Live",()->live.showAllBranches());
+          action("📄  Laporan Live bulanan",()->live.showMonth(selectedMonth));
           action("↻  Terbit menu terbaru ke Live",()->live.publishMenu());
         } else if(branchAccounts.staff()) {
           add(body,text(live.enabled()?"Live: "+(live.usable()?"ONLINE":"menunggu server"):"Owner belum aktifkan Live",12,gold,true),-1,-2);
@@ -729,7 +731,10 @@ selectedDay=date();selectedMonth=selectedDay.substring(0,7);rangeStart=selectedD
   void drawHistoricalPos(String day){JSONObject c=closingForDay(day);int sales=saleTotalBetween(day,day),cash=paymentTotalBetween(day,day,"Tunai"),qr=paymentTotalBetween(day,day,"QR");int opening=0,balance;if(c!=null){opening=c.optInt("opening",0);sales=c.optInt("sales",sales);cash=c.optInt("cash",cash);qr=c.optInt("qr",qr);balance=c.has("closingBalance")?c.optInt("closingBalance",0):Math.max(0,opening+cash);}else balance=Math.max(0,legacyBalanceThrough(day));LinearLayout a=row();metric(a,"OPENING BALANCE",money(opening),gold,null);metric(a,"JUALAN HARI",money(sales),blue,null);add(body,a,-1,-2);gap(body,7);LinearLayout b=row();metric(b,c!=null?"BAKI CLOSING":"BAKI DUIT AKHIR HARI",money(balance),0xff46c979,null);add(body,b,-1,-2);gap(body,6);add(body,text("Tunai "+money(cash)+"   ·   QR "+money(qr)+(c==null?"\nRekod lama: baki dikira daripada rekod jualan + aliran duit sehingga tarikh ini.":""),11,muted,false),-1,-2);}
   void drawPosSession(){boolean open=posSessionOpen();String day=posSessionDay();int opening=open?posOpening():0,cash=open?sessionCash(day):0,qr=open?sessionQr(day):0;LinearLayout a=row();metric(a,"OPENING",money(opening),gold,null);metric(a,"TUNAI",money(cash),0xff46c979,null);metric(a,"QR",money(qr),blue,null);add(body,a,-1,-2);gap(body,8);if(open){action("OPENING DIKUNCI · "+day,()->message("Selagi sesi "+day+" belum Closing, Opening baru tidak boleh dibuat."));gap(body,6);action("CLOSING POS · "+day,()->requireClosingExpenses());}else{action("BUKA POS / OPENING BALANCE",()->openPosSession());}}
   int lastClosingBalance(){JSONArray list=entries("pos_closings");JSONObject latest=null;String latestDay="";for(int i=0;i<list.length();i++){JSONObject e=list.optJSONObject(i);if(e==null)continue;String d=entryDay(e);if(latest==null||d.compareTo(latestDay)>=0){latest=e;latestDay=d;}}if(latest==null)return Math.max(0,totalMoneyBalance());if(latest.has("closingBalance"))return Math.max(0,latest.optInt("closingBalance",0));int legacy=latest.optInt("opening",0)+latest.optInt("cash",0);return Math.max(0,legacy);}
-  void startPosSession(String day,int amount){int max=lastClosingBalance();if(amount<0||amount>max){message("Opening mesti antara RM0.00 hingga "+money(max)+".");return;}if(posPrefs().edit().putBoolean("pos_session_open",true).putString("pos_session_day",day).putInt("pos_opening",amount).commit()){selectedCashDay=day;draw();}else message("Opening POS gagal disimpan.");}
+  void startPosSession(String day,int amount){int max=lastClosingBalance();if(amount<0||amount>max){message("Opening mesti antara RM0.00 hingga "+money(max)+".");return;}if(posPrefs().edit().putBoolean("pos_session_open",true).putString("pos_session_day",day).putInt("pos_opening",amount).commit()){
+  if(live!=null&&live.enabled())live.session(true,day,amount);
+  selectedCashDay=day;draw();
+}else message("Opening POS gagal disimpan.");}
   void openPosSession(){if(posSessionOpen()){message("Closing sesi semasa dahulu sebelum Opening baru.");return;}String last=posPrefs().getString("pos_last_closed_day","");String proposed=date();final String day=proposed;final int lastBalance=lastClosingBalance();LinearLayout box=col();box.setPadding(dp(16),dp(10),dp(16),dp(8));box.setBackgroundColor(cream);add(box,text("OPENING POS · "+day,18,blue,true),-1,-2);gap(box,8);add(box,text("Baki Closing Terakhir  "+money(lastBalance),14,gold,true),-1,-2);if(!last.isEmpty())add(box,text("Closing terakhir · "+last,11,muted,false),-1,-2);gap(box,8);EditText amount=priceField("Opening RM",String.format(Locale.US,"%.2f",lastBalance/100.0));add(box,text("Opening boleh RM0.00 hingga maksimum "+money(lastBalance)+".",12,muted,false),-1,-2);gap(box,5);add(box,amount,-1,-2);AlertDialog dlg=darkBuilder().setView(box).setPositiveButton("SIMPAN OPENING",null).setNeutralButton("MULA RM0.00",null).setNegativeButton("BATAL",null).create();dlg.setOnShowListener(v->{styleDarkDialogNow(dlg);dlg.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(x->{try{int value=parseCents(amount);if(value<0||value>lastBalance){message("Opening tak boleh lebih daripada Baki Closing Terakhir "+money(lastBalance)+".");return;}startPosSession(day,value);dlg.dismiss();}catch(Exception e){message("Masukkan jumlah Opening yang betul.");}});dlg.getButton(AlertDialog.BUTTON_NEUTRAL).setOnClickListener(x->{startPosSession(day,0);dlg.dismiss();});});dlg.show();}
   int closingOil(String day){return cashCategoryTotal(day,true,"Minyak kereta","Minyak Kereta","Minyak");}
   int closingRent(String day){return cashCategoryTotal(day,true,"Sewa");}
@@ -822,7 +827,9 @@ selectedDay=date();selectedMonth=selectedDay.substring(0,7);rangeStart=selectedD
     JSONArray closingCash=entries("cash_entries");
     saveClosingExpense(closingCash,day,"Minyak kereta",Math.max(0,pendingClosingOil));
     saveClosingExpense(closingCash,day,"Sewa",Math.max(0,pendingClosingRent));
-    if(!posPrefs().edit().putString("cash_entries",closingCash.toString()).putString("pos_closings",list.toString()).putBoolean("pos_session_open",false).putString("pos_last_closed_day",day).putInt("pos_opening",0).commit())throw new Exception();pendingClosingOil=-1;pendingClosingRent=-1;draw();showConfirmedClosingReport(day,receipt);}catch(Exception e){message("Closing gagal disimpan.");}}
+    if(!posPrefs().edit().putString("cash_entries",closingCash.toString()).putString("pos_closings",list.toString()).putBoolean("pos_session_open",false).putString("pos_last_closed_day",day).putInt("pos_opening",0).commit())throw new Exception();
+    if(live!=null&&live.enabled())live.session(false,day,balance);
+    pendingClosingOil=-1;pendingClosingRent=-1;draw();showConfirmedClosingReport(day,receipt);}catch(Exception e){message("Closing gagal disimpan.");}}
   void showConfirmedClosingReport(String day,String receipt){
     LinearLayout frame=col();frame.setPadding(dp(12),dp(6),dp(12),dp(8));frame.setBackgroundColor(cream);
     ScrollView scroll=new ScrollView(this);scroll.setVerticalScrollBarEnabled(false);scroll.setFillViewport(true);frame.addView(scroll,new LinearLayout.LayoutParams(-1,-2));
@@ -1401,6 +1408,13 @@ selectedDay=date();selectedMonth=selectedDay.substring(0,7);rangeStart=selectedD
   void refundSale(int saleIndex){
     if(branchAccounts.staff()){
       message("Refund pekerja memerlukan kelulusan Owner.");return;
+    }
+    JSONObject transaction=entries("stock_sales").optJSONObject(saleIndex);
+    String cloudId=transaction==null?"":transaction.optString("liveOrderId","");
+    if(!cloudId.isEmpty()&&live!=null&&live.enabled()){
+      if(!live.usable()){message("Refund Live perlu internet. Tiada rekod diubah.");return;}
+      live.refund(cloudId,"OWNER",()->refundSaleAuthorized(saleIndex,"OWNER"));
+      return;
     }
     refundSaleAuthorized(saleIndex,"OWNER");
   }
