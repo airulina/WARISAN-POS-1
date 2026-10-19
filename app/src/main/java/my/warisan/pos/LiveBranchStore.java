@@ -331,6 +331,7 @@ final class LiveBranchStore {
     DocumentReference ref=orders(receiptId),inv=inventory();
     ArrayList<Long> quantities=new ArrayList<>();
     for(int n:qty)quantities.add((long)n);
+    final int menuSlots=quantities.size();
     db.runTransaction(tx->{
       // Read ONLY the inventory; querying a nonexistent order UUID first
       // triggers Firestore read security rules before the atomic write.
@@ -377,7 +378,7 @@ final class LiveBranchStore {
         String reason=e.getMessage()==null?"Tiada butiran ralat":e.getMessage();
         if(reason.contains("PERMISSION_DENIED")||reason.contains("PERMISSION DENIED")){
           host.message("ORDER LIVE DISEKAT FIRESTORE. Menyemak kebenaran baca Cloud...");
-          diagnoseReserveRejection(receiptId,quantities.size(),reason);
+          diagnoseReserveRejection(receiptId,menuSlots,reason);
         }else{
           host.message("ORDER LIVE GAGAL (stok + resit): "+reason);
         }
@@ -432,7 +433,8 @@ final class LiveBranchStore {
     branch().get(com.google.firebase.firestore.Source.SERVER)
       .addOnCompleteListener(task->{
         if(task.isSuccessful()&&task.getResult().exists()){
-          result[2]=""+task.getResult().getString("operatingStatus");
+          String branchStatus=task.getResult().getString("operatingStatus");
+          result[2]=branchStatus==null?"OPEN (default)":branchStatus;
         }else result[2]="DITOLAK / GAGAL · "+diagnosticCode(task.getException());
         completed.run();
       });
