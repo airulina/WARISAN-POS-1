@@ -571,7 +571,7 @@ final class LiveBranchStore {
                 (worker==null||worker.isEmpty()?"":" · "+worker)+
                 (stamp.isEmpty()?"":" · "+stamp);
               String before=openingSummary.put(branchId,line);
-              if(!line.equals(before)&&host.activePage==3&&accounts.owner())host.draw();
+              if(!line.equals(before)&&(host.activePage==3||host.activePage==15)&&accounts.owner())host.draw();
             });
           ownerSessionListeners.add(listener);
           ListenerRegistration loginListener=b.getReference().collection("staffLogins")
@@ -588,11 +588,11 @@ final class LiveBranchStore {
                     .format(latest.getTimestamp("createdAt").toDate());
               }
               String old=staffLoginSummary.put(branchId,line);
-              if(!line.equals(old)&&host.activePage==3&&accounts.owner())host.draw();
+              if(!line.equals(old)&&(host.activePage==3||host.activePage==15)&&accounts.owner())host.draw();
             });
           ownerSessionListeners.add(loginListener);
         }
-        if(host.activePage==3&&accounts.owner())host.draw();
+        if((host.activePage==3||host.activePage==15)&&accounts.owner())host.draw();
       });
   }
   void drawOpeningSummary(){
