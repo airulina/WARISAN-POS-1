@@ -339,5 +339,43 @@ try{
   });
   await assertSucceeds(restore.commit());
   await assertSucceeds(getDoc(d(staff,inv)));
-  console.log('PASS: Owner/staff access, atomic sale/refund, archive former employee, restore access, preserve history.');
+
+  // Real upgraded shops may retain an extra Cloud stock slot for an old
+  // hidden product while the worker app has only seven menu slots.
+  // Rule-enforced equality rejects the unpadded receipt; padding zero safely
+  // keeps old stock while permitting an otherwise valid Live transaction.
+  const current=await getDoc(d(owner,inv));
+  const legacyStock=[...current.data().stock,4];
+  await assertSucceeds(updateDoc(d(owner,inv),{stock:legacyStock}));
+  const wrongPath=branch+'/liveOrders/old-slot-unpadded';
+  await assertFails(runTransaction(staff,async tx=>{
+    const stock=await tx.get(d(staff,inv));
+    tx.update(d(staff,inv),{
+      stock:stock.data().stock,lastOrderId:'old-slot-unpadded',
+      lastStockAction:'RESERVE',updatedAt:serverTimestamp()
+    });
+    tx.set(d(staff,wrongPath),{
+      ownerUid:'owner',branchId:'branch1',actorUid:'staff',
+      deviceOrderId:'old-slot-unpadded',deviceId:'phone1',day:today,
+      total:100,qty:[0,0,0,0,1,0,0],
+      status:'PENDING',createdAt:serverTimestamp()
+    });
+  }));
+  assert.equal((await getDoc(d(owner,inv))).data().stock.length,8);
+  const paddedPath=branch+'/liveOrders/old-slot-padded';
+  await assertSucceeds(runTransaction(staff,async tx=>{
+    const stock=await tx.get(d(staff,inv));
+    tx.update(d(staff,inv),{
+      stock:stock.data().stock,lastOrderId:'old-slot-padded',
+      lastStockAction:'RESERVE',updatedAt:serverTimestamp()
+    });
+    tx.set(d(staff,paddedPath),{
+      ownerUid:'owner',branchId:'branch1',actorUid:'staff',
+      deviceOrderId:'old-slot-padded',deviceId:'phone1',day:today,
+      total:100,qty:[0,0,0,0,1,0,0,0],
+      status:'PENDING',createdAt:serverTimestamp()
+    });
+  }));
+  assert.equal((await getDoc(d(owner,inv))).data().stock.length,8);
+  console.log('PASS: Owner/staff access, atomic sale/refund, legacy stock slots, staff permissions, preserve history.');
 }finally{await env.cleanup();}
