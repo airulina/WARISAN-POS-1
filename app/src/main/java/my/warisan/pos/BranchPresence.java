@@ -26,6 +26,7 @@ final class BranchPresence {
   interface LocationResult { void done(Location location); }
   final MainActivity host;
   private Runnable permissionRetry;
+  private String pendingPurpose="";
   private LocationListener listener;
   private final Handler handler=new Handler(Looper.getMainLooper());
   BranchPresence(MainActivity host){this.host=host;}
@@ -42,8 +43,16 @@ final class BranchPresence {
   }
   void permissionAnswer(int[] results){
     Runnable again=permissionRetry;permissionRetry=null;
+    String purpose=pendingPurpose;pendingPurpose="";
     if(permitted()&&again!=null)again.run();
-    else host.message("Lokasi tepat diperlukan untuk semakan Opening. Benarkan Precise Location dalam tetapan Android.");
+    else {
+      if(host.branchAccounts.staff()){
+        if("LOGIN".equals(purpose))recordLoginCheck("GPS_UNAVAILABLE",-1);
+        else if("OPENING".equals(purpose))
+          recordOpeningCheck("GPS_UNAVAILABLE",-1,host.businessDay());
+      }
+      host.message("Precise Location tidak dibenarkan. Lokasi tidak boleh disahkan; Opening pekerja akan disekat.");
+    }
   }
   void location(LocationResult complete){
     if(!permitted()){complete.done(null);return;}
@@ -93,7 +102,9 @@ final class BranchPresence {
     String branchName=host.branchAccounts.branchName();
     host.darkBuilder().setTitle("LOKASI BRANCH · "+branchName)
       .setMessage("Owner perlu berada di kios yang betul. GPS lokasi tepat disimpan sebagai pusat kawasan. Radius 250 meter. Lokasi pekerja hanya diperiksa ketika Opening, bukan dipantau sepanjang hari.")
-      .setPositiveButton("TETAPKAN GPS",(d,w)->requestGps(()->location(loc->{
+      .setPositiveButton("TETAPKAN GPS",(d,w)->{
+        pendingPurpose="OWNER";
+        requestGps(()->location(loc->{
         if(loc==null){host.message("Lokasi belum dapat dikesan. Hidupkan GPS dan cuba di kawasan terbuka.");return;}
         if(mocked(loc)){host.message("Lokasi simulasi ditolak.");return;}
         String owner=host.branchAccounts.ownerUid(),branch=host.branchAccounts.branchId();
@@ -106,7 +117,8 @@ final class BranchPresence {
               " meter. Pekerja mesti berada di kawasan ini semasa Opening.")
             .setPositiveButton("OK",null).show())
           .addOnFailureListener(e->host.message("Lokasi gagal disimpan: "+e.getMessage()));
-      }))).setNegativeButton("BATAL",null).show();
+        }));
+      }).setNegativeButton("BATAL",null).show();
   }
   void ownerSetBranchOpenState(){
     if(!host.branchAccounts.owner()){host.message("Hanya Owner boleh buka/tutup branch.");return;}
@@ -148,6 +160,7 @@ final class BranchPresence {
       if(lat==null||lon==null||radius==null){
         recordLoginCheck("NOT_CONFIGURED",-1);return;
       }
+      pendingPurpose="LOGIN";
       requestGps(()->location(loc->{
         if(loc==null){recordLoginCheck("GPS_UNAVAILABLE",-1);return;}
         if(mocked(loc)){recordLoginCheck("MOCK_LOCATION",-1);return;}
@@ -203,6 +216,7 @@ final class BranchPresence {
             "\nMinta Owner pergi ke branch sebenar dan pilih Set Lokasi GPS. Opening tidak boleh dibuat sehingga lokasi disahkan.")
           .setPositiveButton("FAHAM",null).show();return;
       }
+      pendingPurpose="OPENING";
       requestGps(()->location(loc->{
         if(loc==null){recordOpeningCheck("GPS_UNAVAILABLE",-1,day);
           host.message("GPS tidak dapat mengesahkan lokasi. Opening dibatalkan, cuba di kawasan terbuka.");return;}
