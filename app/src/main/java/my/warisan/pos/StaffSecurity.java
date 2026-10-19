@@ -365,7 +365,9 @@ final class StaffSecurity {
       .addSnapshotListener((profile,error)->{
         if(!accounts.staff()||accounts.user()==null||!uid.equals(accounts.user().getUid()))return;
         if(error!=null)return;
-        if(profile!=null&&profile.exists()){
+        // Avoid logging out from an old cached profile before first device binding
+        // has been confirmed by the Firestore server.
+        if(profile!=null&&profile.exists()&&!profile.getMetadata().isFromCache()){
           String bound=profile.getString("deviceId");
           String device=host.getSharedPreferences("warisan_identity",0).getString("device_uid","");
           if(bound==null||!bound.equals(device)){
