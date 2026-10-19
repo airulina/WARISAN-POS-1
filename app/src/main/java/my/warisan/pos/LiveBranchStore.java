@@ -36,7 +36,7 @@ final class LiveBranchStore {
   private final BranchAccounts accounts;
   private ListenerRegistration inventoryListener,dayListener,orderListener;
   private String activeKey="",activeDay="";
-  private volatile boolean enabled=false,serverConfirmed=false,busy=false;
+  private volatile boolean enabled=false,serverConfirmed=false,busy=false,inventoryChecked=false;
   private volatile List<Long> cloudStock=new ArrayList<>();
   private volatile long daySales=0,dayCash=0,dayQr=0,dayTransactions=0;
   private String cloudBranchName="";
@@ -52,6 +52,7 @@ final class LiveBranchStore {
   }
   boolean enabled(){return enabled&&accounts.active();}
   boolean usable(){return enabled()&&serverConfirmed;}
+  boolean inventoryChecked(){return inventoryChecked;}
   long sales(){return daySales;}
   long cash(){return dayCash;}
   long qr(){return dayQr;}
@@ -73,6 +74,7 @@ final class LiveBranchStore {
     if(dayListener!=null){dayListener.remove();dayListener=null;}
     if(orderListener!=null){orderListener.remove();orderListener=null;}
     activeKey="";activeDay="";enabled=false;serverConfirmed=false;busy=false;
+    inventoryChecked=false;
     cloudStock=new ArrayList<>();
   }
   void attach(){
@@ -83,8 +85,12 @@ final class LiveBranchStore {
       inventoryListener=inventory().addSnapshotListener(MetadataChanges.INCLUDE,(snapshot,error)->{
         if(!key.equals(activeKey))return;
         if(error!=null){serverConfirmed=false;host.message("Live inventory: "+error.getMessage());return;}
-        if(snapshot==null||!snapshot.exists()){
-          enabled=false;serverConfirmed=false;return;
+        if(snapshot==null)return;
+        if(!snapshot.getMetadata().isFromCache())inventoryChecked=true;
+        if(!snapshot.exists()){
+          enabled=false;serverConfirmed=false;
+          if(host.activePage==13&&inventoryChecked)host.draw();
+          return;
         }
         enabled=true;
         serverConfirmed=!snapshot.getMetadata().isFromCache()&&!snapshot.getMetadata().hasPendingWrites();
@@ -115,7 +121,7 @@ final class LiveBranchStore {
             host.loadMenu();
           }
         }
-        if(host.activePage==0||host.activePage==1||host.activePage==12)host.draw();
+        if(host.activePage==0||host.activePage==1||host.activePage==12||host.activePage==13)host.draw();
       });
       recoverPendingOrders();
       reconcileLocalPending();
