@@ -204,6 +204,90 @@ final class StaffSecurity {
         showRegistrationProblem(friendlyRegistrationError("AUTH",error),error));
   }
 
+
+  /** Restore a missing member document using an ACTIVE verified staff profile.
+   *  Owner action only. Never creates a new Auth user or changes POS records.
+   */
+  void repairStaffMembership(){
+    if(!accounts.owner()||accounts.user()==null){
+      host.message("Pemulihan akses pekerja hanya untuk Owner.");return;
+    }
+    EditText email=input("Email pekerja yang sudah didaftarkan",false);
+    host.darkBuilder().setTitle("BAIKI AKSES PEKERJA")
+      .setMessage("Gunakan email pekerja sedia ada. Semakan ini hanya pulihkan "+
+        "rekod keahlian branch yang hilang, bukan reset data atau password.")
+      .setView(email)
+      .setPositiveButton("SEMAK",(d,w)->{
+        String mail=email.getText().toString().trim().toLowerCase(Locale.ROOT);
+        if(!android.util.Patterns.EMAIL_ADDRESS.matcher(mail).matches()){
+          host.message("Masukkan email pekerja yang sah.");return;
+        }
+        final String ownerId=accounts.ownerUid();
+        db.collection("staffEmails").document(mail)
+          .get(com.google.firebase.firestore.Source.SERVER)
+          .addOnSuccessListener(lock->{
+            if(!accounts.owner()||!ownerId.equals(accounts.ownerUid()))return;
+            if(!lock.exists()||!ownerId.equals(lock.getString("ownerUid"))||
+              !"STAFF".equals(lock.getString("role"))||
+              Boolean.TRUE.equals(lock.getBoolean("removed"))){
+              host.message("Rekod email pekerja aktif tidak dijumpai. "+
+                "Tiada data dipulihkan; semak daftar pekerja lama.");return;
+            }
+            final String workerId=lock.getString("workerUid");
+            final String branchId=lock.getString("branchId");
+            if(workerId==null||workerId.isEmpty()||branchId==null||branchId.isEmpty()){
+              host.message("Indeks pekerja tidak lengkap. Tiada perubahan dibuat.");return;
+            }
+            db.collection("staffProfiles").document(workerId)
+              .get(com.google.firebase.firestore.Source.SERVER)
+              .addOnSuccessListener(profile->{
+                if(!accounts.owner()||!ownerId.equals(accounts.ownerUid()))return;
+                if(!profile.exists()||!ownerId.equals(profile.getString("ownerUid"))||
+                  !branchId.equals(profile.getString("branchId"))||
+                  !mail.equals(profile.getString("email"))||
+                  !"STAFF".equals(profile.getString("role"))||
+                  !Boolean.TRUE.equals(profile.getBoolean("active"))||
+                  Boolean.TRUE.equals(profile.getBoolean("removed"))){
+                  host.message("Profil pekerja tidak aktif / tidak sepadan. "+
+                    "Keahlian tidak akan dibuat.");return;
+                }
+                DocumentReference member=db.collection("workspaces").document(ownerId)
+                  .collection("branches").document(branchId).collection("members")
+                  .document(workerId);
+                member.get(com.google.firebase.firestore.Source.SERVER)
+                  .addOnSuccessListener(existing->{
+                    if(!accounts.owner()||!ownerId.equals(accounts.ownerUid()))return;
+                    if(existing.exists()){
+                      host.message("Keahlian pekerja sudah wujud. Jika login masih "+
+                        "PERMISSION_DENIED, semak dan Publish firestore.rules terkini.");
+                      return;
+                    }
+                    host.darkBuilder().setTitle("SAHKAN PULIH KEAHLIAN")
+                      .setMessage(mail+"\nBranch: "+profile.getString("branchName")+
+                        "\n\nKeahlian branch tidak dijumpai tetapi profil aktif "+
+                        "dan milik Owner ini. Pulihkan rekod ahli tanpa mengubah jualan?")
+                      .setPositiveButton("PULIHKAN",(dialog,which)->{
+                        if(!accounts.owner()||!ownerId.equals(accounts.ownerUid()))return;
+                        Map<String,Object> data=new HashMap<>();
+                        data.put("uid",workerId);data.put("email",mail);
+                        data.put("role","STAFF");data.put("active",true);
+                        data.put("removed",false);data.put("ownerUid",ownerId);
+                        data.put("branchId",branchId);
+                        data.put("branchName",profile.getString("branchName")==null?
+                          branchId:profile.getString("branchName"));
+                        data.put("createdAt",FieldValue.serverTimestamp());
+                        member.set(data).addOnSuccessListener(v->
+                          host.message("Keahlian pekerja dipulihkan. Cuba login semula."))
+                          .addOnFailureListener(e->host.message("Keahlian gagal disimpan: "+
+                            e.getMessage()+". Semak Firebase Rules."));
+                      }).setNegativeButton("BATAL",null).show();
+                  }).addOnFailureListener(e->host.message(
+                    "Gagal semak keahlian: "+e.getMessage()));
+              }).addOnFailureListener(e->host.message("Gagal baca profil pekerja: "+e.getMessage()));
+          }).addOnFailureListener(e->host.message("Gagal baca indeks email pekerja: "+
+            e.getMessage()+". Semak Firestore Rules."));
+      }).setNegativeButton("BATAL",null).show();
+  }
   void loginEmployee(){
     LinearLayout form=host.col();form.setPadding(host.dp(18),0,host.dp(18),0);
     EditText email=input("Email",false),password=input("Password",true);
