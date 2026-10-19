@@ -269,6 +269,12 @@ final class OwnerCashflow {
     host.cashDailyMode=false;
     host.heading("DUIT · OVERALL",
       "Keseluruhan jualan. Tekan TOTAL SALE untuk pilih branch.");
+    host.action("🔓  OPENING / CLOSING · "+accounts.branchName(),()->{
+      host.activePage=22;host.draw();
+    });
+    host.add(host.body,host.text("Sesi Opening/Closing untuk branch Owner yang sedang aktif. "+
+      "Tidak mengubah rekod branch lain.",11,host.muted,false),-1,-2);
+    host.gap(host.body,8);
     ensureLoaded();
     host.add(host.body,host.text("SEMUA BRANCH · "+period(),12,host.gold,true),-1,-2);
     host.gap(host.body,7);
