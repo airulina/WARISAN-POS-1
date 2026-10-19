@@ -25,7 +25,15 @@ public final class WarisanLanguageSmoke {
     assertEqual("BM identity","BRANCH PEKERJA: BRANCH UTAMA",false,
       "CAWANGAN PEKERJA: CAWANGAN UTAMA");
     assertEqual("EN identity","BRANCH PEKERJA: BRANCH UTAMA",true,
-      "BRANCH EMPLOYEE: MAIN BRANCH");
+      "EMPLOYEE BRANCH: MAIN BRANCH");
+    assertEqual("BM branch message","Order tempatan dan order Cloud branch lain, lengkap dengan nombor resit serta asal branch.",false,
+      "Pesanan tempatan dan pesanan awan daripada cawangan lain, lengkap dengan nombor resit serta cawangan asal.");
+    assertEqual("EN branch message","Order tempatan dan order Cloud branch lain, lengkap dengan nombor resit serta asal branch.",true,
+      "Local orders and Cloud orders from other branches, including receipt numbers and originating branches.");
+    assertEqual("BM branch label","PEMBEKAL · BRANCH AKTIF",false,"PEMBEKAL · CAWANGAN AKTIF");
+    assertEqual("EN branch label","PEMBEKAL · BRANCH AKTIF",true,"SUPPLIERS · ACTIVE BRANCH");
+    assertEqual("BM sentence case","Pilih menu",false,"Pilih menu");
+    assertEqual("EN sentence case","Pilih menu",true,"Select items");
     assertEqual("proper name","WARISAN POS",false,"WARISAN POS");
     assertEqual("uri","https://test.example/order/abc",false,"https://test.example/order/abc");
     assertEqual("dynamic RM","RM 1,300.50",true,"RM 1,300.50");
