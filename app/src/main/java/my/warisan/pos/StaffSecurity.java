@@ -148,6 +148,14 @@ final class StaffSecurity {
         com.google.firebase.firestore.WriteBatch batch=db.batch();
         batch.set(db.collection("staffProfiles").document(worker.getUid()),profile);
         batch.set(member,new HashMap<>(profile));
+        Map<String,Object> emailRole=new HashMap<>();
+        emailRole.put("email",mail);emailRole.put("ownerUid",oid);
+        emailRole.put("workerUid",worker.getUid());emailRole.put("branchId",bid);
+        emailRole.put("role","STAFF");emailRole.put("removed",false);
+        emailRole.put("updatedAt",FieldValue.serverTimestamp());
+        // An email already registered as STAFF is reserved across Google/provider logins.
+        // Firestore rules reject Owner signup while this role is active.
+        batch.set(db.collection("staffEmails").document(mail),emailRole);
         batch.commit().addOnSuccessListener(done->
           worker.sendEmailVerification().addOnCompleteListener(task->{
             staffProvisionAuth.signOut();
@@ -370,6 +378,17 @@ final class StaffSecurity {
     else changes.put("removedAt",FieldValue.delete());
     batch.update(worker.member.getReference(),changes);
     batch.update(profile,changes);
+    String staffMail=worker.email().trim().toLowerCase(Locale.ROOT);
+    if(android.util.Patterns.EMAIL_ADDRESS.matcher(staffMail).matches()){
+      Map<String,Object> emailRole=new HashMap<>();
+      emailRole.put("email",staffMail);emailRole.put("workerUid",worker.member.getId());
+      emailRole.put("ownerUid",ownerId);emailRole.put("branchId",worker.branchId);
+      emailRole.put("role","STAFF");emailRole.put("removed",removed);
+      emailRole.put("updatedAt",FieldValue.serverTimestamp());
+      // Merge supports workers enrolled on older APKs without a role index.
+      batch.set(db.collection("staffEmails").document(staffMail),emailRole,
+        com.google.firebase.firestore.SetOptions.merge());
+    }
     batch.commit().addOnSuccessListener(v->{
       if(!accounts.owner()||!ownerId.equals(accounts.ownerUid()))return;
       host.message(removed?"Pekerja dibuang daripada akses semua fungsi branch.":
