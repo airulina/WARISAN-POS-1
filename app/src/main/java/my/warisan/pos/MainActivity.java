@@ -254,7 +254,7 @@ selectedDay=date();selectedMonth=selectedDay.substring(0,7);rangeStart=selectedD
       return;
     }
     if(branchAccounts!=null&&branchAccounts.staff()
-      &&activePage!=0&&activePage!=11&&activePage!=5&&activePage!=12&&activePage!=14)activePage=0;
+      &&activePage!=0&&activePage!=11&&activePage!=5&&activePage!=12&&activePage!=14&&activePage!=20)activePage=0;
     if(activePage!=0){drawPage();addNavigation(screen);return;}
     LinearLayout header=row();ImageView logo=new ImageView(this);setStoreLogo(logo);makeCircle(logo);add(header,logo,49,49);
     LinearLayout heading=col();heading.setPadding(dp(10),0,0,0);add(heading,text("WARISAN POS",21,blue,true),-1,-2);LinearLayout sub=row();sub.addView(text("KIOS WARISAN  ·  SISTEM JUALAN",10,muted,true),new LinearLayout.LayoutParams(0,-2,1));TextView liveClock=text("",10,gold,true);liveClock.setGravity(Gravity.RIGHT|Gravity.CENTER_VERTICAL);add(sub,liveClock,-2,-2);add(heading,sub,-1,-2);startHeaderClock(liveClock);header.addView(heading,new LinearLayout.LayoutParams(0,-2,1));
@@ -301,8 +301,8 @@ selectedDay=date();selectedMonth=selectedDay.substring(0,7);rangeStart=selectedD
     if(count()==0){TextView empty=text("Belum ada pesanan. Pilih menu di atas.",13,muted,false);empty.setPadding(0,dp(13),0,dp(13));add(basket,empty,-1,-2);return;}
     for(int i=0;i<qty.length;i++)if(qty[i]>0){final int id=i;LinearLayout r=row();r.addView(text(names[i]+" × "+qty[i],14,ink,true),new LinearLayout.LayoutParams(0,dp(39),1));add(r,text(money(qty[i]*prices[i]),13,blue,true),-2,-2);TextView minus=chip("−",0xffc83f46,Color.WHITE);LinearLayout.LayoutParams m=params(32,30);m.leftMargin=dp(8);r.addView(minus,m);minus.setOnClickListener(v->{qty[id]--;draw();});add(basket,r,-1,-2);}
   }
-  void addNavigation(LinearLayout screen){LinearLayout nav=row();nav.setBackgroundColor(cream);nav.setPadding(dp(7),dp(7),dp(7),dp(9));String[] labels=branchAccounts.staff()?new String[]{"MENU","ORDER","HARI INI","PRINTER","ACCOUNT"}:(english()?new String[]{"MENU","ORDERS","STOCK","CASH","BRANCH","SETTINGS"}:new String[]{"MENU","ORDER","STOK","DUIT","BRANCH","SETTING"});int[] pages=branchAccounts.staff()?new int[]{0,11,12,14,5}:new int[]{0,11,1,3,15,4};
-    for(int i=0;i<labels.length;i++){final int page=pages[i];boolean selected=(activePage==page)||(page==1&&activePage==13)||(page==3&&(activePage==2||activePage==16||activePage==17||activePage==18||activePage==19))||(page==4&&activePage>=4&&activePage<=10);TextView tab=text(labels[i],branchAccounts.staff()?10:9,selected?Color.rgb(19,24,34):Color.WHITE,true);tab.setGravity(Gravity.CENTER);tab.setBackground(shape(selected?gold:Color.rgb(20,58,101),11));LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(0,dp(49),1);p.setMargins(dp(3),0,dp(3),0);nav.addView(tab,p);tab.setOnClickListener(v->{activePage=page;draw();});}add(screen,nav,-1,-2);}
+  void addNavigation(LinearLayout screen){LinearLayout nav=row();nav.setBackgroundColor(cream);nav.setPadding(dp(7),dp(7),dp(7),dp(9));String[] labels=branchAccounts.staff()?new String[]{"MENU","ORDER","STOK","HARI INI","PRINTER","ACCOUNT"}:(english()?new String[]{"MENU","ORDERS","STOCK","CASH","BRANCH","SETTINGS"}:new String[]{"MENU","ORDER","STOK","DUIT","BRANCH","SETTING"});int[] pages=branchAccounts.staff()?new int[]{0,11,20,12,14,5}:new int[]{0,11,1,3,15,4};
+    for(int i=0;i<labels.length;i++){final int page=pages[i];boolean selected=(activePage==page)||(page==1&&activePage==13)||(page==3&&(activePage==2||activePage==16||activePage==17||activePage==18||activePage==19||activePage==21))||(page==4&&activePage>=4&&activePage<=10);TextView tab=text(labels[i],branchAccounts.staff()?10:9,selected?Color.rgb(19,24,34):Color.WHITE,true);tab.setGravity(Gravity.CENTER);tab.setBackground(shape(selected?gold:Color.rgb(20,58,101),11));LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(0,dp(49),1);p.setMargins(dp(3),0,dp(3),0);nav.addView(tab,p);tab.setOnClickListener(v->{activePage=page;draw();});}add(screen,nav,-1,-2);}
   void heading(String title,String subtitle){
     LinearLayout brand=row();brand.setGravity(Gravity.CENTER_VERTICAL);ImageView logo=new ImageView(this);setStoreLogo(logo);makeCircle(logo);add(brand,logo,44,44);LinearLayout brandText=col();brandText.setPadding(dp(9),0,0,0);add(brandText,text("WARISAN POS",18,blue,true),-1,-2);add(brandText,text("KIOS WARISAN  ·  SISTEM JUALAN",9,muted,true),-1,-2);brand.addView(brandText,new LinearLayout.LayoutParams(0,-2,1));TextView clock=text("",9,gold,true);clock.setGravity(Gravity.RIGHT|Gravity.CENTER_VERTICAL);add(brand,clock,-2,-2);startHeaderClock(clock);add(body,brand,-1,-2);gap(body,15);
     add(body,text(title,23,ink,true),-1,-2);add(body,text(subtitle,12,muted,false),-1,-2);gap(body,16);
@@ -387,7 +387,7 @@ selectedDay=date();selectedMonth=selectedDay.substring(0,7);rangeStart=selectedD
   }
   void previewSupplierReceipt(){int original=17500,deduction=2500,paid=15000;String remark="Contoh remark / alasan tolakan";showSupplierReceipt(supplierReceipt(-1,original,deduction,paid,remark),-1,original,deduction,paid,remark);}
   void paySupplier(){paySupplier(-1,"Sate");}
-  void paySupplier(int group,String label){int due=supplierDue(group);if(due<=0){message("Tiada bayaran pembekal "+label+" tertunggak.");return;}LinearLayout form=col();form.setPadding(dp(18),dp(5),dp(18),0);add(form,text("Jumlah perlu dibayar: "+money(due),15,ink,true),-1,-2);EditText deduction=priceField("Jumlah tolakan RM","0.00");EditText remark=new EditText(this);remark.setHint("Remark / alasan tolakan");styleInput(remark);add(form,text("Jumlah tolakan",12,muted,true),-1,-2);add(form,deduction,-1,-2);add(form,text("Remark",12,muted,true),-1,-2);add(form,remark,-1,-2);AlertDialog dialog=darkBuilder().setTitle("Telah dibayar · "+label).setView(form).setPositiveButton("CONFIRM",null).setNegativeButton("Batal",null).create();dialog.setOnShowListener(v->{styleDarkDialogNow(dialog);dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(x->{try{int cut=parseCents(deduction);String note=remark.getText().toString().trim();if(cut<0||cut>due){message("Jumlah tolakan tidak sah");return;}if(cut>0&&note.isEmpty()){message("Isi remark / alasan untuk jumlah tolakan");return;}int paid=due-cut;String paidAt=timestamp();JSONObject expense=new JSONObject();expense.put("time",paidAt);expense.put("businessDay",businessDay());expense.put("month",businessDay().substring(0,7));expense.put("amount",-paid);expense.put("category","Bayaran Pembekal · "+label);expense.put("note",note);expense.put("supplierOriginal",due);expense.put("supplierDeduction",cut);expense.put("supplierPaid",paid);expense.put("supplierGroup",group);expense.put("supplierLabel",label);expense.put("supplierItemsSnapshot",supplierItems(group).toString());JSONArray cash=entries("cash_entries");cash.put(expense);String key=supplierDueKey(group);String detailSnapshot=supplierItems(group).toString();posPrefs().edit().putString("supplier_receipt_snapshot_"+group,detailSnapshot).commit();String printed=supplierReceipt(group,due,cut,paid,note,paidAt);android.content.SharedPreferences.Editor editor=posPrefs().edit().putString("cash_entries",cash.toString()).putInt(key,0).remove(supplierItemsKey(group));if(!editor.commit())throw new Exception();dialog.dismiss();draw();posPrefs().edit().putString(supplierItemsKey(group),detailSnapshot).commit();showSupplierReceipt(printed,group,due,cut,paid,note,paidAt);posPrefs().edit().remove(supplierItemsKey(group)).apply();}catch(Exception e){message("Semak jumlah tolakan dan cuba lagi.");}});});dialog.show();}
+  void paySupplier(int group,String label){if(!branchAccounts.owner()){message("Owner sahaja boleh bayar pembekal.");return;}int due=supplierDue(group);if(due<=0){message("Tiada bayaran pembekal "+label+" tertunggak.");return;}LinearLayout form=col();form.setPadding(dp(18),dp(5),dp(18),0);add(form,text("Jumlah perlu dibayar: "+money(due),15,ink,true),-1,-2);EditText deduction=priceField("Jumlah tolakan RM","0.00");EditText remark=new EditText(this);remark.setHint("Remark / alasan tolakan");styleInput(remark);add(form,text("Jumlah tolakan",12,muted,true),-1,-2);add(form,deduction,-1,-2);add(form,text("Remark",12,muted,true),-1,-2);add(form,remark,-1,-2);AlertDialog dialog=darkBuilder().setTitle("Telah dibayar · "+label).setView(form).setPositiveButton("CONFIRM",null).setNegativeButton("Batal",null).create();dialog.setOnShowListener(v->{styleDarkDialogNow(dialog);dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(x->{try{int cut=parseCents(deduction);String note=remark.getText().toString().trim();if(cut<0||cut>due){message("Jumlah tolakan tidak sah");return;}if(cut>0&&note.isEmpty()){message("Isi remark / alasan untuk jumlah tolakan");return;}int paid=due-cut;String paidAt=timestamp();JSONObject expense=new JSONObject();expense.put("time",paidAt);expense.put("businessDay",businessDay());expense.put("month",businessDay().substring(0,7));expense.put("amount",-paid);expense.put("category","Bayaran Pembekal · "+label);expense.put("note",note);expense.put("supplierOriginal",due);expense.put("supplierDeduction",cut);expense.put("supplierPaid",paid);expense.put("supplierGroup",group);expense.put("supplierLabel",label);expense.put("supplierItemsSnapshot",supplierItems(group).toString());JSONArray cash=entries("cash_entries");cash.put(expense);String key=supplierDueKey(group);String detailSnapshot=supplierItems(group).toString();posPrefs().edit().putString("supplier_receipt_snapshot_"+group,detailSnapshot).commit();String printed=supplierReceipt(group,due,cut,paid,note,paidAt);android.content.SharedPreferences.Editor editor=posPrefs().edit().putString("cash_entries",cash.toString()).putInt(key,0).remove(supplierItemsKey(group));if(!editor.commit())throw new Exception();dialog.dismiss();draw();posPrefs().edit().putString(supplierItemsKey(group),detailSnapshot).commit();showSupplierReceipt(printed,group,due,cut,paid,note,paidAt);posPrefs().edit().remove(supplierItemsKey(group)).apply();}catch(Exception e){message("Semak jumlah tolakan dan cuba lagi.");}});});dialog.show();}
 
 
   void supplierReceiptHistory(int group,String label){
@@ -494,6 +494,7 @@ selectedDay=date();selectedMonth=selectedDay.substring(0,7);rangeStart=selectedD
     darkBuilder().setTitle("History bayaran pembekal").setItems(rows,(d,which)->{JSONObject e=records.get(which);int group=e.optInt("supplierGroup",-999);String label=e.optString("supplierLabel",e.optString("category","").replace("Bayaran Pembekal · ",""));if(group==-999){message(label+" · "+money(e.optInt("supplierPaid",Math.abs(e.optInt("amount")))));return;}try{int original=e.optInt("supplierOriginal",Math.abs(e.optInt("amount"))),cut=e.optInt("supplierDeduction",0),paid=e.optInt("supplierPaid",Math.abs(e.optInt("amount")));String note=e.optString("note","");String snapshot=e.optString("supplierItemsSnapshot","");String key=supplierItemsKey(group);String before=posPrefs().getString(key,"[]");if(!snapshot.isEmpty())posPrefs().edit().putString(key,snapshot).commit();String receiptTime=e.optString("time","");if(receiptTime.isEmpty())receiptTime=e.optString("businessDay","");if(receiptTime.isEmpty())receiptTime=e.optString("month","");String printed=supplierReceipt(group,original,cut,paid,note,receiptTime);showSupplierReceipt(printed,group,original,cut,paid,note,receiptTime);posPrefs().edit().putString(key,before).apply();}catch(Exception ex){message("Resit lama tidak dapat dibuka.");}}).setNegativeButton("Tutup",null).show();
   }
   void supplierHub(){
+    if(!branchAccounts.owner()){message("Bayaran pembekal hanya untuk Owner.");return;}
     LinearLayout box=col();box.setPadding(dp(14),dp(12),dp(14),dp(12));box.setBackgroundColor(cream);ScrollView sc=new ScrollView(this);sc.setFillViewport(true);sc.setBackgroundColor(cream);sc.addView(box);AlertDialog dlg=new AlertDialog.Builder(this).setTitle("Bayaran Pembekal").setView(sc).setNegativeButton("Tutup",null).create();
     int dueSate=supplierDue(-1);LinearLayout sate=col();sate.setPadding(dp(10),dp(10),dp(10),dp(10));sate.setBackground(shape(surface,11));add(sate,text("SATE",13,ink,true),-1,-2);add(sate,text("Baki perlu dibayar  "+money(dueSate),12,dueSate>0?gold:0xff46c979,true),-1,-2);LinearLayout sr=row();TextView sp=chip("TELAH DIBAYAR",blue,Color.WHITE);TextView sh=chip("HISTORY RESIT",0xff294563,Color.WHITE);sr.addView(sp,new LinearLayout.LayoutParams(0,dp(40),1));LinearLayout.LayoutParams hp=new LinearLayout.LayoutParams(0,dp(40),1);hp.leftMargin=dp(6);sr.addView(sh,hp);add(sate,sr,-1,-2);sp.setOnClickListener(v->{dlg.dismiss();paySupplier(-1,"Sate");});sh.setOnClickListener(v->{dlg.dismiss();supplierReceiptHistory(-1,"Sate");});add(box,sate,-1,-2);gap(box,8);
     for(int id=3;id<names.length;id++){if(id==4||posPrefs().getBoolean("menu_hidden_"+id,false)||!supplierItem(id))continue;final int sid=id;int due=supplierDue(sid);LinearLayout c=col();c.setPadding(dp(10),dp(10),dp(10),dp(10));c.setBackground(shape(surface,11));add(c,text(names[sid].toUpperCase(new Locale("ms","MY")),13,ink,true),-1,-2);add(c,text("Baki perlu dibayar  "+money(due),12,due>0?gold:0xff46c979,true),-1,-2);LinearLayout rr=row();TextView p=chip("TELAH DIBAYAR",blue,Color.WHITE),h=chip("HISTORY RESIT",0xff294563,Color.WHITE);rr.addView(p,new LinearLayout.LayoutParams(0,dp(40),1));LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(0,dp(40),1);lp.leftMargin=dp(6);rr.addView(h,lp);add(c,rr,-1,-2);p.setOnClickListener(v->{dlg.dismiss();paySupplier(sid,names[sid]);});h.setOnClickListener(v->{dlg.dismiss();supplierReceiptHistory(sid,names[sid]);});add(box,c,-1,-2);gap(box,8);}
@@ -532,6 +533,33 @@ selectedDay=date();selectedMonth=selectedDay.substring(0,7);rangeStart=selectedD
         draw();
       });
     add(body,text("Tetapan ini disimpan untuk telefon ini sahaja. Pekerja tidak boleh mengubah stok, duit atau laporan Owner.",12,muted,false),-1,-2);
+  }
+  /** Read-only, server-verified inventory for staff. */
+  void drawStaffStockBalances(){
+    if(!branchAccounts.staff()){
+      heading("Akses ditolak","Paparan ini khas untuk pekerja.");return;
+    }
+    heading("STOK · "+branchAccounts.branchName(),
+      "PEKERJA · Semak baki sahaja. Semua perubahan stok dibuat oleh Owner.");
+    if(live==null||!live.enabled()||!live.usable()){
+      add(body,text("Menunggu baki Live disahkan oleh Firebase. Sambung internet. "+
+        "Stok offline tidak dianggap baki semasa.",13,gold,true),-1,-2);
+      return;
+    }
+    add(body,text("☁  LIVE ONLINE · Baki semasa daripada Firestore",12,0xff46c979,true),-1,-2);
+    gap(body,10);
+    for(int id=0;id<names.length;id++){
+      if(posPrefs().getBoolean("menu_hidden_"+id,false))continue;
+      LinearLayout card=col();card.setPadding(dp(14),dp(12),dp(14),dp(12));
+      card.setBackground(shape(surface,13));
+      add(card,text(names[id],15,ink,true),-1,-2);gap(card,5);
+      add(card,text(unlimited(id)?"Tiada had stok unit":
+        "BAKI STOK: "+stock(id)+(id<3?" cucuk":" unit"),17,gold,true),-1,-2);
+      add(body,card,-1,-2);gap(body,8);
+    }
+    add(body,text("Jika ada stok rosak, laporkan kepada Owner melalui luar aplikasi. "+
+      "Pekerja tidak boleh restock, edit baki, rekod rosak atau bayar pembekal.",
+      12,muted,false),-1,-2);
   }
   void drawLiveBranchStock(){
     heading("Stok · "+branchAccounts.branchName(),
@@ -584,6 +612,9 @@ selectedDay=date();selectedMonth=selectedDay.substring(0,7);rangeStart=selectedD
       add(item,extras,-1,-2);
       add(body,item,-1,-2);gap(body,8);
     }
+    ownerSection("PEMBEKAL · BRANCH AKTIF");
+    action("BAYARAN PEMBEKAL · "+money(supplierDue()),()->supplierHub());
+    action("HISTORY BAYARAN PEMBEKAL",()->supplierAllHistory());
     ownerSection("HISTORY & LAPORAN STOK");
     action("Tarikh rekod tempatan: "+selectedStockDay+"   ▼",()->chooseStockDay());
     action("HISTORY EDAR / BAYAR / STOK PULANG",()->distributionHistory());
@@ -693,6 +724,10 @@ selectedDay=date();selectedMonth=selectedDay.substring(0,7);rangeStart=selectedD
       ownerCashflow.drawBranchDetail();
     }else if(activePage==19){
       ownerCashflow.drawUnifiedReport();
+    }else if(activePage==21){
+      ownerCashflow.drawOverallReport();
+    }else if(activePage==20){
+      drawStaffStockBalances();
     }else if(activePage==3&&branchAccounts.owner()){
       ownerCashflow.drawOverview();
     }else if(activePage==14){
@@ -1415,6 +1450,7 @@ JSONArray list=entries("stock_distribution");JSONObject e=list.optJSONObject(ind
   }
   void stockEntryItem(int id){stockEntryItem(id,false);}
   void stockEntryItem(int id,boolean opening){
+    if(!branchAccounts.owner()){message("Restock dan stok awal hanya untuk Owner.");return;}
     if(live!=null&&live.enabled()){
       if(opening){message("Stok awal telah dipindahkan ke Live. Guna + Restock Live.");return;}
       live.restockDialog(id);return;
@@ -2210,6 +2246,7 @@ JSONArray list=entries("stock_distribution");JSONObject e=list.optJSONObject(ind
     dlg.show();
   }
   void damageEntry(int id){
+    if(!branchAccounts.owner()){message("Hanya Owner boleh rekod stok rosak selepas menerima laporan pekerja.");return;}
     if(live!=null&&live.enabled()){damageLiveEntry(id);return;}
 if(costUnit(id)<=0){message("Tetapkan harga mentah dahulu untuk kira kerugian");editMenuPrice(id);return;}if(stock(id)==0){message("Tiada stok untuk direkod rosak");return;}LinearLayout form=col();form.setPadding(dp(18),dp(6),dp(18),0);
     add(form,text("Baki: "+stock(id)+" unit · Kos "+money(costUnit(id))+" / "+costPack(id)+" unit",13,ink,true),-1,-2);
