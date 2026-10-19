@@ -691,6 +691,7 @@ selectedDay=date();selectedMonth=selectedDay.substring(0,7);rangeStart=selectedD
       add(body,text(branchAccounts.staff()?"AKSES PEKERJA":"OWNER / BRANCH / PEKERJA",11,gold,true),-1,-2);gap(body,7);
       if(branchAccounts.owner()){
         action("📍  Tetapkan Lokasi GPS Branch "+branchAccounts.branchName(),()->presence.ownerSetBranchLocation());
+        action("🏪  Buka / Tutup Opening Branch Ini",()->presence.ownerSetBranchOpenState());
         action("👥  LIHAT SEMUA PEKERJA · Aktif / Berhenti",()->staffSecurity.manageWorkers());
         gap(body,8);
       }
