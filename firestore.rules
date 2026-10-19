@@ -465,9 +465,15 @@ service cloud.firestore {
     // Cross-provider reservation of worker EMAIL: a Google sign-in using
     // the same worker email cannot register another Owner workspace.
     match /staffEmails/{email} {
+      // Owners repairing a legacy worker may look up an email-index document
+      // which has NEVER been created. Allow an existing, verified workspace
+      // Owner to check nonexistence; an existing index belonging to another
+      // Owner still remains private.
       allow get: if signedIn() &&
         (request.auth.token.email == email ||
-          (resource != null && resource.data.ownerUid == request.auth.uid));
+          (resource != null && resource.data.ownerUid == request.auth.uid) ||
+          (resource == null && owner(request.auth.uid) &&
+            exists(/databases/$(database)/documents/workspaces/$(request.auth.uid))));
       allow list: if false;
       allow create: if signedIn() && owner(request.auth.uid)
         && request.resource.data.email == email
