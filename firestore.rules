@@ -327,7 +327,7 @@ service cloud.firestore {
                 .hasOnly(["open","opening","closing","openedBy","closedBy",
                           "openedByEmail","closedByEmail","updatedAt"])
               && (request.resource.data.openedBy == request.auth.uid
-                || request.resource.data.closedBy == request.auth.uid))
+                || request.resource.data.closedBy == request.auth.uid)
               && request.resource.data.get("openedByEmail",request.auth.token.email) ==
                 request.auth.token.email
               && request.resource.data.get("closedByEmail",request.auth.token.email) ==
