@@ -30,6 +30,7 @@ final class BranchAccounts {
   final FirebaseAuth auth;
   final FirebaseFirestore db;
   final SharedPreferences identity;
+  volatile boolean staffBranchVerified=false;
   static final String ROOT="workspaces";
   static final String LEGACY_BRANCH="utama_legacy";
   final ArrayList<String> stockBranchIds=new ArrayList<>();
@@ -200,7 +201,7 @@ final class BranchAccounts {
   }
   // Fail closed: a fresh worker install must never get Owner tabs just because
   // a legacy migration or app housekeeping created records in local storage.
-  boolean blocked(){return !active();}
+  boolean blocked(){return !active()||(staff()&&!staffBranchVerified);}
   boolean staff(){return active()&&"STAFF".equals(identity.getString("role",""));}
   boolean owner(){return active()&&"OWNER".equals(identity.getString("role",""));}
   String ownerUid(){return identity.getString("ownerUid","");}
@@ -219,6 +220,9 @@ final class BranchAccounts {
     return host.getSharedPreferences("warisan_branch_"+branchId(),Context.MODE_PRIVATE);
   }
   void setSession(String uid,String ownerUid,String branchId,String branchName,String role){
+    // Worker sessions begin only after a server-verified OPEN branch check.
+    // Reinstalled/restarted apps default to restricted until remote validation.
+    staffBranchVerified=!"STAFF".equals(role);
     identity.edit().putBoolean("configured",true).putString("sessionUid",uid)
       .putString("ownerUid",ownerUid).putString("branchId",branchId)
       .putString("branchName",branchName).putString("role",role).commit();
