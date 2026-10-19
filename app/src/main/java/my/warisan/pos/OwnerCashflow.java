@@ -322,11 +322,16 @@ final class OwnerCashflow {
     host.metric(localBreakdown,"KOS PRODUK",rm(localCost),host.ink,null);
     host.metric(localBreakdown,"BELANJA OPERASI",rm(localOperations),host.ink,null);
     host.add(host.body,localBreakdown,-1,-2);host.gap(host.body,6);
-    host.add(host.body,host.text("Jualan POS tempatan: "+rm(localSales)+
-      ". Untung ini dikira daripada rekod tempatan "+accounts.branchName()+
-      " sahaja. Jualan Live dari telefon pekerja dan kos branch lain belum "+
-      "semuanya termasuk. Jangan samakan dengan untung semua branch.",
-      11,host.muted,false),-1,-2);
+    String localDisclaimer=host.english()?
+      "Local POS sales: "+rm(localSales)+". This profit is calculated only "+
+      "from local records for "+accounts.branchName()+". Live sales from employee "+
+      "phones and costs from other branches may be missing. Do not treat this "+
+      "as profit across all branches.":
+      "Jualan POS tempatan: "+rm(localSales)+". Keuntungan ini hanya dikira "+
+      "daripada rekod tempatan "+accounts.branchName()+". Jualan masa nyata "+
+      "daripada telefon pekerja dan kos cawangan lain mungkin belum termasuk. "+
+      "Jangan anggap ini sebagai untung keseluruhan cawangan.";
+    host.add(host.body,host.text(localDisclaimer,11,host.muted,false),-1,-2);
     host.gap(host.body,11);
     host.action("📊  LAPORAN KESELURUHAN · SEMUA BRANCH",()->{
       host.activePage=21;host.draw();
@@ -469,8 +474,12 @@ final class OwnerCashflow {
       ()->showQrHistory(chosen));
     host.add(host.body,pay,-1,-2);host.gap(host.body,9);
     if(total.unknown>0)
-      host.add(host.body,host.text("Bayaran belum dikelaskan: "+rm(total.unknown)+
-        " · Semak rekod lama yang tidak menyimpan kaedah pembayaran.",12,host.gold,true),-1,-2);
+      host.add(host.body,host.text(
+        host.english()?"Uncategorized payments: "+rm(total.unknown)+
+          " · Review historical records that did not save a payment method.":
+          "Bayaran belum dikelaskan: "+rm(total.unknown)+
+          " · Semak rekod lama yang tidak menyimpan kaedah pembayaran.",
+        12,host.gold,true),-1,-2);
     LinearLayout count=host.row();
     host.metric(count,"BILANGAN TRANSAKSI",String.valueOf(total.transactions),host.ink,null);
     host.add(host.body,count,-1,-2);host.gap(host.body,10);
@@ -480,18 +489,27 @@ final class OwnerCashflow {
       host.metric(profitBox,"UNTUNG BERSIH POS TEMPATAN",rm(branchLocalProfit),
         branchLocalProfit>=0?host.gold:0xffff6b6b,null);
       host.add(host.body,profitBox,-1,-2);host.gap(host.body,6);
-      host.add(host.body,host.text("Kos dan keuntungan dari rekod pada telefon branch aktif sahaja. "+
-        "Jualan Cloud yang belum direkodkan tempatan tidak dikira dalam untung ini.",
+      host.add(host.body,host.text(host.english()?
+          "Costs and profits come only from records on the active branch's phone. "+
+          "Cloud sales not saved locally are excluded from this profit.":
+          "Kos dan keuntungan hanya berdasarkan rekod pada telefon cawangan aktif. "+
+          "Jualan awan yang belum disimpan secara tempatan tidak termasuk dalam keuntungan ini.",
         11,host.muted,false),-1,-2);
       host.gap(host.body,8);
     }else{
-      host.add(host.body,host.text("Untung branch ini belum tersedia kerana "+
-        "kos perniagaan belum diselaraskan daripada telefon branch tersebut.",
+      host.add(host.body,host.text(host.english()?
+          "Profit for this branch is unavailable because its business costs "+
+          "have not been synchronized from the branch's phone.":
+          "Keuntungan cawangan ini belum tersedia kerana kos perniagaannya "+
+          "belum diselaraskan daripada telefon cawangan tersebut.",
         11,host.muted,false),-1,-2);
       host.gap(host.body,8);
     }
-    host.add(host.body,host.text("Tekan TOTAL SALE di atas untuk melihat semua laporan jualan, "+
-      "QR, kos dan sejarah tempatan branch ini.",12,host.muted,false),-1,-2);
+    host.add(host.body,host.text(host.english()?
+        "Tap TOTAL SALES above to view sales, QR payments, costs and "+
+        "local history for this branch.":
+        "Tekan JUMLAH JUALAN di atas untuk melihat laporan jualan, bayaran QR, "+
+        "kos dan sejarah tempatan cawangan ini.",12,host.muted,false),-1,-2);
     host.gap(host.body,8);
     dataMessage();
   }
@@ -578,12 +596,19 @@ final class OwnerCashflow {
       host.add(host.body,host.text("Pengeluaran peribadi: "+rm(personal)+
         "  ·  Baki pembekal perlu bayar: "+rm(host.supplierDue()),12,host.muted,false),-1,-2);
       host.gap(host.body,6);
-      host.add(host.body,host.text("Kos dan untung di sini dikira daripada rekod POS "+
-        "tempatan branch aktif sahaja. Jangan samakan dengan untung keseluruhan Cloud.",11,host.muted,false),-1,-2);
+      host.add(host.body,host.text(host.english()?
+        "These costs and profits use only the active branch's local POS "+
+        "records, not overall cloud profit.":
+        "Kos dan keuntungan di sini hanya berdasarkan rekod POS tempatan "+
+        "cawangan aktif, bukan keuntungan keseluruhan awan.",11,host.muted,false),-1,-2);
     }else{
-      host.add(host.body,host.text("Jualan Cloud branch ini tersedia. Kos dan "+
-        "untung tempatan belum diselaraskan daripada telefon branch ini; "+
-        "angka kos tidak ditunjukkan supaya tidak tersalah sebagai RM0.",12,host.muted,false),-1,-2);
+      host.add(host.body,host.text(host.english()?
+        "Cloud sales are available for this branch, but local costs and "+
+        "profit have not been synchronized from its phone. Costs are hidden "+
+        "to avoid incorrectly displaying RM0.":
+        "Jualan awan cawangan ini tersedia, tetapi kos dan keuntungan tempatan "+
+        "belum diselaraskan daripada telefon cawangan. Nilai kos disembunyikan "+
+        "supaya tidak tersalah dipaparkan sebagai RM0.",12,host.muted,false),-1,-2);
     }
     if(chosen.id.equals(accounts.branchId())){
       host.gap(host.body,10);
