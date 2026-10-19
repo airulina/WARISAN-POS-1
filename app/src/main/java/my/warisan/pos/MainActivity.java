@@ -705,6 +705,11 @@ selectedDay=date();selectedMonth=selectedDay.substring(0,7);rangeStart=selectedD
     ownerTile(second,"Opening Live","Status semua branch",
       ()->live.showOpeningBranches());
     add(body,second,-1,-2);
+    gap(body,8);
+    action("🗂  PADAM / ARKIB BRANCH · OWNER",()->
+      branchAccounts.manageBranchRemoval());
+    add(body,text("Branch dengan jualan, stok atau pekerja hanya boleh diarkibkan. "+
+      "Rekod lama kekal dalam laporan semua branch.",11,muted,false),-1,-2);
     ownerSection("PEKERJA");
     LinearLayout staff=row();
     ownerTile(staff,"+ Daftar Pekerja","Email · Password · Branch",
