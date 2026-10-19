@@ -177,7 +177,7 @@ final class OwnerCashflow {
     for(String k:p.getAll().keySet()){
       if(!k.startsWith("sales_")||k.length()!=16)continue;
       String day=k.substring(6);
-      if(day.compareTo(from)>0||day.compareTo(to)<0)continue;
+      if(day.compareTo(from)<0||day.compareTo(to)>0)continue;
       if(!result.containsKey(day))
         result.put(day,new Day(p.getInt(k,0),0,0,0,false));
     }
@@ -297,7 +297,8 @@ final class OwnerCashflow {
       host.action("‹  Senarai Branch",()->{host.activePage=16;host.draw();});
       return;
     }
-    host.heading("Jualan · "+branch.name,period()+"  ·  "+branch.status);
+    final BranchRow chosen=branch;
+    host.heading("Jualan · "+chosen.name,period()+"  ·  "+chosen.status);
     host.action("‹  Kembali ke Jualan Semua Branch",()->{host.activePage=16;host.draw();});
     if(!branch.seen){dataMessage();return;}
     Day total=branch.totals();
@@ -321,7 +322,7 @@ final class OwnerCashflow {
       host.action(item.getKey()+"  ·  "+rm(day.sales)+
         "\n  Tunai "+rm(day.cash)+"   QR "+rm(day.qr)+
         "\n  "+day.transactions+" transaksi · "+(day.cloud?"Cloud Live":"Rekod lama telefon"),
-        ()->showDay(item.getKey(),day,branch.name));
+        ()->showDay(item.getKey(),day,chosen.name));
     }
     if(branch.id.equals(accounts.branchId())){
       host.gap(host.body,8);
