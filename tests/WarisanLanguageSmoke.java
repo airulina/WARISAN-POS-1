@@ -39,6 +39,42 @@ public final class WarisanLanguageSmoke {
     assertEqual("EN receipt footer","Sila datang lagi.",true,"Please visit us again.");
     assertEqual("BM customer history","HISTORY CUSTOMER",false,"SEJARAH PELANGGAN");
     assertEqual("EN closing","RESIT PENUTUPAN POS",true,"POS CLOSING RECEIPT");
+    // Screenshot regression: never translate one word at a time.
+    assertEqual("Stock screenshot title BM","Stok Mengikut Branch",false,
+      "Stok Mengikut Cawangan");
+    assertEqual("Stock screenshot title EN","Stok Mengikut Branch",true,
+      "Stock by Branch");
+    assertEqual("Stock screenshot subtitle BM",
+      "Owner sahaja · Pilih branch untuk edit atau tambah stok.",false,
+      "Pemilik sahaja · Pilih cawangan untuk mengubah atau menambah stok.");
+    assertEqual("Stock screenshot subtitle EN",
+      "Owner sahaja · Pilih branch untuk edit atau tambah stok.",true,
+      "Owner only · Select a branch to edit or add stock.");
+    assertEqual("Stock screenshot refresh BM","↻  Refresh Senarai Branch",false,
+      "↻  Segar Semula Senarai Cawangan");
+    assertEqual("Stock screenshot refresh EN","↻  Refresh Senarai Branch",true,
+      "↻  Refresh Branch List");
+    assertEqual("Stock screenshot count BM","JUMLAH BRANCH: 2",false,
+      "JUMLAH CAWANGAN: 2");
+    assertEqual("Stock screenshot count EN","JUMLAH BRANCH: 2",true,
+      "TOTAL BRANCHES: 2");
+    assertEqual("Stock screenshot active BM","Branch Utama · Branch aktif",false,
+      "Cawangan Utama · Cawangan aktif");
+    assertEqual("Stock screenshot active EN","Branch Utama · Branch aktif",true,
+      "Main Branch · Active branch");
+    assertEqual("Stock screenshot hint BM",
+      "Masuk branch dahulu sebelum ubah stok. Branch lain tidak akan terjejas.",false,
+      "Pilih cawangan dahulu sebelum mengubah stok. Cawangan lain tidak akan terjejas.");
+    assertEqual("Stock screenshot hint EN",
+      "Masuk branch dahulu sebelum ubah stok. Branch lain tidak akan terjejas.",true,
+      "Select a branch before changing stock. Other branches will not be affected.");
+    assertEqual("No partial word salad EN",
+      "Masuk branch previously before change stock.",true,
+      "Masuk branch previously before change stock.");
+    assertEqual("Proper branch name", "Warisan Jalan Kebun",true,
+      "Warisan Jalan Kebun");
+    assertEqual("Email should remain unchanged",
+      "cashier@example.com",true,"cashier@example.com");
     assertEqual("proper name","WARISAN POS",false,"WARISAN POS");
     assertEqual("uri","https://test.example/order/abc",false,"https://test.example/order/abc");
     assertEqual("dynamic RM","RM 1,300.50",true,"RM 1,300.50");
