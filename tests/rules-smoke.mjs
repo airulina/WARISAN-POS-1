@@ -50,6 +50,31 @@ try{
   await assertSucceeds(getDoc(d(owner,inv)));
   await assertSucceeds(getDoc(d(staff,inv)));
   await assertFails(getDoc(d(outsider,inv)));
+
+  // A single Owner-uploaded static payment QR is visible across all assigned
+  // branches, but only the Owner can replace/delete it.
+  const qrRef=d(owner,workspace+'/paymentConfig/mainQr');
+  const workerQr=d(staff,workspace+'/paymentConfig/mainQr');
+  const outsiderQr=d(outsider,workspace+'/paymentConfig/mainQr');
+  await assertSucceeds(setDoc(qrRef,{
+    contentType:'image/png',imageBase64:'aGVsbG8=',
+    updatedAt:serverTimestamp()
+  }));
+  await assertSucceeds(getDoc(workerQr));
+  await assertFails(getDoc(outsiderQr));
+  await assertFails(setDoc(workerQr,{
+    contentType:'image/png',imageBase64:'c3B5',
+    updatedAt:serverTimestamp()
+  }));
+  await assertFails(setDoc(d(staff,workspace+'/paymentConfig/other'),{
+    contentType:'image/png',imageBase64:'c3B5',
+    updatedAt:serverTimestamp()
+  }));
+  await assertSucceeds(setDoc(qrRef,{
+    contentType:'image/png',imageBase64:'aGVsbG8y',
+    updatedAt:serverTimestamp()
+  }));
+  await assertSucceeds(getDoc(workerQr));
   // Off Day is a server-wide staff ban, not a cosmetic Android login flag.
   // Owner can still read/modify the branch and see its existing records.
   await assertSucceeds(updateDoc(d(owner,branch),{
@@ -58,6 +83,7 @@ try{
   }));
   await assertSucceeds(getDoc(d(staff,branch))); // staff may see why login is blocked
   await assertFails(getDoc(d(staff,inv)));
+  await assertFails(getDoc(workerQr)); // branch closed: staff QR access suspended
   await assertFails(getDoc(d(staff,branch+'/liveSessions/'+today)));
   await assertFails(updateDoc(d(staff,branch),{operatingStatus:'OPEN'}));
   await assertSucceeds(getDoc(d(owner,inv)));
@@ -72,6 +98,7 @@ try{
     operatingUpdatedBy:'owner',operatingUpdatedAt:serverTimestamp()
   }));
   await assertSucceeds(getDoc(d(staff,inv)));
+  await assertSucceeds(getDoc(workerQr)); // QR readable again after reopening
   await assertSucceeds(getDoc(d(owner,lastYear)));
   await assertFails(getDoc(d(staff,lastYear)));
   await assertFails(updateDoc(d(staff,inv),{stock:[999,10,10,10,0,10,10]}));
