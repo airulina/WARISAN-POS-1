@@ -327,25 +327,40 @@ final class StaffSecurity {
           pwd.length()<10||!pwd.equals(confirm.getText().toString())){
           host.message("Semak Email dan Password minimum 10 aksara.");return;
         }
-        db.collection("staffEmails").document(mail)
-          .get(com.google.firebase.firestore.Source.SERVER)
-          .addOnSuccessListener(lock->{
-            if(lock.exists()&&!Boolean.TRUE.equals(lock.getBoolean("removed"))){
-              host.message("Email ini masih didaftarkan sebagai pekerja. Tidak boleh Sign Up.");return;
-            }
-            accounts.auth.createUserWithEmailAndPassword(mail,pwd)
-              .addOnSuccessListener(created->{
-                FirebaseUser u=created.getUser();
-                if(u==null){host.message("Daftar gagal.");return;}
+        // A signed-out app CANNOT read staffEmails: Firestore Rules
+        // require an authenticated email. Create Firebase Auth user first,
+        // then verify the reserved-role index before sending verification.
+        accounts.auth.createUserWithEmailAndPassword(mail,pwd)
+          .addOnSuccessListener(created->{
+            FirebaseUser u=created.getUser();
+            if(u==null){host.message("Sign Up gagal.");return;}
+            db.collection("staffEmails").document(mail)
+              .get(com.google.firebase.firestore.Source.SERVER)
+              .addOnSuccessListener(lock->{
+                if(lock.exists()&&!Boolean.TRUE.equals(lock.getBoolean("removed"))){
+                  u.delete().addOnCompleteListener(deleted->{
+                    accounts.auth.signOut();host.draw();
+                    host.message("Email masih didaftarkan sebagai pekerja. Hubungi Owner dahulu.");
+                  });
+                  return;
+                }
                 u.sendEmailVerification().addOnCompleteListener(sent->{
                   accounts.auth.signOut();host.draw();
                   host.darkBuilder().setTitle("SAHKAN EMAIL")
-                    .setMessage("Akaun berjaya dibuat. Sila sahkan email "+mail+
-                      " dahulu, kemudian Log In dan pilih DAFTAR OWNER untuk isi perniagaan dan branch.")
+                    .setMessage(sent.isSuccessful()?
+                      "Email berjaya didaftarkan. Sila klik Verify Email di "+mail+
+                      ", kemudian Log In dan Daftar Owner untuk isi perniagaan dan branch.":
+                      "Akaun telah dibuat tetapi email pengesahan gagal dihantar. "+
+                      "Jangan daftar semula. Cuba Log In untuk minta email pengesahan.")
                     .setPositiveButton("FAHAM",null).show();
                 });
-              }).addOnFailureListener(e->host.message("Sign Up gagal: "+e.getMessage()));
-          }).addOnFailureListener(e->host.message("Gagal semak status email pekerja: "+e.getMessage()));
+              }).addOnFailureListener(e->{
+                u.delete().addOnCompleteListener(deleted->{
+                  accounts.auth.signOut();host.draw();
+                  host.message("Semakan status pekerja gagal. Akaun sementara cuba dibatalkan: "+e.getMessage());
+                });
+              });
+          }).addOnFailureListener(e->host.message("Sign Up gagal: "+e.getMessage()));
       }).setNegativeButton("BATAL",null).show();
   }
   DocumentReference refundDoc(String id){
