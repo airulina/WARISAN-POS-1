@@ -36,6 +36,77 @@ final class BranchAccounts {
   final ArrayList<String> stockBranchNames=new ArrayList<>();
   boolean stockBranchesLoaded=false,stockBranchesLoading=false;
   String stockListOwner="";
+  static String operatingLabel(String code) {
+    if("OFFDAY".equals(code))return "OFF DAY";
+    if("STOCK_OUT".equals(code))return "TUTUP · STOK HABIS";
+    return "BUKA";
+  }
+  void manageBranchOperatingStatus(){
+    if(!owner()){host.message("Hanya Owner boleh tetapkan Off Day.");return;}
+    final String uid=ownerUid();
+    db.collection(ROOT).document(uid).collection("branches")
+      .get(com.google.firebase.firestore.Source.SERVER)
+      .addOnSuccessListener(branches->{
+        if(!owner()||!uid.equals(ownerUid()))return;
+        ArrayList<QueryDocumentSnapshot> docs=new ArrayList<>();
+        ArrayList<String> labels=new ArrayList<>();
+        for(QueryDocumentSnapshot b:branches){
+          docs.add(b);
+          String name=b.getString("name");if(name==null)name=b.getId();
+          String status=operatingLabel(b.getString("operatingStatus"));
+          labels.add(name+"  ·  "+status);
+        }
+        if(docs.isEmpty()){host.message("Belum ada branch.");return;}
+        host.darkBuilder().setTitle("OPERASI BRANCH · OWNER")
+          // AlertDialog cannot combine setMessage with setItems.
+          .setItems(labels.toArray(new String[0]),(dialog,i)->chooseBranchStatus(docs.get(i)))
+          .setNegativeButton("TUTUP",null).show();
+      }).addOnFailureListener(e->host.message("Semak branch gagal: "+e.getMessage()));
+  }
+  void chooseBranchStatus(QueryDocumentSnapshot branch){
+    if(!owner())return;
+    final String id=branch.getId(),name=branch.getString("name")==null?id:branch.getString("name");
+    final String old=branch.getString("operatingStatus");
+    final String[] options={
+      "🟢  BUKA · Benarkan pekerja Log In / Opening",
+      "🔴  OFF DAY · Cuti / Tidak berniaga",
+      "🟠  TUTUP · STOK HABIS"
+    };
+    host.darkBuilder().setTitle("Status "+name+" · "+operatingLabel(old))
+      .setItems(options,(dialog,i)->{
+        String newStatus=i==0?"OPEN":i==1?"OFFDAY":"STOCK_OUT";
+        if(newStatus.equals(old)||(old==null&&"OPEN".equals(newStatus))){
+          host.message("Branch sudah berstatus "+operatingLabel(newStatus));return;
+        }
+        String note=i==1?"OFF DAY":i==2?"STOK HABIS":"BUKA SEMULA";
+        host.darkBuilder().setTitle("Sahkan "+name+" · "+note)
+          .setMessage(i==0?
+            "Buka semula akses pekerja untuk "+name+"? Pekerja boleh Log In semula.":
+            "Tutup "+name+" sekarang? Semua akaun pekerja branch ini akan disekat daripada login, Opening dan transaksi Live, walaupun pada telefon lain. Rekod lama tidak dipadam. Jika sesi sedang OPEN, Owner perlu semak dan urus Closing.")
+          .setPositiveButton("SAHKAN",(d,w)->updateBranchStatus(id,name,newStatus))
+          .setNegativeButton("BATAL",null).show();
+      }).setNegativeButton("BATAL",null).show();
+  }
+  void updateBranchStatus(String id,String name,String status){
+    if(!owner()||user()==null)return;
+    if(!("OPEN".equals(status)||"OFFDAY".equals(status)||"STOCK_OUT".equals(status)))return;
+    final String ownerId=ownerUid(),actor=user().getUid();
+    DocumentReference ref=db.collection(ROOT).document(ownerId).collection("branches").document(id);
+    Map<String,Object> fields=new HashMap<>();
+    fields.put("operatingStatus",status);
+    fields.put("operatingReason","OFFDAY".equals(status)?"OFF DAY":
+      "STOCK_OUT".equals(status)?"STOK HABIS":"");
+    fields.put("operatingUpdatedBy",actor);
+    fields.put("operatingUpdatedAt",com.google.firebase.firestore.FieldValue.serverTimestamp());
+    ref.update(fields).addOnSuccessListener(v->{
+      if(!owner()||!ownerId.equals(ownerUid()))return;
+      host.message(name+" → "+operatingLabel(status)+". Status disimpan di Firebase.");
+      if(host.live!=null)host.live.refreshOwnerOpeningStatuses();
+      manageBranchOperatingStatus();
+    }).addOnFailureListener(e->host.darkBuilder().setTitle("Status tidak disimpan")
+      .setMessage("Firestore gagal: "+e.getMessage()+". Pastikan online dan Rules Owner sudah aktif.")
+      .setPositiveButton("OK",null).show());
+  }
   void showStockBranches(){
     if(!owner()){host.message("Hanya Owner boleh urus stok branch.");return;}
     String uid=ownerUid();
