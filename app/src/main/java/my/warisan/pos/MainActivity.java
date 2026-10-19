@@ -1613,7 +1613,9 @@ selectedDay=date();selectedMonth=selectedDay.substring(0,7);rangeStart=selectedD
     if(live.enabled()){
       if(!live.usable()){message("Live OFFLINE. Sambung internet sebelum simpan order.");return;}
       String id=UUID.randomUUID().toString();
-      live.reserve(purchased,total,day,id,()->saveConfirmedOrder(purchased,total,day,id));
+      int receiptNo=posPrefs().getInt("order_seq_"+day,0)+1;
+       live.reserve(purchased,total,day,id,receiptNo,
+         ()->saveConfirmedOrder(purchased,total,day,id));
       return;
     }
     saveConfirmedOrder(purchased,total,day,"");
