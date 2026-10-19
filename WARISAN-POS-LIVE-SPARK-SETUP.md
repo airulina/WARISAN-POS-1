@@ -1,10 +1,20 @@
-# WARISAN POS-1 v3.20 — Firebase Spark Live (tanpa Cloud Functions)
+# WARISAN POS-1 v3.23 — Firebase Spark Live (tanpa Cloud Functions)
 
 ## Status & keselamatan
 - **Android build lulus**, dan Firestore Emulator menguji hak Owner/pekerja serta transaksi stok, bayaran dan refund dengan berjaya.
 - **Firebase projek sebenar belum diaktifkan oleh perbualan ini.** Memasukkan `firestore.rules` ke GitHub tidak secara automatik menukar Firebase Console.
 - **Jangan guna untuk operasi kaunter sebenar sebelum ujian pada 2 telefon**, termasuk ujian tanpa internet, printer, refund, closing, dan laporan.
 
+## v3.23 — Pengguna baru, Owner dan pekerja
+- Login Owner sedia ada: tekan **Owner · Log masuk Google**, guna email Google Owner asal, kemudian **Owner sedia ada · Pilih Branch**.
+- Pengguna baru: selepas Google login tekan **Pengguna Baru · DAFTAR OWNER / SIGN UP** dan isi nama perniagaan / branch. Akaun baharu tidak mengambil data POS lama.
+- Owner lama dengan data asal: gunakan **Owner lama · Gunakan data POS asal** secara sengaja; fungsi itu tidak muncul dalam Account pekerja.
+- Pekerja yang sudah login hanya boleh melihat akaun pekerja / status refund. Butang untuk pilih Owner, daftar Owner, atau pulihkan data Owner lama tidak dipaparkan.
+- **Email pekerja aktif atau cuma DISEKAT tak boleh daftar Owner**, termasuk jika login Google dengan email sama. Owner perlu tekan **BUANG AKSES** dahulu. Setelah profile `removed=true`, email boleh digunakan bagi pendaftaran Owner baru tertakluk kepada kaedah login Firebase.
+- Perlindungan ini memerlukan Firestore Rules `firestore.rules` terkini **diterbitkan** pada Firebase Console → Firestore Database → Rules → Publish. Menjalankan GitHub Actions sahaja bukan mengaktifkan rules pada Firebase sebenar.
+- Role pekerja dikuatkuasakan berdasarkan dokumen `staffProfiles/{uid}` dan `staffEmails/{email}` untuk pekerja yang didaftarkan melalui versi baharu. Akaun pekerja lama yang sudah wujud sebelum v3.23 masih dilindungi melalui profil UID; semak indeks email pada Firestore apabila mengurus akaun lama. Jangan padam rekod jualan lama.
+- Selepas perubahan rules, uji menggunakan akaun pekerja aktif, pekerja disekat, pekerja dibuang, serta Google Owner baharu.
+ 
 ## 0. Backup dahulu — JANGAN UNINSTALL
 1. Buka APK WARISAN POS yang sedang digunakan, **Setting → Account → Backup to phone**.
 2. Simpan salinan JSON di Downloads / Google Drive / tempat selamat **di luar data aplikasi**.
