@@ -541,6 +541,8 @@ selectedDay=date();selectedMonth=selectedDay.substring(0,7);rangeStart=selectedD
       heading(english()?"Settings":"Setting",english()?"WarisanPOS 3.39 · Complete POS & report audit.":"WarisanPOS 3.39 · Audit penuh POS & report.");
       action("🌐  "+(english()?"Language · English":"Bahasa · Bahasa Melayu"),()->chooseLanguage());
       action("👤  Account",()->{activePage=5;draw();});
+      if(branchAccounts.owner())
+        action("👥  Senarai Pekerja / Buang Akses",()->staffSecurity.manageWorkers());
       if(!branchAccounts.staff()){
         action("🔐  Password Owner",()->ownerPassword.change());
         action("☁  LIVE BRANCH / Sync",()->live.showDashboard());
@@ -567,6 +569,10 @@ selectedDay=date();selectedMonth=selectedDay.substring(0,7);rangeStart=selectedD
       }
       gap(body,7);
       add(body,text("OWNER / BRANCH / PEKERJA",11,gold,true),-1,-2);gap(body,7);
+      if(branchAccounts.owner()){
+        action("👥  LIHAT SEMUA PEKERJA · Aktif / Berhenti",()->staffSecurity.manageWorkers());
+        gap(body,8);
+      }
       if(user!=null)branchAccounts.showActions();
       if(branchAccounts.active()){
         if(branchAccounts.owner()){
