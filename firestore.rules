@@ -30,7 +30,8 @@ service cloud.firestore {
     function member(ownerUid, branchId) {
       return signedIn()
         && exists(/databases/$(database)/documents/workspaces/$(ownerUid)/branches/$(branchId)/members/$(request.auth.uid))
-        && get(/databases/$(database)/documents/workspaces/$(ownerUid)/branches/$(branchId)/members/$(request.auth.uid)).data.active == true;
+        && get(/databases/$(database)/documents/workspaces/$(ownerUid)/branches/$(branchId)/members/$(request.auth.uid)).data.active == true
+        && get(/databases/$(database)/documents/workspaces/$(ownerUid)/branches/$(branchId)/members/$(request.auth.uid)).data.get("removed",false) == false;
     }
 
     function afterLiveOrder(ownerUid,branchId,orderId) {
@@ -333,7 +334,10 @@ service cloud.firestore {
         && request.resource.data.role == "STAFF"
         && request.resource.data.branchId == resource.data.branchId
         && request.resource.data.email == resource.data.email
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["active"]);
+        && request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(["active","removed","removedAt","updatedAt"])
+        && (!request.resource.data.get("removed",false)
+          || request.resource.data.active == false);
       allow delete: if false;
     }
     // Legacy Gmail invitation creation is disabled for new deployments.
