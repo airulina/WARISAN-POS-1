@@ -709,7 +709,7 @@ selectedDay=date();selectedMonth=selectedDay.substring(0,7);rangeStart=selectedD
     LinearLayout staff=row();
     ownerTile(staff,"+ Daftar Pekerja","Email · Password · Branch",
       ()->staffSecurity.createEmployee());
-    ownerTile(staff,"Urus Pekerja","Aktif · Sekat · Buang",
+    ownerTile(staff,"Urus Pekerja","Tukar Branch · Akses",
       ()->staffSecurity.manageWorkers());
     add(body,staff,-1,-2);gap(body,7);
     action("BAIKI AKSES PEKERJA · EMAIL / BRANCH",()->staffSecurity.repairStaffMembership());
