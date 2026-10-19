@@ -332,32 +332,40 @@ service cloud.firestore {
         match /liveSessions/{dayId} {
           allow get: if owner(ownerUid) || (member(ownerUid,branchId) && staffWorkingDay(dayId));
           allow list: if owner(ownerUid);
+          // Workers can CREATE only a genuine Opening for their branch/day.
           allow create: if owner(ownerUid) ||
             (member(ownerUid,branchId)
+              && staffWorkingDay(dayId)
               && request.resource.data.ownerUid == ownerUid
               && request.resource.data.branchId == branchId
               && request.resource.data.day == dayId
-              && (request.resource.data.openedBy == request.auth.uid
-                || request.resource.data.closedBy == request.auth.uid)
-              && request.resource.data.get("openedByEmail",request.auth.token.email) ==
-                request.auth.token.email);
+              && request.resource.data.open == true
+              && request.resource.data.openedBy == request.auth.uid
+              && request.resource.data.openedByEmail == request.auth.token.email
+              && request.resource.data.opening is number
+              && request.resource.data.opening >= 0
+              && request.resource.data.keys().hasOnly([
+                "day","branchId","ownerUid","open","openedBy",
+                "openedByEmail","opening","updatedAt"]));
+          // A different assigned worker may close a session started by a
+          // colleague; the original opener/audit must never be rewritten.
           allow update: if owner(ownerUid) ||
             (member(ownerUid,branchId)
+              && staffWorkingDay(dayId)
               && resource.data.ownerUid == ownerUid
               && resource.data.branchId == branchId
+              && resource.data.day == dayId
+              && resource.data.open == true
               && request.resource.data.ownerUid == ownerUid
               && request.resource.data.branchId == branchId
               && request.resource.data.day == dayId
+              && request.resource.data.open == false
+              && request.resource.data.closedBy == request.auth.uid
+              && request.resource.data.closedByEmail == request.auth.token.email
+              && request.resource.data.closing is number
+              && request.resource.data.closing >= 0
               && request.resource.data.diff(resource.data).affectedKeys()
-                .hasOnly(["open","opening","closing","openedBy","closedBy",
-                          "openedByEmail","closedByEmail","updatedAt"])
-              && (request.resource.data.openedBy == request.auth.uid
-                || request.resource.data.closedBy == request.auth.uid)
-              && request.resource.data.get("openedByEmail",request.auth.token.email) ==
-                request.auth.token.email
-              && request.resource.data.get("closedByEmail",request.auth.token.email) ==
-                request.auth.token.email);
-
+                .hasOnly(["open","closing","closedBy","closedByEmail","updatedAt"]));
           allow delete: if false;
         }
         // Refund requests: staff may request; ONLY Owner may approve/deny.
