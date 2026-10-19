@@ -526,12 +526,13 @@ final class LiveBranchStore {
   private ListenerRegistration ownerBranchesListener;
   private final ArrayList<ListenerRegistration> ownerSessionListeners=new ArrayList<>();
   private final Map<String,String> openingSummary=new HashMap<>();
+  private final Map<String,String> staffLoginSummary=new HashMap<>();
   private String ownerSummaryKey="";
   void clearOwnerOpeningListeners(){
     if(ownerBranchesListener!=null){ownerBranchesListener.remove();ownerBranchesListener=null;}
     for(ListenerRegistration l:ownerSessionListeners)l.remove();
     ownerSessionListeners.clear();
-    openingSummary.clear();ownerSummaryKey="";
+    openingSummary.clear();staffLoginSummary.clear();ownerSummaryKey="";
   }
   void loadOwnerOpeningStatuses(){
     if(!accounts.owner())return;
@@ -544,7 +545,7 @@ final class LiveBranchStore {
       .collection("branches").addSnapshotListener((branches,error)->{
         if(error!=null||branches==null||!key.equals(ownerSummaryKey))return;
         for(ListenerRegistration l:ownerSessionListeners)l.remove();
-        ownerSessionListeners.clear();openingSummary.clear();
+        ownerSessionListeners.clear();openingSummary.clear();staffLoginSummary.clear();
         for(QueryDocumentSnapshot b:branches){
           final String branchId=b.getId();
           final String branchName=b.getString("name")==null?branchId:b.getString("name");
@@ -565,6 +566,23 @@ final class LiveBranchStore {
               if(!line.equals(before)&&host.activePage==3&&accounts.owner())host.draw();
             });
           ownerSessionListeners.add(listener);
+          ListenerRegistration loginListener=b.getReference().collection("staffLogins")
+            .orderBy("createdAt",Query.Direction.DESCENDING).limit(1)
+            .addSnapshotListener((log,logErr)->{
+              if(logErr!=null||log==null||!key.equals(ownerSummaryKey))return;
+              String line="Belum ada login pekerja";
+              if(!log.isEmpty()){
+                DocumentSnapshot latest=log.getDocuments().get(0);
+                String email=latest.getString("email");
+                line="Login: "+(email==null?"Pekerja":email);
+                if(latest.getTimestamp("createdAt")!=null)
+                  line+=" · "+new SimpleDateFormat("HH:mm",Locale.US)
+                    .format(latest.getTimestamp("createdAt").toDate());
+              }
+              String old=staffLoginSummary.put(branchId,line);
+              if(!line.equals(old)&&host.activePage==3&&accounts.owner())host.draw();
+            });
+          ownerSessionListeners.add(loginListener);
         }
         if(host.activePage==3&&accounts.owner())host.draw();
       });
@@ -581,7 +599,14 @@ final class LiveBranchStore {
       java.util.Collections.sort(list);
       for(String entry:list){
         host.add(host.body,host.text(entry,12,host.ink,true),-1,-2);
-        host.gap(host.body,5);
+        // Login summary below the matching branch is shown on the next
+        // refresh from the same server snapshot listener.
+        String branchName=entry.split(" · ",2)[0];
+        String login=null;
+        for(Map.Entry<String,String> member:openingSummary.entrySet())
+          if(member.getValue().equals(entry)){login=staffLoginSummary.get(member.getKey());break;}
+        if(login!=null)host.add(host.body,host.text("    "+login,11,host.muted,false),-1,-2);
+        host.gap(host.body,8);
       }
     }
     host.gap(host.body,9);
@@ -590,7 +615,12 @@ final class LiveBranchStore {
     if(!accounts.owner())return;
     loadOwnerOpeningStatuses();
     StringBuilder content=new StringBuilder("Tarikh: "+host.businessDay()+"\n\n");
-    for(String row:openingSummary.values())content.append(row).append("\n\n");
+    for(Map.Entry<String,String> item:openingSummary.entrySet()){
+      content.append(item.getValue()).append("\n");
+      if(staffLoginSummary.containsKey(item.getKey()))
+        content.append("  ").append(staffLoginSummary.get(item.getKey())).append("\n");
+      content.append("\n");
+    }
     if(openingSummary.isEmpty())content.append("Belum menerima status daripada Firestore.");
     host.darkBuilder().setTitle("CASHFLOW LIVE · SEMUA BRANCH")
       .setMessage(content.toString())
