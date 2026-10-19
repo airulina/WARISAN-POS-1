@@ -23,6 +23,89 @@ service cloud.firestore {
         && get(/databases/$(database)/documents/workspaces/$(ownerUid)/branches/$(branchId)/members/$(request.auth.uid)).data.active == true;
     }
 
+    function afterLiveOrder(ownerUid,branchId,orderId) {
+      return getAfter(/databases/$(database)/documents/workspaces/$(ownerUid)/branches/$(branchId)/liveOrders/$(orderId)).data;
+    }
+    function afterDay(ownerUid,branchId,dayId) {
+      return getAfter(/databases/$(database)/documents/workspaces/$(ownerUid)/branches/$(branchId)/daily/$(dayId)).data;
+    }
+    function afterInventory(ownerUid,branchId) {
+      return getAfter(/databases/$(database)/documents/workspaces/$(ownerUid)/branches/$(branchId)/live/current).data;
+    }
+    function validStockItem(oldStock,newStock,qty,action,i) {
+      return i >= oldStock.size()
+        || (qty[i] is int && qty[i] >= 0
+          && newStock[i] is int && newStock[i] >= 0
+          && newStock[i] == oldStock[i]
+             + (i == 4 ? 0 : (action == "CANCEL" ? qty[i] : -qty[i])));
+    }
+    function validStockMovement(oldStock,newStock,qty,action) {
+      return oldStock is list && newStock is list && qty is list
+        && oldStock.size() == newStock.size() && qty.size() == oldStock.size()
+        && oldStock.size() <= 30
+      && validStockItem(oldStock,newStock,qty,action,0)
+      && validStockItem(oldStock,newStock,qty,action,1)
+      && validStockItem(oldStock,newStock,qty,action,2)
+      && validStockItem(oldStock,newStock,qty,action,3)
+      && validStockItem(oldStock,newStock,qty,action,4)
+      && validStockItem(oldStock,newStock,qty,action,5)
+      && validStockItem(oldStock,newStock,qty,action,6)
+      && validStockItem(oldStock,newStock,qty,action,7)
+      && validStockItem(oldStock,newStock,qty,action,8)
+      && validStockItem(oldStock,newStock,qty,action,9)
+      && validStockItem(oldStock,newStock,qty,action,10)
+      && validStockItem(oldStock,newStock,qty,action,11)
+      && validStockItem(oldStock,newStock,qty,action,12)
+      && validStockItem(oldStock,newStock,qty,action,13)
+      && validStockItem(oldStock,newStock,qty,action,14)
+      && validStockItem(oldStock,newStock,qty,action,15)
+      && validStockItem(oldStock,newStock,qty,action,16)
+      && validStockItem(oldStock,newStock,qty,action,17)
+      && validStockItem(oldStock,newStock,qty,action,18)
+      && validStockItem(oldStock,newStock,qty,action,19)
+      && validStockItem(oldStock,newStock,qty,action,20)
+      && validStockItem(oldStock,newStock,qty,action,21)
+      && validStockItem(oldStock,newStock,qty,action,22)
+      && validStockItem(oldStock,newStock,qty,action,23)
+      && validStockItem(oldStock,newStock,qty,action,24)
+      && validStockItem(oldStock,newStock,qty,action,25)
+      && validStockItem(oldStock,newStock,qty,action,26)
+      && validStockItem(oldStock,newStock,qty,action,27)
+      && validStockItem(oldStock,newStock,qty,action,28)
+      && validStockItem(oldStock,newStock,qty,action,29);
+    }
+    function staffInventoryChange(ownerUid,branchId) {
+      let id = request.resource.data.lastOrderId;
+      let action = request.resource.data.lastStockAction;
+      let nextOrder = afterLiveOrder(ownerUid,branchId,id);
+      return member(ownerUid,branchId)
+        && id is string && action in ["RESERVE","CANCEL"]
+        && request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(["stock","lastOrderId","lastStockAction","updatedAt"])
+        && nextOrder.actorUid == request.auth.uid
+        && nextOrder.ownerUid == ownerUid
+        && nextOrder.branchId == branchId
+        && ((action == "RESERVE" && nextOrder.status == "PENDING")
+           || (action == "CANCEL" && nextOrder.status == "CANCELLED"))
+        && validStockMovement(resource.data.stock,request.resource.data.stock,nextOrder.qty,action);
+    }
+    function staffPayDay(ownerUid,branchId) {
+      let id = request.resource.data.lastPaymentId;
+      let receipt = afterLiveOrder(ownerUid,branchId,id);
+      return member(ownerUid,branchId)
+        && receipt.actorUid == request.auth.uid
+        && receipt.status == "PAID"
+        && receipt.ownerUid == ownerUid && receipt.branchId == branchId
+        && request.resource.data.sales == resource.data.get("sales",0) + receipt.total
+        && request.resource.data.transactions == resource.data.get("transactions",0) + 1
+        && request.resource.data.cash == resource.data.get("cash",0)
+           + (receipt.method == "Tunai" ? receipt.total : 0)
+        && request.resource.data.qr == resource.data.get("qr",0)
+           + (receipt.method == "Tunai" ? 0 : receipt.total)
+        && request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(["sales","transactions","cash","qr","lastPaymentId","businessDay","updatedAt"]);
+    }
+
     // Backward-compatible Google backup for older single-store accounts.
     match /users/{uid}/warisanpos/{document} {
       allow read, write: if owner(uid);
@@ -53,18 +136,56 @@ service cloud.firestore {
         }
         match /live/{docId} {
           allow read: if owner(ownerUid) || member(ownerUid,branchId);
-          allow create, update: if owner(ownerUid);
+          allow create: if owner(ownerUid) && docId == "current"
+            && request.resource.data.ownerUid == ownerUid;
+          allow update: if docId == "current"
+            && (owner(ownerUid) || staffInventoryChange(ownerUid,branchId));
           allow delete: if false;
         }
         match /daily/{dayId} {
           allow read: if owner(ownerUid) || member(ownerUid,branchId);
-          allow create, update: if owner(ownerUid) || member(ownerUid,branchId);
+          allow create: if owner(ownerUid) || (
+            member(ownerUid,branchId)
+            && request.resource.data.lastPaymentId is string
+            && request.resource.data.businessDay == dayId
+            && request.resource.data.sales == afterLiveOrder(ownerUid,branchId,request.resource.data.lastPaymentId).total
+            && request.resource.data.transactions == 1
+            && afterLiveOrder(ownerUid,branchId,request.resource.data.lastPaymentId).status == "PAID"
+            && afterLiveOrder(ownerUid,branchId,request.resource.data.lastPaymentId).actorUid == request.auth.uid
+            && request.resource.data.cash == (afterLiveOrder(ownerUid,branchId,request.resource.data.lastPaymentId).method == "Tunai" ?
+              request.resource.data.sales : 0)
+            && request.resource.data.qr == (afterLiveOrder(ownerUid,branchId,request.resource.data.lastPaymentId).method == "Tunai" ?
+              0 : request.resource.data.sales)
+          );
+          allow update: if owner(ownerUid) || staffPayDay(ownerUid,branchId);
           allow delete: if false;
         }
         match /liveOrders/{orderId} {
           allow read: if owner(ownerUid) || member(ownerUid,branchId);
-          allow create: if owner(ownerUid) || member(ownerUid,branchId);
-          allow update: if owner(ownerUid) || member(ownerUid,branchId);
+          allow create: if (owner(ownerUid) || member(ownerUid,branchId))
+            && request.resource.data.ownerUid == ownerUid
+            && request.resource.data.branchId == branchId
+            && request.resource.data.actorUid == request.auth.uid
+            && request.resource.data.deviceOrderId == orderId
+            && request.resource.data.total is int
+            && request.resource.data.total > 0
+            && request.resource.data.qty is list
+            && request.resource.data.qty.size() <= 30
+            && request.resource.data.status == "PENDING"
+            && afterInventory(ownerUid,branchId).lastOrderId == orderId
+            && afterInventory(ownerUid,branchId).lastStockAction == "RESERVE";
+          allow update: if owner(ownerUid) ||
+            (member(ownerUid,branchId)
+              && resource.data.actorUid == request.auth.uid
+              && request.resource.data.actorUid == resource.data.actorUid
+              && request.resource.data.diff(resource.data).affectedKeys()
+                .hasOnly(["status","method","paidAt","cancelledAt"])
+              && resource.data.status == "PENDING"
+              && ((request.resource.data.status == "CANCELLED"
+                    && afterInventory(ownerUid,branchId).lastOrderId == orderId
+                    && afterInventory(ownerUid,branchId).lastStockAction == "CANCEL")
+                 || (request.resource.data.status == "PAID"
+                    && afterDay(ownerUid,branchId,resource.data.day).lastPaymentId == orderId)));
           allow delete: if false;
         }
         // Refund requests: staff may request; ONLY Owner may approve/deny.
