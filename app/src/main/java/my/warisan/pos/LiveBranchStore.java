@@ -189,7 +189,8 @@ final class LiveBranchStore {
       orderData.put("day",day);orderData.put("total",due);
       orderData.put("qty",quantities);orderData.put("status","PENDING");
       orderData.put("createdAt",FieldValue.serverTimestamp());
-      tx.update(inv,"stock",remaining,"updatedAt",FieldValue.serverTimestamp());
+      tx.update(inv,"stock",remaining,"lastOrderId",receiptId,"lastStockAction","RESERVE",
+        "updatedAt",FieldValue.serverTimestamp());
       tx.set(ref,orderData);return null;
     }).addOnSuccessListener(v->{busy=false;onSuccess.apply();})
       .addOnFailureListener(e->{busy=false;host.message("Order Live gagal: "+e.getMessage());});
@@ -207,7 +208,8 @@ final class LiveBranchStore {
       List<?> qty=(List<?>)order.get("qty");
       for(int i=0;i<qty.size()&&i<remaining.size();i++)if(i!=4)
         remaining.set(i,remaining.get(i)+((Number)qty.get(i)).longValue());
-      tx.update(inv,"stock",remaining,"updatedAt",FieldValue.serverTimestamp());
+      tx.update(inv,"stock",remaining,"lastOrderId",id,"lastStockAction","CANCEL",
+        "updatedAt",FieldValue.serverTimestamp());
       tx.update(ref,"status","CANCELLED","cancelledAt",FieldValue.serverTimestamp());
       return null;
     }).addOnSuccessListener(v->{busy=false;onSuccess.apply();})
@@ -235,6 +237,7 @@ final class LiveBranchStore {
       totals.put("sales",sales+value);totals.put("cash",cash+("Tunai".equals(method)?value:0L));
       totals.put("qr",qr+("Tunai".equals(method)?0L:value));
       totals.put("transactions",count+1);totals.put("businessDay",orderDay);
+      totals.put("lastPaymentId",id);
       totals.put("updatedAt",FieldValue.serverTimestamp());
       tx.set(report,totals,com.google.firebase.firestore.SetOptions.merge());
       tx.update(ref,"status","PAID","method",method,"paidAt",FieldValue.serverTimestamp());
