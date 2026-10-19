@@ -287,6 +287,25 @@ service cloud.firestore {
               "distanceMeters","createdAt"]);
           allow update, delete: if false;
         }
+        // One-time sign-in GPS check. Staff may append their own result;
+        // no continuous location tracking or raw GPS coordinates are stored.
+        match /loginChecks/{checkId} {
+          allow get, list: if owner(ownerUid);
+          allow create: if member(ownerUid,branchId)
+            && request.resource.data.ownerUid == ownerUid
+            && request.resource.data.branchId == branchId
+            && request.resource.data.employeeUid == request.auth.uid
+            && request.resource.data.email == request.auth.token.email
+            && request.resource.data.day is string
+            && request.resource.data.status in
+              ["WITHIN_BRANCH","OUTSIDE_BRANCH","NOT_CONFIGURED",
+               "GPS_UNAVAILABLE","MOCK_LOCATION"]
+            && request.resource.data.distanceMeters is int
+            && request.resource.data.keys().hasOnly([
+              "ownerUid","branchId","employeeUid","email","day",
+              "status","distanceMeters","createdAt"]);
+          allow update, delete: if false;
+        }
         match /staffLogins/{eventId} {
           allow get, list: if owner(ownerUid);
           allow create: if member(ownerUid,branchId)
