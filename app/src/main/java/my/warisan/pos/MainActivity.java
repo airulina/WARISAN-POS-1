@@ -69,6 +69,7 @@ private static final int RC_SIGN_IN = 9001;
   OwnerPassword ownerPassword;
   StaffSecurity staffSecurity;
   LiveBranchStore live;
+  BranchPresence presence;
   FirebaseFirestore firestoreForStaff(){return firestore;}
   android.content.SharedPreferences posPrefs(){
     return branchAccounts==null?getPreferences(0):branchAccounts.posPrefs();
@@ -162,7 +163,7 @@ private static final int RC_SIGN_IN = 9001;
       }else p.edit().putBoolean("fix_supplier_receipt_detail_20260926",true).commit();
     }catch(Exception ignored){}
   }
-  @Override public void onCreate(Bundle b){super.onCreate(b);firebaseAuth = FirebaseAuth.getInstance();firestore = FirebaseFirestore.getInstance();branchAccounts=new BranchAccounts(this,firebaseAuth,firestore);ownerPassword=new OwnerPassword(this);staffSecurity=new StaffSecurity(this);live=new LiveBranchStore(this);
+  @Override public void onCreate(Bundle b){super.onCreate(b);firebaseAuth = FirebaseAuth.getInstance();firestore = FirebaseFirestore.getInstance();branchAccounts=new BranchAccounts(this,firebaseAuth,firestore);ownerPassword=new OwnerPassword(this);staffSecurity=new StaffSecurity(this);live=new LiveBranchStore(this);presence=new BranchPresence(this);
 GoogleSignInOptions gso = new GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
         .requestIdToken(getString(R.string.default_web_client_id))
         .requestEmail()
@@ -588,6 +589,11 @@ selectedDay=date();selectedMonth=selectedDay.substring(0,7);rangeStart=selectedD
       action("PREVIEW / SHARE / PRINT REPORT",()->previewSalesReportPrintShare());
       action("History customer / Refund",()->{if(salesReportMode==0)saleHistory(selectedDay);else if(salesReportMode==1)saleHistory(selectedMonth);else new AlertDialog.Builder(this).setTitle("History Tarikh Dipilih").setMessage("History transaksi untuk "+rs+" hingga "+re+" dipaparkan pada bahagian Transaksi Terkini di atas.").setPositiveButton("OK",null).show();});action("Export laporan Excel / PDF",()->exportMenu());
     }else if(activePage==3){heading("Duit / POS","Fokus jualan harian dan sesi POS. Operasi bermula sekitar 4 petang; sesi kekal pada tarikh Opening sehingga Closing dibuat.");
+      if(branchAccounts.owner()){
+        action("🏪  CASHFLOW LIVE · Status Opening Semua Branch",()->live.showOpeningBranches());
+        live.drawOpeningSummary();
+        action("⚠  Semak Cubaan Opening Di Luar Kawasan",()->live.showOpeningAlerts());
+      }
       LinearLayout mode=row();TextView daily=chip("HARIAN",cashDailyMode?gold:0xff294563,cashDailyMode?0xff17202c:Color.WHITE),monthlyBtn=chip("BULANAN",!cashDailyMode?gold:0xff294563,!cashDailyMode?0xff17202c:Color.WHITE);daily.setGravity(Gravity.CENTER);monthlyBtn.setGravity(Gravity.CENTER);mode.addView(daily,new LinearLayout.LayoutParams(0,dp(42),1));LinearLayout.LayoutParams mlp=new LinearLayout.LayoutParams(0,dp(42),1);mlp.leftMargin=dp(7);mode.addView(monthlyBtn,mlp);add(body,mode,-1,-2);gap(body,9);daily.setOnClickListener(v->{cashDailyMode=true;draw();});monthlyBtn.setOnClickListener(v->{cashDailyMode=false;draw();});
       if(cashDailyMode)action("Tarikh: "+selectedCashDay+"   ▼",()->chooseCashDay());else action("Bulan: "+monthLabel(selectedMonth)+"   ▼",()->chooseMonth());
       String period=cashDailyMode?selectedCashDay:selectedMonth;String from=cashDailyMode?period:period+"-01",to=cashDailyMode?period:period+"-31";int sale=saleTotalBetween(from,to);int profit=businessProfit(period,cashDailyMode);int supplierPaid=supplierPaidTotal(period,cashDailyMode),supplierOutstanding=supplierDue(),fuel=cashCategoryTotal(period,cashDailyMode,"Minyak kereta"),rent=cashCategoryTotal(period,cashDailyMode,"Sewa");
@@ -652,6 +658,7 @@ selectedDay=date();selectedMonth=selectedDay.substring(0,7);rangeStart=selectedD
       gap(body,7);
       add(body,text(branchAccounts.staff()?"AKSES PEKERJA":"OWNER / BRANCH / PEKERJA",11,gold,true),-1,-2);gap(body,7);
       if(branchAccounts.owner()){
+        action("📍  Tetapkan Lokasi GPS Branch "+branchAccounts.branchName(),()->presence.ownerSetBranchLocation());
         action("👥  LIHAT SEMUA PEKERJA · Aktif / Berhenti",()->staffSecurity.manageWorkers());
         gap(body,8);
       }
@@ -822,10 +829,28 @@ selectedDay=date();selectedMonth=selectedDay.substring(0,7);rangeStart=selectedD
   void drawHistoricalPos(String day){JSONObject c=closingForDay(day);int sales=saleTotalBetween(day,day),cash=paymentTotalBetween(day,day,"Tunai"),qr=paymentTotalBetween(day,day,"QR");int opening=0,balance;if(c!=null){opening=c.optInt("opening",0);sales=c.optInt("sales",sales);cash=c.optInt("cash",cash);qr=c.optInt("qr",qr);balance=c.has("closingBalance")?c.optInt("closingBalance",0):Math.max(0,opening+cash);}else balance=Math.max(0,legacyBalanceThrough(day));LinearLayout a=row();metric(a,"OPENING BALANCE",money(opening),gold,null);metric(a,"JUALAN HARI",money(sales),blue,null);add(body,a,-1,-2);gap(body,7);LinearLayout b=row();metric(b,c!=null?"BAKI CLOSING":"BAKI DUIT AKHIR HARI",money(balance),0xff46c979,null);add(body,b,-1,-2);gap(body,6);add(body,text("Tunai "+money(cash)+"   ·   QR "+money(qr)+(c==null?"\nRekod lama: baki dikira daripada rekod jualan + aliran duit sehingga tarikh ini.":""),11,muted,false),-1,-2);}
   void drawPosSession(){boolean open=posSessionOpen();String day=posSessionDay();int opening=open?posOpening():0,cash=open?sessionCash(day):0,qr=open?sessionQr(day):0;LinearLayout a=row();metric(a,"OPENING",money(opening),gold,null);metric(a,"TUNAI",money(cash),0xff46c979,null);metric(a,"QR",money(qr),blue,null);add(body,a,-1,-2);gap(body,8);if(open){action("OPENING DIKUNCI · "+day,()->message("Selagi sesi "+day+" belum Closing, Opening baru tidak boleh dibuat."));gap(body,6);action("CLOSING POS · "+day,()->requireClosingExpenses());}else{action("BUKA POS / OPENING BALANCE",()->openPosSession());}}
   int lastClosingBalance(){JSONArray list=entries("pos_closings");JSONObject latest=null;String latestDay="";for(int i=0;i<list.length();i++){JSONObject e=list.optJSONObject(i);if(e==null)continue;String d=entryDay(e);if(latest==null||d.compareTo(latestDay)>=0){latest=e;latestDay=d;}}if(latest==null)return Math.max(0,totalMoneyBalance());if(latest.has("closingBalance"))return Math.max(0,latest.optInt("closingBalance",0));int legacy=latest.optInt("opening",0)+latest.optInt("cash",0);return Math.max(0,legacy);}
-  void startPosSession(String day,int amount){int max=lastClosingBalance();if(amount<0||amount>max){message("Opening mesti antara RM0.00 hingga "+money(max)+".");return;}if(posPrefs().edit().putBoolean("pos_session_open",true).putString("pos_session_day",day).putInt("pos_opening",amount).commit()){
-  if(live!=null&&live.enabled())live.session(true,day,amount);
-  selectedCashDay=day;draw();
-}else message("Opening POS gagal disimpan.");}
+  void startPosSession(String day,int amount){
+    int max=lastClosingBalance();
+    if(posSessionOpen()){message("Sesi POS sudah dibuka.");return;}
+    if(amount<0||amount>max){message("Opening mesti antara RM0.00 hingga "+money(max)+".");return;}
+    if(branchAccounts.staff()){
+      if(live==null||!live.usable()){
+        message("Opening pekerja memerlukan Cloud Live ONLINE.");return;
+      }
+      presence.verifyOpening(amount,day,()->{
+        if(!branchAccounts.staff()||posSessionOpen())return;
+        live.sessionConfirmed(true,day,amount,()->persistPosOpening(day,amount));
+      });
+    }else persistPosOpening(day,amount);
+  }
+  void persistPosOpening(String day,int amount){
+    if(posSessionOpen())return;
+    if(posPrefs().edit().putBoolean("pos_session_open",true)
+      .putString("pos_session_day",day).putInt("pos_opening",amount).commit()){
+      if(branchAccounts.owner()&&live!=null&&live.usable())live.session(true,day,amount);
+      selectedCashDay=day;draw();
+    }else message("Opening gagal disimpan dalam telefon. Minta Owner semak sesi Live.");
+  }
   void openPosSession(){if(posSessionOpen()){message("Closing sesi semasa dahulu sebelum Opening baru.");return;}String last=posPrefs().getString("pos_last_closed_day","");String proposed=date();final String day=proposed;final int lastBalance=lastClosingBalance();LinearLayout box=col();box.setPadding(dp(16),dp(10),dp(16),dp(8));box.setBackgroundColor(cream);add(box,text("OPENING POS · "+day,18,blue,true),-1,-2);gap(box,8);add(box,text("Baki Closing Terakhir  "+money(lastBalance),14,gold,true),-1,-2);if(!last.isEmpty())add(box,text("Closing terakhir · "+last,11,muted,false),-1,-2);gap(box,8);EditText amount=priceField("Opening RM",String.format(Locale.US,"%.2f",lastBalance/100.0));add(box,text("Opening boleh RM0.00 hingga maksimum "+money(lastBalance)+".",12,muted,false),-1,-2);gap(box,5);add(box,amount,-1,-2);AlertDialog dlg=darkBuilder().setView(box).setPositiveButton("SIMPAN OPENING",null).setNeutralButton("MULA RM0.00",null).setNegativeButton("BATAL",null).create();dlg.setOnShowListener(v->{styleDarkDialogNow(dlg);dlg.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(x->{try{int value=parseCents(amount);if(value<0||value>lastBalance){message("Opening tak boleh lebih daripada Baki Closing Terakhir "+money(lastBalance)+".");return;}startPosSession(day,value);dlg.dismiss();}catch(Exception e){message("Masukkan jumlah Opening yang betul.");}});dlg.getButton(AlertDialog.BUTTON_NEUTRAL).setOnClickListener(x->{startPosSession(day,0);dlg.dismiss();});});dlg.show();}
   int closingOil(String day){return cashCategoryTotal(day,true,"Minyak kereta","Minyak Kereta","Minyak");}
   int closingRent(String day){return cashCategoryTotal(day,true,"Sewa");}
@@ -1667,6 +1692,7 @@ selectedDay=date();selectedMonth=selectedDay.substring(0,7);rangeStart=selectedD
   @Override public void onRequestPermissionsResult(int request,String[] permissions,int[] results){
     super.onRequestPermissionsResult(request,permissions,results);
     if(request==REQUEST_BLUETOOTH&&results.length>0&&results[0]==PackageManager.PERMISSION_GRANTED)choosePrinter();
+    if(request==BranchPresence.REQUEST_LOCATION&&presence!=null)presence.permissionAnswer(results);
   }
   void message(String s){Toast.makeText(this,ui(s),Toast.LENGTH_LONG).show();}
   void playPaymentSound(){try{MediaPlayer player=MediaPlayer.create(this,R.raw.payment_chime);if(player==null)return;player.setVolume(.85f,.85f);player.setOnCompletionListener(MediaPlayer::release);player.setOnErrorListener((mp,what,extra)->{mp.release();return true;});player.start();}catch(Exception ignored){}}
