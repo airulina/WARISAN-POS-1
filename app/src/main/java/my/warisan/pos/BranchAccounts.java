@@ -337,7 +337,7 @@ final class BranchAccounts {
     if(!active())host.action("Login Pekerja · Email + Password",()->host.staffSecurity.loginEmployee());
   }
   EditText entry(String hint){
-    EditText e=new EditText(host);e.setSingleLine(true);e.setHint(hint);host.styleInput(e);return e;
+    EditText e=new EditText(host);e.setSingleLine(true);e.setHint(host.ui(hint));host.styleInput(e);return e;
   }
   void registerOwner(){
     FirebaseUser u=user();
