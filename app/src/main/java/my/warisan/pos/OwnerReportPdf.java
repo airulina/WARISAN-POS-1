@@ -13,6 +13,12 @@ import java.util.Locale;
 
 /** A4 visual report for a single owner-selected branch. Never merges another branch's costs. */
 final class OwnerReportPdf {
+  // Printing happens in background. Thread-local language prevents reports
+  // printed concurrently by separate jobs from changing each other's labels.
+  private static final ThreadLocal<Boolean> PDF_ENGLISH=new ThreadLocal<>();
+  private static String localized(String label){
+    return WarisanLanguage.translate(label,Boolean.TRUE.equals(PDF_ENGLISH.get()));
+  }
   private static final int NAVY=Color.rgb(13,35,58);
   private static final int BLUE=Color.rgb(54,116,191);
   private static final int GOLD=Color.rgb(207,152,41);
@@ -36,6 +42,7 @@ final class OwnerReportPdf {
     }else{sale=0;cost=0;operating=0;profit=0;sold=new int[0];}
     final String[] names=host.names.clone();
     WarisanPrinting.print(host,"WARISAN POS · "+name+" · "+month, out->{
+      PDF_ENGLISH.set(host.english());
       PdfDocument pdf=new PdfDocument();
       try{
         Paint p=new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -106,7 +113,7 @@ final class OwnerReportPdf {
         note(c,p,"Rekod lama pada telefon lain mungkin belum diselaraskan ke Cloud.",40,817);
         pdf.finishPage(page);
         pdf.writeTo(out);
-      }finally{pdf.close();}
+      }finally{pdf.close();PDF_ENGLISH.remove();}
     });
   }
   private static void header(Canvas c,Paint p,String branch,String month,String subtitle){
@@ -122,11 +129,11 @@ final class OwnerReportPdf {
   }
   private static void title(Canvas c,Paint p,String text,float x,float y,float size,int color){
     p.setColor(color);p.setTypeface(Typeface.create("sans-serif",Typeface.BOLD));
-    p.setTextSize(size);c.drawText(text,x,y,p);
+    p.setTextSize(size);c.drawText(localized(text),x,y,p);
   }
   private static void label(Canvas c,Paint p,String text,float x,float y,float size,int color){
     p.setColor(color);p.setTypeface(Typeface.create("sans-serif",Typeface.NORMAL));
-    p.setTextSize(size);c.drawText(text,x,y,p);
+    p.setTextSize(size);c.drawText(localized(text),x,y,p);
   }
   private static void note(Canvas c,Paint p,String text,int x,int y){
     label(c,p,text,x,y,8.5f,GRAY);
