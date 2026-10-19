@@ -269,6 +269,36 @@ service cloud.firestore {
               && afterDay(ownerUid,branchId,resource.data.day).lastRefundId == orderId);
           allow delete: if false;
         }
+        // One-time foreground location check records; only Owner may list.
+        // Coordinates are intentionally NOT stored (distance/status only).
+        match /openingChecks/{checkId} {
+          allow get, list: if owner(ownerUid);
+          allow create: if member(ownerUid,branchId)
+            && request.resource.data.ownerUid == ownerUid
+            && request.resource.data.branchId == branchId
+            && request.resource.data.employeeUid == request.auth.uid
+            && request.resource.data.day is string
+            && request.resource.data.status in
+              ["VERIFIED","OUTSIDE_BRANCH","GPS_UNAVAILABLE",
+               "NOT_CONFIGURED","MOCK_LOCATION"]
+            && request.resource.data.distanceMeters is int
+            && request.resource.data.keys().hasOnly([
+              "ownerUid","branchId","employeeUid","day","status",
+              "distanceMeters","createdAt"]);
+          allow update, delete: if false;
+        }
+        match /staffLogins/{eventId} {
+          allow get, list: if owner(ownerUid);
+          allow create: if member(ownerUid,branchId)
+            && request.resource.data.ownerUid == ownerUid
+            && request.resource.data.branchId == branchId
+            && request.resource.data.employeeUid == request.auth.uid
+            && request.resource.data.email == request.auth.token.email
+            && request.resource.data.keys().hasOnly([
+              "ownerUid","branchId","employeeUid","email","deviceTag",
+              "createdAt"]);
+          allow update, delete: if false;
+        }
         match /liveSessions/{dayId} {
           allow get: if owner(ownerUid) || (member(ownerUid,branchId) && staffWorkingDay(dayId));
           allow list: if owner(ownerUid);
@@ -287,9 +317,12 @@ service cloud.firestore {
               && request.resource.data.branchId == branchId
               && request.resource.data.day == dayId
               && request.resource.data.diff(resource.data).affectedKeys()
-                .hasOnly(["open","opening","closing","openedBy","closedBy","updatedAt"])
+                .hasOnly(["open","opening","closing","openedBy","closedBy",
+                          "openedByEmail","closedByEmail","updatedAt"])
               && (request.resource.data.openedBy == request.auth.uid
-                || request.resource.data.closedBy == request.auth.uid));
+                || request.resource.data.closedBy == request.auth.uid))
+              && (request.resource.data.get("openedByEmail",request.auth.token.email) is string));
+
           allow delete: if false;
         }
         // Refund requests: staff may request; ONLY Owner may approve/deny.
