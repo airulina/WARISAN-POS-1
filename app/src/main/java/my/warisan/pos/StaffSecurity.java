@@ -205,51 +205,146 @@ final class StaffSecurity {
 
   void loginEmployee(){
     LinearLayout form=host.col();form.setPadding(host.dp(18),0,host.dp(18),0);
-    EditText email=input("Email pekerja",false),password=input("Password pekerja",true);
+    EditText email=input("Email",false),password=input("Password",true);
     host.add(form,email,-1,-2);host.add(form,password,-1,-2);
-    host.darkBuilder().setTitle("Log Masuk Pekerja")
-      .setMessage("Masukkan email dan password yang Owner sediakan.")
-      .setView(form).setPositiveButton("LOGIN",(d,w)->{
-        String mail=email.getText().toString().trim().toLowerCase(Locale.ROOT);
-        String secret=password.getText().toString();
-        if(mail.isEmpty()||secret.isEmpty()){host.message("Isi email dan password.");return;}
-        accounts.auth.signInWithEmailAndPassword(mail,secret).addOnSuccessListener(result->{
-          FirebaseUser u=accounts.user();
-          if(u==null){host.message("Login gagal.");return;}
-          if(!u.isEmailVerified()){
-            // Wait for the server to queue the verification email BEFORE logout.
-            u.sendEmailVerification().addOnCompleteListener(mailResult->{
-              accounts.auth.signOut();
-              host.draw();
-              String note=mailResult.isSuccessful()
-                ?"Email pengesahan telah diminta dihantar kepada "+mail+". Semak Inbox, Spam/Junk dan tekan Verify Email. Selepas disahkan, login semula."
-                :"Akaun pekerja wujud tetapi email pengesahan gagal dihantar. Semak Firebase Authentication → Templates dan internet. Ralat: "+
-                  (mailResult.getException()==null?"Tidak diketahui":mailResult.getException().getMessage());
-              host.darkBuilder().setTitle("SAHKAN EMAIL PEKERJA")
-                .setMessage(note+"\n\nTak perlu daftar pekerja semula atau padam data.")
-                .setPositiveButton("FAHAM",null).show();
-            });
+    host.darkBuilder().setTitle("LOG IN")
+      .setView(form).setPositiveButton("LOG IN",(d,w)->
+        loginWithCredentials(email.getText().toString().trim(),
+          password.getText().toString()))
+      .setNegativeButton("BATAL",null).show();
+  }
+  void loginWithCredentials(String rawMail,String secret){
+    final String mail=rawMail.trim().toLowerCase(Locale.ROOT);
+    if(!android.util.Patterns.EMAIL_ADDRESS.matcher(mail).matches()||secret.isEmpty()){
+      host.message("Masukkan Email dan Password yang sah.");return;
+    }
+    accounts.auth.signInWithEmailAndPassword(mail,secret).addOnSuccessListener(result->{
+      FirebaseUser user=result.getUser();
+      if(user==null){host.message("Firebase Login gagal.");return;}
+      db.collection("staffProfiles").document(user.getUid())
+        .get(com.google.firebase.firestore.Source.SERVER)
+        .addOnSuccessListener(profile->{
+          if(profile.exists()&&"STAFF".equals(profile.getString("role"))){
+            if(!Boolean.TRUE.equals(profile.getBoolean("active"))||
+              Boolean.TRUE.equals(profile.getBoolean("removed"))){
+              accounts.auth.signOut();host.draw();
+              host.message("Akaun pekerja disekat atau sudah berhenti.");return;
+            }
+            if(!user.isEmailVerified()){
+              user.sendEmailVerification().addOnCompleteListener(mailTask->{
+                accounts.auth.signOut();host.draw();
+                host.darkBuilder().setTitle("SAHKAN EMAIL")
+                  .setMessage(mailTask.isSuccessful()?
+                    "Buka email pekerja dan klik Verify Email, kemudian login semula.":
+                    "Email pengesahan tidak berjaya dihantar. Semak inbox, spam atau Firebase.")
+                  .setPositiveButton("FAHAM",null).show();
+              });return;
+            }
+            bindWorkerDevice(user,profile);
             return;
           }
-          db.collection("staffProfiles").document(u.getUid()).get()
-            .addOnSuccessListener(profile->{
-              if(!profile.exists()||!Boolean.TRUE.equals(profile.getBoolean("active"))
-                ||!"STAFF".equals(profile.getString("role"))){
-                accounts.auth.signOut();host.message("Akaun pekerja belum aktif atau telah ditutup.");host.draw();return;
-              }
-              String ownerUid=profile.getString("ownerUid"),branchId=profile.getString("branchId");
-              String name=profile.getString("branchName");
-              if(ownerUid==null||branchId==null||ownerUid.isEmpty()||branchId.isEmpty()){
-                accounts.auth.signOut();host.message("Profil pekerja tidak lengkap.");host.draw();return;
-              }
-              // Online role check; only the Firebase Admin backend can create profiles.
-              accounts.setSession(u.getUid(),ownerUid,branchId,
-                name==null?"Branch":name,"STAFF");
-              observeWorker();
-              host.message("Login pekerja berjaya.");
-            }).addOnFailureListener(e->{accounts.auth.signOut();host.draw();host.message("Pengesahan pekerja gagal: "+e.getMessage());});
-        }).addOnFailureListener(e->host.message("Login gagal: "+e.getMessage()));
-      }).setNegativeButton("Batal",null).show();
+          if(!user.isEmailVerified()){
+            user.sendEmailVerification();
+            accounts.auth.signOut();host.draw();
+            host.message("Sahkan Email sebelum Log In Owner.");return;
+          }
+          // If email credentials are an existing Owner, verify workspace on
+          // server before restoring previous branches. Workers cannot elevate.
+          accounts.afterLogin();
+        }).addOnFailureListener(e->{
+          accounts.auth.signOut();host.draw();
+          host.message("Semak peranan akaun gagal: "+e.getMessage());
+        });
+    }).addOnFailureListener(e->host.message("Email / Password gagal: "+e.getMessage()));
+  }
+  void bindWorkerDevice(FirebaseUser user,com.google.firebase.firestore.DocumentSnapshot profile){
+    final String uid=user.getUid();
+    final String device=host.getSharedPreferences("warisan_identity",0)
+      .getString("device_uid","");
+    if(device.isEmpty()){accounts.auth.signOut();host.message("ID telefon tidak tersedia.");return;}
+    final String assignedOwner=profile.getString("ownerUid");
+    final String assignedBranch=profile.getString("branchId");
+    final String assignedName=profile.getString("branchName");
+    if(assignedOwner==null||assignedBranch==null){
+      accounts.auth.signOut();host.message("Profil branch pekerja tidak lengkap.");return;
+    }
+    DocumentReference ref=db.collection("staffProfiles").document(uid);
+    db.runTransaction(tx->{
+      com.google.firebase.firestore.DocumentSnapshot current=tx.get(ref);
+      if(!current.exists()||!Boolean.TRUE.equals(current.getBoolean("active"))||
+        !"STAFF".equals(current.getString("role"))||
+        Boolean.TRUE.equals(current.getBoolean("removed"))||
+        !assignedBranch.equals(current.getString("branchId")))
+        throw new IllegalStateException("Akaun pekerja tidak aktif atau branch berubah.");
+      String bound=current.getString("deviceId");
+      if(bound!=null&&!bound.isEmpty()&&!device.equals(bound))
+        throw new IllegalStateException("Akaun ini sudah diikat pada telefon lain. Minta Owner RESET PERANTI.");
+      if(bound==null||bound.isEmpty())
+        tx.update(ref,"deviceId",device,"deviceBoundAt",
+          com.google.firebase.firestore.FieldValue.serverTimestamp());
+      return null;
+    }).addOnSuccessListener(ok->{
+      if(accounts.user()==null||!uid.equals(accounts.user().getUid()))return;
+      accounts.setSession(uid,assignedOwner,assignedBranch,
+        assignedName==null?"Branch":assignedName,"STAFF");
+      observeWorker();
+      recordStaffLogin(uid,mailOf(user),assignedOwner,assignedBranch,device);
+      host.message("Log In berjaya · "+accounts.branchName());
+    }).addOnFailureListener(e->{
+      accounts.auth.signOut();host.draw();
+      host.darkBuilder().setTitle("LOG IN PEKERJA DISEKAT")
+        .setMessage(e.getMessage()+"\n\nSetiap pekerja hanya dibenarkan satu pemasangan telefon. "+
+          "Jika bertukar telefon, Owner perlu reset peranti dalam Senarai Pekerja. "+
+          "Login tidak membuktikan lokasi; GPS diperiksa ketika Opening.")
+        .setPositiveButton("FAHAM",null).show();
+    });
+  }
+  String mailOf(FirebaseUser user){
+    return user.getEmail()==null?"":user.getEmail().trim().toLowerCase(Locale.ROOT);
+  }
+  void recordStaffLogin(String uid,String email,String owner,String branch,String device){
+    Map<String,Object> log=new HashMap<>();
+    log.put("ownerUid",owner);log.put("branchId",branch);
+    log.put("employeeUid",uid);log.put("email",email);
+    log.put("deviceTag",device.length()>6?device.substring(device.length()-6):device);
+    log.put("createdAt",com.google.firebase.firestore.FieldValue.serverTimestamp());
+    db.collection("workspaces").document(owner).collection("branches").document(branch)
+      .collection("staffLogins").add(log);
+  }
+  void signupOwnerWithEmail(){
+    LinearLayout form=host.col();form.setPadding(host.dp(18),0,host.dp(18),0);
+    EditText email=input("Email pengguna baru",false);
+    EditText password=input("Password baru (minimum 10 aksara)",true);
+    EditText confirm=input("Ulang Password",true);
+    host.add(form,email,-1,-2);host.add(form,password,-1,-2);host.add(form,confirm,-1,-2);
+    host.darkBuilder().setTitle("SIGN UP · PENGGUNA BARU")
+      .setView(form).setPositiveButton("SIGN UP",(d,w)->{
+        String mail=email.getText().toString().trim().toLowerCase(Locale.ROOT);
+        String pwd=password.getText().toString();
+        if(!android.util.Patterns.EMAIL_ADDRESS.matcher(mail).matches()||
+          pwd.length()<10||!pwd.equals(confirm.getText().toString())){
+          host.message("Semak Email dan Password minimum 10 aksara.");return;
+        }
+        db.collection("staffEmails").document(mail)
+          .get(com.google.firebase.firestore.Source.SERVER)
+          .addOnSuccessListener(lock->{
+            if(lock.exists()&&!Boolean.TRUE.equals(lock.getBoolean("removed"))){
+              host.message("Email ini masih didaftarkan sebagai pekerja. Tidak boleh Sign Up.");return;
+            }
+            accounts.auth.createUserWithEmailAndPassword(mail,pwd)
+              .addOnSuccessListener(created->{
+                FirebaseUser u=created.getUser();
+                if(u==null){host.message("Daftar gagal.");return;}
+                u.sendEmailVerification().addOnCompleteListener(sent->{
+                  accounts.auth.signOut();host.draw();
+                  host.darkBuilder().setTitle("SAHKAN EMAIL")
+                    .setMessage("Akaun berjaya dibuat. Sila sahkan email "+mail+
+                      " dahulu, kemudian Log In dan pilih DAFTAR OWNER untuk isi perniagaan dan branch.")
+                    .setPositiveButton("FAHAM",null).show();
+                });
+              }).addOnFailureListener(e->host.message("Sign Up gagal: "+e.getMessage()));
+          }).addOnFailureListener(e->host.message("Gagal semak status email pekerja: "+e.getMessage()));
+      }).setNegativeButton("BATAL",null).show();
   }
   DocumentReference refundDoc(String id){
     return db.collection("workspaces").document(accounts.ownerUid())
@@ -268,6 +363,16 @@ final class StaffSecurity {
       .addSnapshotListener((profile,error)->{
         if(!accounts.staff()||accounts.user()==null||!uid.equals(accounts.user().getUid()))return;
         if(error!=null)return;
+        if(profile!=null&&profile.exists()){
+          String bound=profile.getString("deviceId");
+          String device=host.getSharedPreferences("warisan_identity",0).getString("device_uid","");
+          if(bound==null||!bound.equals(device)){
+            if(workerAccessListener!=null){workerAccessListener.remove();workerAccessListener=null;}
+            host.live.stop();accounts.auth.signOut();host.draw();
+            host.message("Telefon pekerja dinyahikat. Log In semula selepas Owner sahkan.");
+            return;
+          }
+        }
         if(profile!=null&&(!profile.exists()||
           !Boolean.TRUE.equals(profile.getBoolean("active"))||
           !"STAFF".equals(profile.getString("role"))||
