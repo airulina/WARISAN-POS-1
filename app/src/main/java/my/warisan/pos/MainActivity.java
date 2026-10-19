@@ -265,6 +265,14 @@ selectedDay=date();selectedMonth=selectedDay.substring(0,7);rangeStart=selectedD
     add(body,text("🏪  "+(branchAccounts.staff()?"BRANCH PEKERJA: ":"BRANCH AKTIF: ")+
       branchAccounts.branchName().toUpperCase(new Locale("ms","MY")),
       13,gold,true),-1,-2);
+    if(branchAccounts.owner()){
+      gap(body,8);
+      TextView session=chip("OPENING / CLOSING · "+branchAccounts.branchName(),
+        0xff203f61,gold);
+      session.setPadding(dp(12),dp(10),dp(12),dp(10));
+      session.setOnClickListener(v->{activePage=22;draw();});
+      add(body,session,-1,-2);
+    }
     gap(body,15);
     LinearLayout title=row();title.addView(text("Pilih menu",20,ink,true),new LinearLayout.LayoutParams(0,-2,1));TextView historyButton=chip("HISTORY",0xff203f61,gold);add(title,historyButton,-2,-2);historyButton.setOnClickListener(v->{
       if(branchAccounts.staff())saleHistory(businessDay());
@@ -1143,7 +1151,7 @@ selectedDay=date();selectedMonth=selectedDay.substring(0,7);rangeStart=selectedD
   String posClosingReceipt(String day,int opening,int sales,int cash,int qr,int tx,int outstanding,int balance,int supplierPaid,int supplierOutstanding,int oil,int rent){
     sales=saleTotalBetween(day,day);cash=paymentTotalBetween(day,day,"Tunai");qr=paymentTotalBetween(day,day,"QR");int edar=edarPaidTotal(day);int unknown=paymentUnknownBetween(day,day);
     StringBuilder b=new StringBuilder();String shop=posPrefs().getString("shop_name","WARISAN FROZEN");b.append(centerReceipt(shop));String phone=posPrefs().getString("receipt_phone","");if(!phone.isEmpty())b.append(centerReceipt("Tel: "+phone));
-    b.append("--------------------------------\n").append(centerReceipt("RESIT PENUTUPAN POS")).append(receiptPair("Tarikh sesi",day)).append(receiptPair("Baki permulaan",money(opening))).append("--------------------------------\nJUALAN\n").append(soldClosingText(day)).append("--------------------------------\n").append(receiptPair("JUMLAH JUALAN",money(sales))).append(receiptPair("Tunai",money(cash))).append(receiptPair("QR",money(qr)));if(edar>0)b.append(receiptPair("EDAR dibayar",money(edar)));
+    b.append("--------------------------------\n").append(centerReceipt("RESIT PENUTUPAN POS")).append(receiptPair("Branch",branchAccounts.branchName())).append(receiptPair("Tarikh sesi",day)).append(receiptPair("Baki permulaan",money(opening))).append("--------------------------------\nJUALAN\n").append(soldClosingText(day)).append("--------------------------------\n").append(receiptPair("JUMLAH JUALAN",money(sales))).append(receiptPair("Tunai",money(cash))).append(receiptPair("QR",money(qr)));if(edar>0)b.append(receiptPair("EDAR dibayar",money(edar)));
     b.append("--------------------------------\nPERBELANJAAN OPERASI\n").append(receiptPair("Minyak",money(oil))).append(receiptPair("Sewa",money(rent))).append("--------------------------------\nPEMBEKAL\n").append(receiptPair("Dibayar hari ini",money(supplierPaid))).append(receiptPair("Belum dibayar",money(supplierOutstanding))).append("--------------------------------\n").append(receiptPair("Pesanan belum bayar",String.valueOf(outstanding))).append(receiptPair("BAKI TUNAI POS",money(balance))).append("================================\n").append(centerReceipt("PENUTUPAN DISAHKAN")).append(ownerReceipt()).append("\n");return b.toString();
   }
   void confirmResetToday(){
@@ -1960,7 +1968,16 @@ JSONArray list=entries("stock_distribution");JSONObject e=list.optJSONObject(ind
   }
   void payPendingOrder(int index){JSONArray list=entries("pending_orders");JSONObject o=list.optJSONObject(index);if(o==null||o.optBoolean("paid",false)||o.optBoolean("cancelled",false)){message("Order ini sudah dibayar, dibatalkan atau tidak dijumpai.");return;}int due=o.optInt("total");showDarkChoice("BAYAR ORDER #"+String.format(Locale.US,"%04d",o.optInt("order")),money(due),new String[]{"TUNAI","QR"},new int[]{blue,0xff203f61},which->{if(which==0)cashPaymentPending(index,due);else chooseQrPending(index,due);});}
   void cashPaymentPending(int index,int due){LinearLayout box=col();box.setPadding(dp(20),dp(18),dp(20),dp(10));box.setBackground(shape(surface,18));add(box,text("BAYARAN TUNAI",20,ink,true),-1,-2);gap(box,4);add(box,text("Jumlah",12,muted,true),-1,-2);gap(box,2);TextView dueAmount=text(money(due),30,gold,true);add(box,dueAmount,-1,-2);gap(box,12);EditText received=new EditText(this);received.setSingleLine(true);received.setInputType(android.text.InputType.TYPE_CLASS_NUMBER|android.text.InputType.TYPE_NUMBER_FLAG_DECIMAL);received.setHint("Contoh 50.00");styleInput(received);add(box,received,-1,-2);TextView change=text("Masukkan tunai diterima",14,muted,true);gap(box,8);add(box,change,-1,-2);AlertDialog dialog=darkBuilder().setView(box).setPositiveButton("BAYARAN DITERIMA",null).setNegativeButton("BATAL",null).create();dialog.setOnShowListener(v->{styleDarkDialogNow(dialog);Button ok=dialog.getButton(AlertDialog.BUTTON_POSITIVE),back=dialog.getButton(AlertDialog.BUTTON_NEGATIVE);ok.setTextColor(gold);back.setTextColor(muted);ok.setEnabled(false);received.addTextChangedListener(new android.text.TextWatcher(){public void beforeTextChanged(CharSequence s,int a,int b,int c){}public void onTextChanged(CharSequence s,int a,int b,int c){int tendered=cashCents(received);boolean enough=tendered>=due;ok.setEnabled(enough);change.setText(enough?"BAKI  "+money(tendered-due):tendered<0?"Masukkan tunai diterima":"Kurang  "+money(due-tendered));change.setTextColor(enough?gold:muted);}public void afterTextChanged(android.text.Editable e){}});ok.setOnClickListener(x->{int tendered=cashCents(received);if(tendered<due)return;dialog.dismiss();completePendingPayment(index,"Tunai",tendered);});});dialog.show();}
-  void chooseQrPending(int index,int due){showDarkChoice("PILIH QR",money(due),new String[]{"TOUCH ’N GO  ·  MANUAL","BANK  ·  DYNAMIC / AUTO CONFIRM"},new int[]{0xff203f61,blue},which->{if(which==0)showTngQrPending(index,due);else showBankQrPending(index,due);});}
+  void chooseQrPending(int index,int due){
+    // QR / DuitNow defaults directly to the Owner's centrally saved TNG QR.
+    // Keep the separate supported Billplz flow available for shops using it.
+    if("Billplz".equals(posPrefs().getString("payment_provider","Static DuitNow"))){
+      showDarkChoice("PILIH PEMBAYARAN QR",money(due),
+        new String[]{"QR / DUITNOW OWNER  ·  MANUAL","BILLPLZ  ·  API BANK"},
+        new int[]{0xff203f61,blue},
+        which->{if(which==0)showTngQrPending(index,due);else showBankQrPending(index,due);});
+    }else showTngQrPending(index,due);
+  }
   void showTngQrPending(int index,int due){
     if(!sharedPaymentQr.hasQr()){
       message("QR Cloud belum tersedia. Minta Owner upload di Setting → QR / DuitNow.");return;
