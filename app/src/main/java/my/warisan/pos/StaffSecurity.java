@@ -10,7 +10,8 @@ import com.google.firebase.firestore.DocumentReference;
 import com.google.firebase.firestore.FirebaseFirestore;
 import com.google.firebase.firestore.FieldValue;
 import com.google.firebase.firestore.QueryDocumentSnapshot;
-import com.google.firebase.functions.FirebaseFunctions;
+import com.google.firebase.FirebaseApp;
+import com.google.firebase.auth.FirebaseAuth;
 import org.json.JSONArray;
 import org.json.JSONObject;
 import java.util.ArrayList;
@@ -24,10 +25,15 @@ final class StaffSecurity {
   final MainActivity host;
   final BranchAccounts accounts;
   final FirebaseFirestore db;
-  final FirebaseFunctions functions;
+  final FirebaseAuth staffProvisionAuth;
   StaffSecurity(MainActivity a){
     host=a;accounts=a.branchAccounts;db=a.firestoreForStaff();
-    functions=FirebaseFunctions.getInstance("asia-southeast1");
+    FirebaseApp secondary;
+    try { secondary=FirebaseApp.getInstance("warisan_staff_provisioning"); }
+    catch(IllegalStateException e) {
+      secondary=FirebaseApp.initializeApp(a,FirebaseApp.getInstance().getOptions(),"warisan_staff_provisioning");
+    }
+    staffProvisionAuth=FirebaseAuth.getInstance(secondary);
   }
   EditText input(String hint,boolean secret){
     EditText f=new EditText(host);
@@ -49,12 +55,36 @@ final class StaffSecurity {
         String p=password.getText().toString();
         if(!android.util.Patterns.EMAIL_ADDRESS.matcher(mail).matches()){host.message("Email pekerja tidak sah.");return;}
         if(p.length()<10||!p.equals(confirm.getText().toString())){host.message("Password minimum 10 aksara dan mesti sepadan.");return;}
-        Map<String,Object> args=new HashMap<>();args.put("email",mail);args.put("password",p);
-        args.put("branchId",accounts.branchId());
-        functions.getHttpsCallable("createStaffAccount").call(args)
-          .addOnSuccessListener(res->host.message("Pekerja berjaya didaftarkan. Kongsi password sementara secara peribadi."))
-          .addOnFailureListener(e->host.message("Gagal daftar pekerja: "+e.getMessage()+
-              ". Pastikan Firebase Cloud Functions telah dipasang."));
+        // Secondary FirebaseAuth means the Owner stays signed in.
+        // Email/Password + Firestore work on the no-cost Spark plan.
+        if(!accounts.owner()){host.message("Sesi Owner sudah tamat.");return;}
+        final String oid=accounts.ownerUid(),bid=accounts.branchId(),name=accounts.branchName();
+        staffProvisionAuth.createUserWithEmailAndPassword(mail,p).addOnSuccessListener(result->{
+          FirebaseUser worker=result.getUser();
+          if(worker==null){host.message("Gagal cipta akaun pekerja.");return;}
+          Map<String,Object> profile=new HashMap<>();
+          profile.put("uid",worker.getUid());profile.put("email",mail);
+          profile.put("role","STAFF");profile.put("active",true);
+          profile.put("ownerUid",oid);profile.put("branchId",bid);
+          profile.put("branchName",name);profile.put("createdAt",new Date());
+          DocumentReference member=db.collection("workspaces").document(oid)
+            .collection("branches").document(bid).collection("members").document(worker.getUid());
+          Map<String,Object> m=new HashMap<>(profile);
+          com.google.firebase.firestore.WriteBatch batch=db.batch();
+          batch.set(db.collection("staffProfiles").document(worker.getUid()),profile);
+          batch.set(member,m);
+          batch.commit().addOnSuccessListener(done->{
+            worker.sendEmailVerification().addOnCompleteListener(verification->{
+              staffProvisionAuth.signOut();
+              host.message("Akaun pekerja didaftarkan. Sahkan email sebelum login.");
+            });
+          }).addOnFailureListener(error->{
+            worker.delete().addOnCompleteListener(deleted->staffProvisionAuth.signOut());
+            host.message("Profil pekerja gagal disimpan: "+error.getMessage());
+          });
+        }).addOnFailureListener(error->host.message(
+          "Gagal daftar pekerja. Aktifkan Email/Password dalam Firebase Authentication: "+error.getMessage()));
+
       }).setNegativeButton("Batal",null).show();
   }
   void loginEmployee(){
@@ -70,6 +100,12 @@ final class StaffSecurity {
         accounts.auth.signInWithEmailAndPassword(mail,secret).addOnSuccessListener(result->{
           FirebaseUser u=accounts.user();
           if(u==null){host.message("Login gagal.");return;}
+          if(!u.isEmailVerified()){
+            u.sendEmailVerification();
+            accounts.auth.signOut();
+            host.message("Sahkan email pekerja dahulu, kemudian login semula.");
+            host.draw();return;
+          }
           db.collection("staffProfiles").document(u.getUid()).get()
             .addOnSuccessListener(profile->{
               if(!profile.exists()||!Boolean.TRUE.equals(profile.getBoolean("active"))
