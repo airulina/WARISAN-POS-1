@@ -214,7 +214,7 @@ selectedDay=date();selectedMonth=selectedDay.substring(0,7);rangeStart=selectedD
       return;
     }
     if(branchAccounts!=null&&branchAccounts.staff()
-      &&activePage!=0&&activePage!=11&&activePage!=5&&activePage!=12)activePage=0;
+      &&activePage!=0&&activePage!=11&&activePage!=5&&activePage!=12&&activePage!=14)activePage=0;
     if(activePage!=0){drawPage();addNavigation(screen);return;}
     LinearLayout header=row();ImageView logo=new ImageView(this);logo.setImageResource(R.drawable.warisan_logo);makeCircle(logo);add(header,logo,49,49);
     LinearLayout heading=col();heading.setPadding(dp(10),0,0,0);add(heading,text("WARISAN POS",21,blue,true),-1,-2);LinearLayout sub=row();sub.addView(text("KIOS WARISAN  ·  SISTEM JUALAN",10,muted,true),new LinearLayout.LayoutParams(0,-2,1));TextView liveClock=text("",10,gold,true);liveClock.setGravity(Gravity.RIGHT|Gravity.CENTER_VERTICAL);add(sub,liveClock,-2,-2);add(heading,sub,-1,-2);startHeaderClock(liveClock);header.addView(heading,new LinearLayout.LayoutParams(0,-2,1));
@@ -240,7 +240,9 @@ selectedDay=date();selectedMonth=selectedDay.substring(0,7);rangeStart=selectedD
     // Menu sengaja guna ikon ringan sahaja. Logo kedai kekal pada header/resit.
     TextView icon=chip(icons[id],0xff203f61,gold);icon.setTextSize(20);icon.setGravity(Gravity.CENTER);add(card,icon,52,52);
     LinearLayout info=col();info.setPadding(dp(11),0,dp(8),0);TextView name=text(names[id],15,ink,true);name.setMaxLines(2);add(info,name,-1,-2);gap(info,3);add(info,text(money(prices[id]),14,gold,true),-1,-2);
-    int available=unlimited(id)?Integer.MAX_VALUE:stock(id);TextView stockLabel=text(branchAccounts.staff()?(available>0?"Tersedia":"HABIS"):(unlimited(id)?"Kuah · tanpa had unit":"Stok: "+available+(available==0?" · HABIS":"")),11,available==0?0xffff4d4d:blue,true);add(info,stockLabel,-1,-2);card.addView(info,new LinearLayout.LayoutParams(0,-2,1));
+    int available=unlimited(id)?Integer.MAX_VALUE:stock(id);
+    String shownStock=unlimited(id)?"Stok: Tanpa had":"Baki stok: "+available+(available==0?" · HABIS":"")+" "+(id<3?"cucuk":"unit");
+    TextView stockLabel=text(shownStock,11,available==0?0xffff4d4d:blue,true);add(info,stockLabel,-1,-2);card.addView(info,new LinearLayout.LayoutParams(0,-2,1));
     LinearLayout controls=row();controls.setGravity(Gravity.CENTER_VERTICAL);TextView minus=chip("−",0xffc83f46,Color.WHITE),number=text(""+qty[id],16,ink,true),plus=chip("+",blue,Color.WHITE);minus.setGravity(Gravity.CENTER);number.setGravity(Gravity.CENTER);plus.setGravity(Gravity.CENTER);
     add(controls,minus,45,42);add(controls,number,44,42);add(controls,plus,45,42);add(card,controls,-2,-2);
     number.setClickable(true);number.setOnClickListener(v->editOrderQuantity(id));
@@ -259,8 +261,8 @@ selectedDay=date();selectedMonth=selectedDay.substring(0,7);rangeStart=selectedD
     if(count()==0){TextView empty=text("Belum ada pesanan. Pilih menu di atas.",13,muted,false);empty.setPadding(0,dp(13),0,dp(13));add(basket,empty,-1,-2);return;}
     for(int i=0;i<qty.length;i++)if(qty[i]>0){final int id=i;LinearLayout r=row();r.addView(text(names[i]+" × "+qty[i],14,ink,true),new LinearLayout.LayoutParams(0,dp(39),1));add(r,text(money(qty[i]*prices[i]),13,blue,true),-2,-2);TextView minus=chip("−",0xffc83f46,Color.WHITE);LinearLayout.LayoutParams m=params(32,30);m.leftMargin=dp(8);r.addView(minus,m);minus.setOnClickListener(v->{qty[id]--;draw();});add(basket,r,-1,-2);}
   }
-  void addNavigation(LinearLayout screen){LinearLayout nav=row();nav.setBackgroundColor(cream);nav.setPadding(dp(7),dp(7),dp(7),dp(9));String[] labels=branchAccounts.staff()?new String[]{"MENU","ORDER","HARI INI","ACCOUNT"}:(english()?new String[]{"MENU","ORDERS","STOCK","CASH","SETTINGS"}:new String[]{"MENU","ORDER","STOK","DUIT","SETTING"});int[] pages=branchAccounts.staff()?new int[]{0,11,12,5}:new int[]{0,11,1,3,4};
-    for(int i=0;i<labels.length;i++){final int page=pages[i];boolean selected=(activePage==page)||(page==3&&activePage==2)||(page==4&&activePage>=4&&activePage!=11);TextView tab=text(labels[i],10,selected?Color.rgb(19,24,34):Color.WHITE,true);tab.setGravity(Gravity.CENTER);tab.setBackground(shape(selected?gold:Color.rgb(20,58,101),11));LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(0,dp(49),1);p.setMargins(dp(3),0,dp(3),0);nav.addView(tab,p);tab.setOnClickListener(v->{activePage=page;draw();});}add(screen,nav,-1,-2);}
+  void addNavigation(LinearLayout screen){LinearLayout nav=row();nav.setBackgroundColor(cream);nav.setPadding(dp(7),dp(7),dp(7),dp(9));String[] labels=branchAccounts.staff()?new String[]{"MENU","ORDER","HARI INI","PRINTER","ACCOUNT"}:(english()?new String[]{"MENU","ORDERS","STOCK","CASH","SETTINGS"}:new String[]{"MENU","ORDER","STOK","DUIT","SETTING"});int[] pages=branchAccounts.staff()?new int[]{0,11,12,14,5}:new int[]{0,11,1,3,4};
+    for(int i=0;i<labels.length;i++){final int page=pages[i];boolean selected=(activePage==page)||(page==1&&activePage==13)||(page==3&&activePage==2)||(page==4&&activePage>=4&&activePage!=11);TextView tab=text(labels[i],10,selected?Color.rgb(19,24,34):Color.WHITE,true);tab.setGravity(Gravity.CENTER);tab.setBackground(shape(selected?gold:Color.rgb(20,58,101),11));LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(0,dp(49),1);p.setMargins(dp(3),0,dp(3),0);nav.addView(tab,p);tab.setOnClickListener(v->{activePage=page;draw();});}add(screen,nav,-1,-2);}
   void heading(String title,String subtitle){
     LinearLayout brand=row();brand.setGravity(Gravity.CENTER_VERTICAL);ImageView logo=new ImageView(this);logo.setImageResource(R.drawable.warisan_logo);makeCircle(logo);add(brand,logo,44,44);LinearLayout brandText=col();brandText.setPadding(dp(9),0,0,0);add(brandText,text("WARISAN POS",18,blue,true),-1,-2);add(brandText,text("KIOS WARISAN  ·  SISTEM JUALAN",9,muted,true),-1,-2);brand.addView(brandText,new LinearLayout.LayoutParams(0,-2,1));TextView clock=text("",9,gold,true);clock.setGravity(Gravity.RIGHT|Gravity.CENTER_VERTICAL);add(brand,clock,-2,-2);startHeaderClock(clock);add(body,brand,-1,-2);gap(body,15);
     add(body,text(title,23,ink,true),-1,-2);add(body,text(subtitle,12,muted,false),-1,-2);gap(body,16);
@@ -474,7 +476,57 @@ selectedDay=date();selectedMonth=selectedDay.substring(0,7);rangeStart=selectedD
       .append(centerReceipt("WARISAN POS")).append("\n");
     return report.toString();
   }
-  void drawPage(){if(activePage==12){
+  void drawStaffPrinterSettings(){
+    if(!branchAccounts.staff()){message("Halaman printer khas pekerja sahaja.");return;}
+    heading("Printer & Resit","Tetapan printer untuk telefon pekerja sahaja, bukan harga/stok.");
+    String address=getPreferences(0).getString("printer","");
+    String mode=getPreferences(0).getString("printer_mode",address.isEmpty()?"system":"thermal");
+    add(body,text("Jenis: "+("thermal".equals(mode)?"Thermal Bluetooth":"A4 / WiFi / Warna"),14,gold,true),-1,-2);
+    if("thermal".equals(mode))add(body,text("Alamat printer: "+(address.isEmpty()?"Belum dipilih":address),11,muted,false),-1,-2);
+    gap(body,12);
+    action("🖨  Pilih Printer / Tukar Printer",()->choosePrinter());
+    action("🧾  Test Print Resit",()->previewTestReceipt(true));
+    action("Logo pada resit thermal: "+(getPreferences(0).getBoolean("printer_logo",false)?"ON":"OFF"),
+      ()->{boolean current=getPreferences(0).getBoolean("printer_logo",false);
+        getPreferences(0).edit().putBoolean("printer_logo",!current).apply();
+        draw();
+      });
+    add(body,text("Tetapan ini disimpan untuk telefon ini sahaja. Pekerja tidak boleh mengubah stok, duit atau laporan Owner.",12,muted,false),-1,-2);
+  }
+  void drawLiveBranchStock(){
+    heading("Stok · "+branchAccounts.branchName(),"OWNER · Baki Live daripada Firestore mengikut branch.");
+    action("‹  Kembali ke semua Branch",()->{activePage=1;draw();});
+    action("☁  Live Branch: "+(live.usable()?"ONLINE":"Menunggu Server"),()->live.showDashboard());
+    if(!live.usable()){
+      add(body,text("Tidak boleh edit atau restock sehingga server Live online. Sambung internet dahulu.",12,0xffff6b6b,true),-1,-2);
+    }
+    for(int i=0;i<names.length;i++){
+      final int id=i;
+      if(posPrefs().getBoolean("menu_hidden_"+id,false))continue;
+      if(unlimited(id)){action(names[id]+" · tanpa had unit",()->message("Item ini tiada had stok unit."));continue;}
+      LinearLayout item=col();item.setPadding(dp(12),dp(12),dp(12),dp(12));
+      item.setBackground(shape(surface,13));
+      add(item,text(names[id],16,ink,true),-1,-2);gap(item,5);
+      add(item,text("BAKI STOK LIVE: "+stock(id)+" "+(id<3?"cucuk":"unit"),17,gold,true),-1,-2);
+      gap(item,8);
+      LinearLayout actions=row();
+      TextView restock=chip("+ TAMBAH STOK",blue,Color.WHITE);
+      restock.setGravity(Gravity.CENTER);
+      TextView edit=chip("EDIT BAKI",0xffffd54f,0xff6d3b16);
+      edit.setGravity(Gravity.CENTER);
+      actions.addView(restock,new LinearLayout.LayoutParams(0,dp(44),1));
+      LinearLayout.LayoutParams params=new LinearLayout.LayoutParams(0,dp(44),1);
+      params.leftMargin=dp(8);actions.addView(edit,params);
+      restock.setAlpha(live.usable()?1f:.4f);edit.setAlpha(live.usable()?1f:.4f);
+      restock.setEnabled(live.usable());edit.setEnabled(live.usable());
+      restock.setOnClickListener(v->live.restockDialog(id));
+      edit.setOnClickListener(v->live.editStockDialog(id));
+      add(item,actions,-1,-2);add(body,item,-1,-2);gap(body,8);
+    }
+  }
+  void drawPage(){if(activePage==14){
+      drawStaffPrinterSettings();
+    }else if(activePage==12){
       String day=businessDay();
       heading("Laporan Hari Ini","Paparan pekerja untuk branch "+branchAccounts.branchName());
       LinearLayout overview=row();
@@ -492,7 +544,18 @@ selectedDay=date();selectedMonth=selectedDay.substring(0,7);rangeStart=selectedD
       action("Semak kelulusan refund",()->staffSecurity.showMyRefunds());
     }else if(activePage==11){heading("Order belum bayar","Semua order yang sudah confirm tetapi belum dibayar.");JSONArray pending=entries("pending_orders");int open=0;for(int i=0;i<pending.length();i++){JSONObject o=pending.optJSONObject(i);if(o!=null&&!o.optBoolean("paid",false)&&!o.optBoolean("cancelled",false))open++;}if(open==0){LinearLayout empty=col();empty.setPadding(dp(16),dp(18),dp(16),dp(18));empty.setBackground(shape(surface,15));add(empty,text("Tiada order belum bayar.",15,ink,true),-1,-2);gap(empty,5);add(empty,text("Order yang di-Confirm dari MENU akan muncul di sini.",12,muted,false),-1,-2);add(body,empty,-1,-2);}else drawPendingOrders();
       gap(body,12);
-    }else if(activePage==1){heading("Stok & restock","Pilih tarikh untuk semak rekod stok. Baki hari sebelumnya dibawa ke hari seterusnya.");
+    }else if(activePage==1){
+      if(branchAccounts.owner())branchAccounts.showStockBranches();
+      else message("Hanya Owner boleh urus stok.");
+    }else if(activePage==13){
+      if(!branchAccounts.owner()){
+        heading("Akses ditolak","Stok branch hanya untuk Owner.");
+      }else if(live.enabled()){
+        drawLiveBranchStock();
+      }else{
+      heading("Stok · "+branchAccounts.branchName(),"OWNER · Stok tempatan branch. Aktifkan Live untuk sync telefon pekerja.");
+      action("‹  Kembali ke semua Branch",()->{activePage=1;draw();});
+      action("☁  Aktifkan Live branch ini",()->live.activate());
       action("Tarikh stok: "+selectedStockDay+"   ▼",()->chooseStockDay());boolean stockTodayView=businessDay().equals(selectedStockDay);
       for(int i=0;i<names.length;i++){final int id=i;if(posPrefs().getBoolean("menu_hidden_"+id,false))continue;if(unlimited(id)){action(names[id]+" · kuah ikut liter (tiada had unit)",()->message("Kuah kacang sentiasa boleh dijual."));continue;}
         int[] st=stockForDay(id,selectedStockDay);LinearLayout card=col();card.setPadding(dp(12),dp(10),dp(12),dp(10));card.setBackground(shape(surface,15));
@@ -504,6 +567,7 @@ selectedDay=date();selectedMonth=selectedDay.substring(0,7);rangeStart=selectedD
         else{TextView old=chip("REKOD LAMA · PAPARAN SAHAJA",0xff31485f,muted);old.setGravity(Gravity.CENTER);add(card,old,-1,34);}
         add(body,card,-1,-2);gap(body,8);}
       action("HISTORY EDAR / BAYAR / STOK PULANG",()->distributionHistory());action("Lihat ringkasan stok tarikh dipilih",()->stockBalance());action("Rekod stok rosak",()->damageHistory());
+      }
     }else if(activePage==2){heading("Detail Jualan","Dashboard laporan lengkap · graf, pie, produk, bayaran dan transaksi.");
       action("‹  Kembali ke DUIT",()->{activePage=3;draw();});addReportTabs();
       String rs=saleReportStart(),re=saleReportEnd();int reportSales=saleTotalBetween(rs,re),reportItems=saleCountBetween(rs,re),reportTx=transactionCountBetween(rs,re);int reportOp=0;if(salesReportMode==1)reportOp=operatingExpenseTotal(selectedMonth,false);else if(salesReportMode==0)reportOp=operatingExpenseTotal(rs,true);else{JSONArray ce=entries("cash_entries");for(int i=0;i<ce.length();i++){JSONObject e=ce.optJSONObject(i);if(e==null||legacySupplierRestock(e)||personalCash(e)||stockPurchaseCash(e))continue;String d=entryDay(e);if(d.compareTo(rs)>=0&&d.compareTo(re)<=0&&e.optInt("amount")<0)reportOp-=e.optInt("amount");}}int reportProfit=reportSales-productCostBetween(rs,re)-reportOp;
@@ -563,6 +627,9 @@ selectedDay=date();selectedMonth=selectedDay.substring(0,7);rangeStart=selectedD
       add(body,text("ACCOUNT",11,muted,true),-1,-2);gap(body,7);
       if(!branchAccounts.staff())action(ownerPassword.isSet()?"🔐  Tukar Password Owner":"🔐  Tetapkan Password Owner",()->ownerPassword.change());
       if(branchAccounts.active())add(body,text("Branch: "+branchAccounts.summary(),13,gold,true),-1,-2);
+      if(branchAccounts.staff()){
+        action("🖨  Printer / Resit / Test Print",()->{activePage=14;draw();});
+      }
       FirebaseUser user=firebaseAuth.getCurrentUser();
       if(user==null){
         action("Owner · Sign in Google",()->{Intent signInIntent=googleSignInClient.getSignInIntent();startActivityForResult(signInIntent,RC_SIGN_IN);});
@@ -1568,7 +1635,8 @@ selectedDay=date();selectedMonth=selectedDay.substring(0,7);rangeStart=selectedD
       labels.add("THERMAL RESIT · "+name);
     }
     final boolean allowed=permissionOk,bluetoothOff=permissionOk&&adapter!=null&&!adapter.isEnabled();
-    darkBuilder().setTitle("Pilih jenis printer").setMessage("A4/warna guna cetakan Android. Thermal guna Bluetooth ESC/POS. Jenis kertas tidak boleh dikenal pasti dengan tepat untuk semua model.")
+    darkBuilder().setTitle("Pilih Printer · A4 / Thermal")
+      // Android AlertDialog cannot show both setMessage AND setItems: that hid the printer list.
       .setItems(labels.toArray(new String[0]),(dialog,index)->{
         if(index==0){
           getPreferences(0).edit().putString("printer_mode","system").remove("printer").apply();
