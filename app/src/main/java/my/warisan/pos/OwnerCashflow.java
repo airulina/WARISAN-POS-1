@@ -374,6 +374,135 @@ final class OwnerCashflow {
     host.gap(host.body,8);
     dataMessage();
   }
+  static final class QrReceipt {
+    final String date,branch,method,status,reference,source,clock;
+    final long amount;
+    QrReceipt(String date,String branch,String method,String status,
+              String reference,String source,String clock,long amount){
+      this.date=date;this.branch=branch;this.method=method;this.status=status;
+      this.reference=reference;this.source=source;this.clock=clock;this.amount=amount;
+    }
+    String shortLabel(){
+      return date+"  "+branch+"\n"+rm(amount)+" · "+method+
+        ("REFUNDED".equals(status)?" · REFUND":"");
+    }
+  }
+  static boolean qrMethod(String method){
+    if(method==null)return false;
+    String value=method.toLowerCase(Locale.ROOT);
+    return value.contains("qr")||value.contains("duitnow")||
+      value.contains("tng")||value.contains("touch")||
+      value.contains("bank")||value.contains("online");
+  }
+  void showQrHistory(BranchRow selected){
+    if(!accounts.owner())return;
+    ensureLoaded();
+    final String from=start(),to=end(),ownerId=accounts.ownerUid();
+    final ArrayList<BranchRow> chosen=new ArrayList<>();
+    for(BranchRow r:rows)if(selected==null||selected.id.equals(r.id))chosen.add(r);
+    if(chosen.isEmpty()){
+      host.message("Tiada branch yang boleh diperiksa.");return;
+    }
+    // Read the liveOrders receipts only on demand to limit Spark free reads.
+    // Each branch is a separate query. We do not edit or delete any receipt.
+    final ArrayList<Task<QuerySnapshot>> calls=new ArrayList<>();
+    for(BranchRow r:chosen)
+      calls.add(db.collection("workspaces").document(ownerId)
+        .collection("branches").document(r.id)
+        .collection("liveOrders")
+        .whereGreaterThanOrEqualTo("day",from)
+        .whereLessThanOrEqualTo("day",to)
+        .get(com.google.firebase.firestore.Source.SERVER));
+    host.message("Mendapatkan rekod bayaran QR daripada Cloud dan telefon Owner...");
+    Tasks.whenAllSuccess(calls).addOnSuccessListener(results->{
+      if(!accounts.owner()||!ownerId.equals(accounts.ownerUid()))return;
+      final ArrayList<QrReceipt> receipts=new ArrayList<>();
+      final Set<String> cloudIds=new HashSet<>();
+      long paidSum=0;
+      for(int index=0;index<results.size();index++){
+        QuerySnapshot response=(QuerySnapshot)results.get(index);
+        BranchRow branch=chosen.get(index);
+        for(DocumentSnapshot r:response.getDocuments()){
+          // Keep Cloud IDs for all payment methods to avoid duplicates when
+          // local records already mirror the same cloud transaction.
+          cloudIds.add(branch.id+"/"+r.getId());
+          String method=r.getString("method");
+          String status=r.getString("status");
+          if(!qrMethod(method)||(!"PAID".equals(status)&&!"REFUNDED".equals(status)))continue;
+          Long amount=r.getLong("total");
+          if(amount==null)continue;
+          String clock="";
+          com.google.firebase.Timestamp stamp=r.getTimestamp("paidAt");
+          if(stamp!=null)clock=new java.text.SimpleDateFormat(
+            "HH:mm",Locale.US).format(stamp.toDate());
+          receipts.add(new QrReceipt(r.getString("day"),branch.name,method,status,
+            r.getId(),"CLOUD LIVE",clock,amount));
+          if("PAID".equals(status))paidSum+=amount;
+        }
+      }
+      for(BranchRow branch:chosen){
+        SharedPreferences pref=BranchAccounts.LEGACY_BRANCH.equals(branch.id)?
+          host.getPreferences(0):
+          host.getSharedPreferences("warisan_branch_"+branch.id,0);
+        JSONArray local;
+        try{local=new JSONArray(pref.getString("stock_sales","[]"));}
+        catch(Exception e){continue;}
+        for(int i=0;i<local.length();i++){
+          JSONObject receipt=local.optJSONObject(i);
+          if(receipt==null||host.paymentKind(receipt)!=2)continue;
+          String day=host.entryDay(receipt);
+          if(day.compareTo(from)<0||day.compareTo(to)>0)continue;
+          String cloudId=receipt.optString("liveOrderId","");
+          if(!cloudId.isEmpty()&&cloudIds.contains(branch.id+"/"+cloudId))continue;
+          String method=receipt.optString("method",
+            receipt.optString("paymentMethod","QR"));
+          String clock=receipt.optString("time","");
+          if(clock.length()>19)clock=clock.substring(clock.length()-8);
+          boolean refund=receipt.optBoolean("refunded",false);
+          long amount=host.saleTotal(receipt);
+          receipts.add(new QrReceipt(day,branch.name,method,refund?"REFUNDED":"PAID",
+            receipt.optString("order",""+(i+1)),
+            "REKOD LAMA TELEFON",clock,amount));
+          if(!refund)paidSum+=amount;
+        }
+      }
+      receipts.sort((a,b)->{
+        int day=b.date.compareTo(a.date);
+        if(day!=0)return day;
+        return b.clock.compareTo(a.clock);
+      });
+      if(receipts.isEmpty()){
+        host.darkBuilder().setTitle("REKOD QR · "+period())
+          .setMessage("Tiada resit QR/DuitNow/TnG dalam rekod Cloud atau telefon Owner bagi tarikh dipilih."+
+            "\nJika transaksi lama dibuat di telefon lain tetapi belum diselaraskan, ia belum boleh dipaparkan.")
+          .setPositiveButton("TUTUP",null).show();
+        return;
+      }
+      // Both refunds and paid orders appear. The headline sums only PAID.
+      String[] labels=new String[Math.min(receipts.size(),250)];
+      for(int i=0;i<labels.length;i++)labels[i]=receipts.get(i).shortLabel();
+      final long shownTotal=paidSum;
+      host.darkBuilder().setTitle("REKOD QR · "+receipts.size()+
+        " resit · "+rm(shownTotal))
+        .setItems(labels,(dialog,i)->{
+          QrReceipt q=receipts.get(i);
+          host.darkBuilder().setTitle("RESIT QR · "+q.branch)
+            .setMessage("Tarikh: "+q.date+(q.clock.isEmpty()?"":" · "+q.clock)+
+              "\nJumlah: "+rm(q.amount)+"\nKaedah: "+q.method+
+              "\nStatus: "+q.status+"\nRujukan: "+q.reference+
+              "\nSumber: "+q.source+
+              "\n\nRekod ini untuk semakan sahaja. Tiada jualan atau bayaran diubah.")
+            .setPositiveButton("OK",null).show();
+        })
+        .setNegativeButton("TUTUP",null).show();
+      if(receipts.size()>labels.length)
+        host.message("Memaparkan 250 resit terbaru. Pilih tarikh lebih pendek untuk resit lain.");
+    }).addOnFailureListener(error->
+      host.darkBuilder().setTitle("Rekod QR tidak dapat dimuatkan")
+        .setMessage("Cloud perlu dapat dihubungi untuk memastikan resit QR tidak digandakan."+
+          "\nTiada data diubah.\n\n"+error.getMessage())
+        .setPositiveButton("OK",null).show());
+  }
   void showDay(String day,Day value,String branchName){
     host.darkBuilder().setTitle("Jualan "+branchName+" · "+day)
       .setMessage("Jumlah jualan: "+rm(value.sales)+
