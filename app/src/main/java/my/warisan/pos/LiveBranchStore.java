@@ -70,6 +70,7 @@ final class LiveBranchStore {
   DocumentReference orders(String id){return branch().collection("liveOrders").document(id);}
   DocumentReference daily(String day){return branch().collection("daily").document(day);}
   void stop(){
+    clearOwnerOpeningListeners();
     if(inventoryListener!=null){inventoryListener.remove();inventoryListener=null;}
     if(dayListener!=null){dayListener.remove();dayListener=null;}
     if(orderListener!=null){orderListener.remove();orderListener=null;}
@@ -522,6 +523,142 @@ final class LiveBranchStore {
     }).addOnSuccessListener(v->{busy=false;onSuccess.apply();})
       .addOnFailureListener(e->{busy=false;host.message("Refund Live gagal: "+e.getMessage());});
   }
+  private ListenerRegistration ownerBranchesListener;
+  private final ArrayList<ListenerRegistration> ownerSessionListeners=new ArrayList<>();
+  private final Map<String,String> openingSummary=new HashMap<>();
+  private String ownerSummaryKey="";
+  void clearOwnerOpeningListeners(){
+    if(ownerBranchesListener!=null){ownerBranchesListener.remove();ownerBranchesListener=null;}
+    for(ListenerRegistration l:ownerSessionListeners)l.remove();
+    ownerSessionListeners.clear();
+    openingSummary.clear();ownerSummaryKey="";
+  }
+  void loadOwnerOpeningStatuses(){
+    if(!accounts.owner())return;
+    final String today=host.businessDay();
+    final String key=accounts.ownerUid()+":"+today;
+    if(key.equals(ownerSummaryKey)&&ownerBranchesListener!=null)return;
+    clearOwnerOpeningListeners();
+    ownerSummaryKey=key;
+    ownerBranchesListener=db.collection("workspaces").document(accounts.ownerUid())
+      .collection("branches").addSnapshotListener((branches,error)->{
+        if(error!=null||branches==null||!key.equals(ownerSummaryKey))return;
+        for(ListenerRegistration l:ownerSessionListeners)l.remove();
+        ownerSessionListeners.clear();openingSummary.clear();
+        for(QueryDocumentSnapshot b:branches){
+          final String branchId=b.getId();
+          final String branchName=b.getString("name")==null?branchId:b.getString("name");
+          openingSummary.put(branchId,branchName+" · Belum Opening");
+          ListenerRegistration listener=b.getReference().collection("liveSessions")
+            .document(today).addSnapshotListener((doc,err)->{
+              if(!key.equals(ownerSummaryKey)||err!=null||doc==null)return;
+              boolean open=doc.exists()&&Boolean.TRUE.equals(doc.getBoolean("open"));
+              String status=open?"🟢 SUDAH OPENING":doc.exists()?"🔴 CLOSING":"⚪ BELUM OPENING";
+              String worker=doc.exists()?doc.getString(open?"openedByEmail":"closedByEmail"):null;
+              String stamp="";
+              if(doc.exists()&&doc.getTimestamp("updatedAt")!=null)
+                stamp=new SimpleDateFormat("HH:mm",Locale.US).format(doc.getTimestamp("updatedAt").toDate());
+              String line=branchName+" · "+status+
+                (worker==null||worker.isEmpty()?"":" · "+worker)+
+                (stamp.isEmpty()?"":" · "+stamp);
+              String before=openingSummary.put(branchId,line);
+              if(!line.equals(before)&&host.activePage==3&&accounts.owner())host.draw();
+            });
+          ownerSessionListeners.add(listener);
+        }
+        if(host.activePage==3&&accounts.owner())host.draw();
+      });
+  }
+  void drawOpeningSummary(){
+    if(!accounts.owner())return;
+    loadOwnerOpeningStatuses();
+    host.add(host.body,host.text("STATUS BRANCH HARI INI · LIVE",13,host.gold,true),-1,-2);
+    host.gap(host.body,6);
+    if(openingSummary.isEmpty()){
+      host.add(host.body,host.text("Sedang semak Opening semua branch...",12,host.muted,false),-1,-2);
+    }else{
+      ArrayList<String> list=new ArrayList<>(openingSummary.values());
+      java.util.Collections.sort(list);
+      for(String entry:list){
+        host.add(host.body,host.text(entry,12,host.ink,true),-1,-2);
+        host.gap(host.body,5);
+      }
+    }
+    host.gap(host.body,9);
+  }
+  void showOpeningBranches(){
+    if(!accounts.owner())return;
+    loadOwnerOpeningStatuses();
+    StringBuilder content=new StringBuilder("Tarikh: "+host.businessDay()+"\n\n");
+    for(String row:openingSummary.values())content.append(row).append("\n\n");
+    if(openingSummary.isEmpty())content.append("Belum menerima status daripada Firestore.");
+    host.darkBuilder().setTitle("CASHFLOW LIVE · SEMUA BRANCH")
+      .setMessage(content.toString())
+      .setPositiveButton("TUTUP",null).show();
+  }
+  void showOpeningAlerts(){
+    if(!accounts.owner())return;
+    final String today=host.businessDay();
+    db.collection("workspaces").document(accounts.ownerUid()).collection("branches")
+      .get().addOnSuccessListener(branches->{
+        ArrayList<com.google.android.gms.tasks.Task<com.google.firebase.firestore.QuerySnapshot>> checks=new ArrayList<>();
+        ArrayList<String> names=new ArrayList<>();
+        for(QueryDocumentSnapshot branch:branches){
+          checks.add(branch.getReference().collection("openingChecks")
+            .whereEqualTo("day",today).get());
+          names.add(branch.getString("name")==null?branch.getId():branch.getString("name"));
+        }
+        if(checks.isEmpty()){host.message("Tiada branch.");return;}
+        com.google.android.gms.tasks.Tasks.whenAllSuccess(checks).addOnSuccessListener(res->{
+          StringBuilder report=new StringBuilder("Tarikh "+today+"\n\n");
+          int blocked=0;
+          for(int i=0;i<res.size();i++){
+            com.google.firebase.firestore.QuerySnapshot events=(com.google.firebase.firestore.QuerySnapshot)res.get(i);
+            for(QueryDocumentSnapshot doc:events){
+              String state=doc.getString("status");
+              if("VERIFIED".equals(state))continue;
+              blocked++;
+              report.append(names.get(i)).append("\n")
+                .append(state==null?"Tidak diketahui":state)
+                .append(" · ").append(doc.getString("employeeUid"))
+                .append("\n");
+              Long meters=doc.getLong("distanceMeters");
+              if(meters!=null&&meters>=0)report.append("Jarak ±").append(meters).append(" m\n");
+              if(doc.getTimestamp("createdAt")!=null)
+                report.append(new SimpleDateFormat("dd/MM HH:mm",Locale.US)
+                  .format(doc.getTimestamp("createdAt").toDate())).append("\n");
+              report.append("\n");
+            }
+          }
+          if(blocked==0)report.append("Tiada percubaan Opening disekat yang direkod.");
+          host.darkBuilder().setTitle("CUBAAN OPENING · "+blocked)
+            .setMessage(report.toString()).setPositiveButton("TUTUP",null).show();
+        }).addOnFailureListener(e->host.message("Semak cubaan gagal: "+e.getMessage()));
+      }).addOnFailureListener(e->host.message("Gagal semak branch: "+e.getMessage()));
+  }
+  void sessionConfirmed(boolean open,String day,int amount,Done onSuccess){
+    if(!usable()||!accounts.staff()){host.message("Sesi pekerja memerlukan Live ONLINE.");return;}
+    final String owner=accounts.ownerUid(),branchId=accounts.branchId();
+    final String uid=accounts.user().getUid();
+    DocumentReference doc=branch().collection("liveSessions").document(day);
+    db.runTransaction(tx->{
+      DocumentSnapshot existing=tx.get(doc);
+      if(existing.exists()&&Boolean.TRUE.equals(existing.getBoolean("open"))&&open)
+        throw new IllegalStateException("Branch telah Opening pada telefon lain. Minta Owner semak.");
+      Map<String,Object> state=new HashMap<>();
+      state.put("day",day);state.put("branchId",branchId);state.put("ownerUid",owner);
+      state.put("open",open);
+      state.put(open?"openedBy":"closedBy",uid);
+      state.put(open?"openedByEmail":"closedByEmail",accounts.user().getEmail());
+      state.put(open?"opening":"closing",amount);
+      state.put("updatedAt",FieldValue.serverTimestamp());
+      tx.set(doc,state,com.google.firebase.firestore.SetOptions.merge());
+      return null;
+    }).addOnSuccessListener(result->onSuccess.apply())
+      .addOnFailureListener(e->host.darkBuilder().setTitle("OPENING CLOUD GAGAL")
+        .setMessage("Opening tidak dibuat kerana Cloud menolak operasi: "+e.getMessage())
+        .setPositiveButton("FAHAM",null).show());
+  }
   void session(boolean open,String day,int amount){
     if(!accounts.active()||!usable())return;
     DocumentReference doc=branch().collection("liveSessions").document(day);
@@ -530,9 +667,11 @@ final class LiveBranchStore {
     state.put("ownerUid",accounts.ownerUid());
     if(open){
       state.put("openedBy",accounts.user().getUid());
+      state.put("openedByEmail",accounts.user().getEmail());
       state.put("opening",amount);state.put("open",true);
     }else{
       state.put("closedBy",accounts.user().getUid());
+      state.put("closedByEmail",accounts.user().getEmail());
       state.put("closing",amount);state.put("open",false);
     }
     state.put("updatedAt",FieldValue.serverTimestamp());
