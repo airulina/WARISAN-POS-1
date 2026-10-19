@@ -308,7 +308,9 @@ service cloud.firestore {
               && request.resource.data.branchId == branchId
               && request.resource.data.day == dayId
               && (request.resource.data.openedBy == request.auth.uid
-                || request.resource.data.closedBy == request.auth.uid));
+                || request.resource.data.closedBy == request.auth.uid)
+              && request.resource.data.get("openedByEmail",request.auth.token.email) ==
+                request.auth.token.email);
           allow update: if owner(ownerUid) ||
             (member(ownerUid,branchId)
               && resource.data.ownerUid == ownerUid
@@ -321,7 +323,10 @@ service cloud.firestore {
                           "openedByEmail","closedByEmail","updatedAt"])
               && (request.resource.data.openedBy == request.auth.uid
                 || request.resource.data.closedBy == request.auth.uid))
-              && (request.resource.data.get("openedByEmail",request.auth.token.email) is string));
+              && request.resource.data.get("openedByEmail",request.auth.token.email) ==
+                request.auth.token.email
+              && request.resource.data.get("closedByEmail",request.auth.token.email) ==
+                request.auth.token.email);
 
           allow delete: if false;
         }
@@ -432,9 +437,20 @@ service cloud.firestore {
         && request.resource.data.branchId == resource.data.branchId
         && request.resource.data.email == resource.data.email
         && request.resource.data.diff(resource.data).affectedKeys()
-          .hasOnly(["active","removed","removedAt","updatedAt"])
+          .hasOnly(["active","removed","removedAt","updatedAt","deviceId","deviceBoundAt"])
         && (!request.resource.data.get("removed",false)
-          || request.resource.data.active == false);
+          || request.resource.data.active == false)
+        || (signedIn()
+          && request.auth.uid == uid
+          && resource.data.role == "STAFF"
+          && resource.data.active == true
+          && resource.data.get("removed",false) == false
+          && resource.data.get("deviceId","") == ""
+          && request.resource.data.deviceId is string
+          && request.resource.data.deviceId.size() >= 30
+          && request.resource.data.deviceId.size() <= 128
+          && request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(["deviceId","deviceBoundAt"]));
       allow delete: if false;
     }
     // Legacy Google invitation writes are disabled; email/password staff
