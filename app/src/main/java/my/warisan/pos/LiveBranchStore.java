@@ -412,17 +412,49 @@ final class LiveBranchStore {
       .addOnFailureListener(e->{busy=false;host.message("Bayaran Live gagal: "+e.getMessage());});
   }
   void addStock(int item,int count,Done onSuccess){
-    if(!accounts.owner()||!usable()||busy){host.message("Owner perlu Live online untuk restock.");return;}
-    if(count<=0){host.message("Stok mesti lebih daripada 0.");return;}
-    busy=true;DocumentReference ref=inventory();
+    if(!accounts.owner()||!usable()||busy){
+      host.message("Owner perlu Live online untuk restock.");return;
+    }
+    if(count<=0||count>100000||item<0||item>=host.names.length||host.unlimited(item)){
+      host.message("Kuantiti restock Live tidak sah.");return;
+    }
+    final String ownerId=accounts.ownerUid(),branchId=accounts.branchId();
+    final String actorId=accounts.user().getUid();
+    busy=true;
+    DocumentReference ref=inventory();
+    DocumentReference audit=branch().collection("stockAdjustments").document();
     db.runTransaction(tx->{
-      DocumentSnapshot snap=tx.get(ref);ArrayList<Long> remain=readStock(snap);
-      if(item<0||item>=remain.size())throw new IllegalStateException("Menu tak sepadan");
-      remain.set(item,remain.get(item)+count);
+      DocumentSnapshot snap=tx.get(ref);
+      ArrayList<Long> remain=readStock(snap);
+      if(item>=remain.size())throw new IllegalStateException("Menu tak sepadan");
+      long previous=remain.get(item),next=previous+count;
+      if(next>1000000)throw new IllegalStateException("Maksimum stok Live 1,000,000");
+      remain.set(item,next);
+      Map<String,Object> record=new HashMap<>();
+      record.put("ownerUid",ownerId);
+      record.put("branchId",branchId);
+      record.put("actorUid",actorId);
+      record.put("item",item);
+      record.put("name","TAMBAH STOK · "+host.names[item]);
+      record.put("before",previous);
+      record.put("after",next);
+      record.put("difference",(long)count);
+      record.put("type","OWNER_CORRECTION");
+      record.put("createdAt",FieldValue.serverTimestamp());
       tx.update(ref,"stock",remain,"updatedAt",FieldValue.serverTimestamp());
+      tx.set(audit,record);
       return null;
-    }).addOnSuccessListener(v->{busy=false;onSuccess.apply();})
-      .addOnFailureListener(e->{busy=false;host.message("Restock Live gagal: "+e.getMessage());});
+    }).addOnSuccessListener(v->{
+      busy=false;
+      if(!ownerId.equals(accounts.ownerUid())||!branchId.equals(accounts.branchId())){
+        host.message("Stok berjaya ditambah pada branch asal, tetapi Owner sudah "+
+          "bertukar branch. Semak History Cloud sebelum merekod kos.");
+        return;
+      }
+      if(onSuccess!=null)onSuccess.apply();
+    }).addOnFailureListener(e->{
+      busy=false;host.message("Restock Live gagal: "+e.getMessage());
+    });
   }
   /**
    * Atomically move stock for owner-documented ROSAK / EDAR / STOK PULANG.
@@ -438,7 +470,9 @@ final class LiveBranchStore {
       delta==0||Math.abs((long)delta)>100000){
       host.message("Kuantiti stok Live tidak sah.");return;
     }
-    final String branchKey=accounts.ownerUid()+":"+accounts.branchId();
+    final String ownerId=accounts.ownerUid(),branchId=accounts.branchId();
+    final String actorId=accounts.user().getUid();
+    final String branchKey=ownerId+":"+branchId;
     final String label=operation+" · "+host.names[item];
     DocumentReference ref=inventory();
     DocumentReference audit=branch().collection("stockAdjustments").document();
@@ -452,9 +486,9 @@ final class LiveBranchStore {
       if(next>1000000)throw new IllegalStateException("Baki maksimum 1,000,000 unit");
       values.set(item,next);
       Map<String,Object> record=new HashMap<>();
-      record.put("ownerUid",accounts.ownerUid());
-      record.put("branchId",accounts.branchId());
-      record.put("actorUid",accounts.user().getUid());
+      record.put("ownerUid",ownerId);
+      record.put("branchId",branchId);
+      record.put("actorUid",actorId);
       record.put("item",item);
       record.put("name",label);
       record.put("before",previous);
