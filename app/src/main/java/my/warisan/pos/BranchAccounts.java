@@ -191,9 +191,9 @@ final class BranchAccounts {
     checkMayBecomeOwner(u,()->registerOwnerVerified(u));
   }
   void registerOwnerVerified(FirebaseUser u){
-    if(hasLegacyRecords()){
-      linkLegacyOwnerVerified(u);return;
-    }
+    // "Sign Up" creates a distinct new Owner workspace. It NEVER silently
+    // claims previous POS data simply because this device holds old records.
+    // Existing owners can opt in via the separate Owner lama recovery path.
     LinearLayout form=host.col();form.setPadding(host.dp(18),0,host.dp(18),0);
     EditText business=entry("Nama perniagaan"),branch=entry("Nama branch pertama");
     host.add(form,business,-1,-2);host.add(form,branch,-1,-2);
