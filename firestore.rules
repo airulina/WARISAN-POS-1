@@ -73,40 +73,50 @@ service cloud.firestore {
           && newStock[i] == oldStock[i]
              + (i == 4 ? 0 : (action == "CANCEL" ? qty[i] : -qty[i])));
     }
+    // Skip unused index validations for shorter menus. Firestore Rules
+    // has a 1,000-expression limit per request: the unconditional 30-item
+    // version could reject a valid Live order after legacy stock upgrades.
     function validStockMovement(oldStock,newStock,qty,action) {
       return oldStock is list && newStock is list && qty is list
         && oldStock.size() == newStock.size() && qty.size() == oldStock.size()
         && oldStock.size() <= 30
-      && validStockItem(oldStock,newStock,qty,action,0)
-      && validStockItem(oldStock,newStock,qty,action,1)
-      && validStockItem(oldStock,newStock,qty,action,2)
-      && validStockItem(oldStock,newStock,qty,action,3)
-      && validStockItem(oldStock,newStock,qty,action,4)
-      && validStockItem(oldStock,newStock,qty,action,5)
-      && validStockItem(oldStock,newStock,qty,action,6)
-      && validStockItem(oldStock,newStock,qty,action,7)
-      && validStockItem(oldStock,newStock,qty,action,8)
-      && validStockItem(oldStock,newStock,qty,action,9)
-      && validStockItem(oldStock,newStock,qty,action,10)
-      && validStockItem(oldStock,newStock,qty,action,11)
-      && validStockItem(oldStock,newStock,qty,action,12)
-      && validStockItem(oldStock,newStock,qty,action,13)
-      && validStockItem(oldStock,newStock,qty,action,14)
-      && validStockItem(oldStock,newStock,qty,action,15)
-      && validStockItem(oldStock,newStock,qty,action,16)
-      && validStockItem(oldStock,newStock,qty,action,17)
-      && validStockItem(oldStock,newStock,qty,action,18)
-      && validStockItem(oldStock,newStock,qty,action,19)
-      && validStockItem(oldStock,newStock,qty,action,20)
-      && validStockItem(oldStock,newStock,qty,action,21)
-      && validStockItem(oldStock,newStock,qty,action,22)
-      && validStockItem(oldStock,newStock,qty,action,23)
-      && validStockItem(oldStock,newStock,qty,action,24)
-      && validStockItem(oldStock,newStock,qty,action,25)
-      && validStockItem(oldStock,newStock,qty,action,26)
-      && validStockItem(oldStock,newStock,qty,action,27)
-      && validStockItem(oldStock,newStock,qty,action,28)
-      && validStockItem(oldStock,newStock,qty,action,29);
+        && validStockItem(oldStock,newStock,qty,action,0)
+        && validStockItem(oldStock,newStock,qty,action,1)
+        && validStockItem(oldStock,newStock,qty,action,2)
+        && validStockItem(oldStock,newStock,qty,action,3)
+        && validStockItem(oldStock,newStock,qty,action,4)
+        && validStockItem(oldStock,newStock,qty,action,5)
+        && validStockItem(oldStock,newStock,qty,action,6)
+        && validStockItem(oldStock,newStock,qty,action,7)
+        && (oldStock.size() <= 8 || (
+          validStockItem(oldStock,newStock,qty,action,8) &&
+          validStockItem(oldStock,newStock,qty,action,9) &&
+          validStockItem(oldStock,newStock,qty,action,10) &&
+          validStockItem(oldStock,newStock,qty,action,11) &&
+          validStockItem(oldStock,newStock,qty,action,12) &&
+          validStockItem(oldStock,newStock,qty,action,13) &&
+          validStockItem(oldStock,newStock,qty,action,14) &&
+          validStockItem(oldStock,newStock,qty,action,15)
+        ))
+        && (oldStock.size() <= 16 || (
+          validStockItem(oldStock,newStock,qty,action,16) &&
+          validStockItem(oldStock,newStock,qty,action,17) &&
+          validStockItem(oldStock,newStock,qty,action,18) &&
+          validStockItem(oldStock,newStock,qty,action,19) &&
+          validStockItem(oldStock,newStock,qty,action,20) &&
+          validStockItem(oldStock,newStock,qty,action,21) &&
+          validStockItem(oldStock,newStock,qty,action,22) &&
+          validStockItem(oldStock,newStock,qty,action,23)
+        ))
+        && (oldStock.size() <= 24 || (
+          validStockItem(oldStock,newStock,qty,action,24) &&
+          validStockItem(oldStock,newStock,qty,action,25) &&
+          validStockItem(oldStock,newStock,qty,action,26) &&
+          validStockItem(oldStock,newStock,qty,action,27) &&
+          validStockItem(oldStock,newStock,qty,action,28) &&
+          validStockItem(oldStock,newStock,qty,action,29)
+        ))
+      ;
     }
     function staffInventoryChange(ownerUid,branchId) {
       let id = request.resource.data.lastOrderId;
