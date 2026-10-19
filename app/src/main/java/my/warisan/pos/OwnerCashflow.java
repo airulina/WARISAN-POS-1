@@ -144,7 +144,8 @@ final class OwnerCashflow {
           if(name==null||name.trim().isEmpty())name="Branch "+branch.getId();
           String status=branch.getString("operatingStatus");
           BranchRow row=new BranchRow(branch.getId(),name,
-            BranchAccounts.operatingLabel(status));
+            Boolean.TRUE.equals(branch.getBoolean("archived"))?"ARKIB · REKOD LAMA":
+              BranchAccounts.operatingLabel(status));
           row.local=readLocalDays(row.id,from,to,false);
           row.legacyOnly=readLocalDays(row.id,from,to,true);
           rows.add(row);
