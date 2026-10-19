@@ -108,10 +108,6 @@ final class BranchAccounts {
       can NEVER grant a worker Owner access, even after account switches. */
   void checkMayBecomeOwner(FirebaseUser candidate,Runnable allowed){
     if(candidate==null){host.message("Login Google dahulu.");return;}
-    if(staff()&&candidate.getUid().equals(identity.getString("sessionUid",""))){
-      accountAlert("Akaun Pekerja","Email ini masih didaftarkan sebagai pekerja. "+
-        "Minta Owner BUANG AKSES pekerja dahulu sebelum daftar Owner.");return;
-    }
     db.collection("staffProfiles").document(candidate.getUid())
       .get(com.google.firebase.firestore.Source.SERVER)
       .addOnSuccessListener(profile->{
@@ -145,6 +141,11 @@ final class BranchAccounts {
   }
   void afterLogin(){
     FirebaseUser u=user();if(u==null)return;
+    // A user switching from a staff login to Google sign-in must not inherit
+    // the previously saved staff branch/role. This never touches POS records.
+    if(staff())identity.edit().remove("sessionUid").remove("role")
+      .remove("ownerUid").remove("branchId").remove("branchName").commit();
+    if(host.live!=null)host.live.stop();
     checkMayBecomeOwner(u,()->{
       if(active()&&owner()){host.loadMenu();host.draw();return;}
       db.collection(ROOT).document(u.getUid())
