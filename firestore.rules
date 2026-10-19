@@ -183,6 +183,31 @@ service cloud.firestore {
         && request.resource.data.ownerUid == ownerUid;
       allow update, delete: if owner(ownerUid);
 
+      // One static QR for the whole Owner workspace. Only Owner can upload,
+      // assigned workers can read while their designated branch is OPEN.
+      // Do NOT include merchant API keys or provider tokens in this document.
+      match /paymentConfig/{configId} {
+        allow get: if configId == "mainQr" && (
+          owner(ownerUid) || (
+            signedIn() &&
+            exists(/databases/$(database)/documents/staffProfiles/$(request.auth.uid)) &&
+            get(/databases/$(database)/documents/staffProfiles/$(request.auth.uid)).data.get("ownerUid","") == ownerUid &&
+            get(/databases/$(database)/documents/staffProfiles/$(request.auth.uid)).data.get("branchId","") is string &&
+            member(ownerUid,
+              get(/databases/$(database)/documents/staffProfiles/$(request.auth.uid)).data.branchId)
+          ));
+        allow list: if false;
+        allow create, update: if configId == "mainQr" && owner(ownerUid)
+          && request.resource.data.keys().hasOnly([
+            "imageBase64","contentType","updatedAt"])
+          && request.resource.data.imageBase64 is string
+          && request.resource.data.imageBase64.size() <= 650000
+          && request.resource.data.imageBase64.size() > 0
+          && request.resource.data.contentType == "image/png"
+          && request.resource.data.updatedAt == request.time;
+        allow delete: if owner(ownerUid) && configId == "mainQr";
+      }
+
       match /branches/{branchId} {
         // Staff may read ONLY their assigned branch status, even when closed,
         // so Android can explain Off Day and sign them out.
