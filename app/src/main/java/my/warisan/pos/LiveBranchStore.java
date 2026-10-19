@@ -9,6 +9,9 @@ import com.google.firebase.firestore.FieldValue;
 import com.google.firebase.firestore.FirebaseFirestore;
 import com.google.firebase.firestore.ListenerRegistration;
 import com.google.firebase.firestore.MetadataChanges;
+import com.google.firebase.firestore.DocumentChange;
+import com.google.firebase.firestore.QuerySnapshot;
+import com.google.firebase.firestore.Query;
 import com.google.firebase.firestore.QueryDocumentSnapshot;
 import java.util.ArrayList;
 import java.util.Date;
@@ -16,6 +19,10 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.text.SimpleDateFormat;
+import java.util.Locale;
+import org.json.JSONArray;
+import org.json.JSONObject;
 
 /**
  * Branch cloud operations. All live sales use Firestore transactions and do not
@@ -27,14 +34,21 @@ final class LiveBranchStore {
   private final MainActivity host;
   private final FirebaseFirestore db;
   private final BranchAccounts accounts;
-  private ListenerRegistration inventoryListener,dayListener;
+  private ListenerRegistration inventoryListener,dayListener,orderListener;
   private String activeKey="",activeDay="";
   private volatile boolean enabled=false,serverConfirmed=false,busy=false;
   private volatile List<Long> cloudStock=new ArrayList<>();
   private volatile long daySales=0,dayCash=0,dayQr=0,dayTransactions=0;
   private String cloudBranchName="";
+  private final String deviceId;
   LiveBranchStore(MainActivity host){
     this.host=host;this.db=host.firestoreForStaff();this.accounts=host.branchAccounts;
+    SharedPreferences settings=host.getSharedPreferences("warisan_identity",0);
+    String device=settings.getString("device_uid","");
+    if(device.isEmpty()){
+      device=UUID.randomUUID().toString();settings.edit().putString("device_uid",device).commit();
+    }
+    deviceId=device;
   }
   boolean enabled(){return enabled&&accounts.active();}
   boolean usable(){return enabled()&&serverConfirmed;}
@@ -57,6 +71,7 @@ final class LiveBranchStore {
   void stop(){
     if(inventoryListener!=null){inventoryListener.remove();inventoryListener=null;}
     if(dayListener!=null){dayListener.remove();dayListener=null;}
+    if(orderListener!=null){orderListener.remove();orderListener=null;}
     activeKey="";activeDay="";enabled=false;serverConfirmed=false;busy=false;
     cloudStock=new ArrayList<>();
   }
@@ -113,6 +128,68 @@ final class LiveBranchStore {
       dayQr=qr==null?0:qr;dayTransactions=tx==null?0:tx;
       if(host.activePage==12)host.draw();
     });
+    // Owner's existing local report also receives confirmed sales from workers.
+    // Only orders from OTHER devices are merged; we never replace old records.
+    if(accounts.owner()){
+      orderListener=branch().collection("liveOrders")
+        .whereEqualTo("day",selected)
+        .addSnapshotListener((results,error)->{
+          if(error!=null||results==null||!selected.equals(activeDay)||!key.equals(activeKey))return;
+          boolean changed=false;
+          for(DocumentChange diff:results.getDocumentChanges()){
+            if(mergeRemoteOrder(diff.getDocument()))changed=true;
+          }
+          if(changed&&(host.activePage==1||host.activePage==2||host.activePage==3))host.draw();
+        });
+    }
+  }
+  boolean mergeRemoteOrder(DocumentSnapshot remote){
+    if(!accounts.owner())return false;
+    String status=remote.getString("status");
+    if(!"PAID".equals(status)&&!"REFUNDED".equals(status))return false;
+    if(deviceId.equals(remote.getString("deviceId")))return false;
+    String id=remote.getId(),day=remote.getString("day");
+    if(day==null||!day.matches("\\d{4}-\\d{2}-\\d{2}"))return false;
+    try{
+      JSONArray sales=host.entries("stock_sales");
+      for(int i=0;i<sales.length();i++){
+        JSONObject old=sales.optJSONObject(i);
+        if(old==null||!id.equals(old.optString("liveOrderId","")))continue;
+        if("REFUNDED".equals(status)&&!old.optBoolean("refunded",false)){
+          old.put("refunded",true);old.put("refundTime",host.timestamp());
+          old.put("refundApprovalId",remote.getString("refundApprovalId"));
+          sales.put(i,old);
+          int amount=host.saleTotal(old);
+          return host.posPrefs().edit().putString("stock_sales",sales.toString())
+            .putInt("sales_"+day,Math.max(0,host.posPrefs().getInt("sales_"+day,0)-amount)).commit();
+        }
+        return false;
+      }
+      List<?> quantities=(List<?>)remote.get("qty");
+      if(quantities==null||quantities.size()>host.names.length)return false;
+      JSONObject sale=new JSONObject();JSONArray q=new JSONArray();
+      int cost=0;
+      for(int i=0;i<host.names.length;i++){
+        int amount=i<quantities.size()?((Number)quantities.get(i)).intValue():0;
+        q.put(amount);
+        if(amount>0&&!host.unlimited(i))cost+=host.restockCost(i,amount);
+      }
+      String stamp=host.timestamp();
+      com.google.firebase.Timestamp started=remote.getTimestamp("createdAt");
+      if(started!=null)stamp=new SimpleDateFormat("dd/MM/yyyy HH:mm",Locale.US).format(started.toDate());
+      int amount=remote.getLong("total")==null?0:remote.getLong("total").intValue();
+      sale.put("time",stamp);sale.put("businessDay",day);
+      sale.put("order",0);sale.put("qty",q);sale.put("total",amount);
+      sale.put("paid",true);sale.put("method",remote.getString("method"));
+      sale.put("refunded","REFUNDED".equals(status));sale.put("costTotal",cost);
+      sale.put("liveOrderId",id);sale.put("cloudSynced",true);
+      sales.put(sale);
+      int toAdd="REFUNDED".equals(status)?0:amount;
+      return host.posPrefs().edit()
+        .putString("stock_sales",sales.toString())
+        .putInt("sales_"+day,host.posPrefs().getInt("sales_"+day,0)+toAdd)
+        .commit();
+    }catch(Exception ex){host.message("Sync rekod jualan gagal: "+ex.getMessage());return false;}
   }
   void activate(){
     if(!accounts.owner()){host.message("Owner sahaja boleh aktifkan Live.");return;}
@@ -186,6 +263,7 @@ final class LiveBranchStore {
       Map<String,Object> orderData=new HashMap<>();
       orderData.put("ownerUid",accounts.ownerUid());orderData.put("branchId",accounts.branchId());
       orderData.put("actorUid",accounts.user().getUid());orderData.put("deviceOrderId",receiptId);
+      orderData.put("deviceId",deviceId);
       orderData.put("day",day);orderData.put("total",due);
       orderData.put("qty",quantities);orderData.put("status","PENDING");
       orderData.put("createdAt",FieldValue.serverTimestamp());
