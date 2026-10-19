@@ -2324,8 +2324,10 @@ JSONArray list=entries("stock_distribution");JSONObject e=list.optJSONObject(ind
     image.recycle();square.recycle();source.recycle();
   }
   void print(String receipt){
-    // Translate a fresh copy for the printer; never rewrite saved receipts.
-    receipt=ui(receipt);
+    // Localize only the outgoing copy; saved JSON/receipt data stays intact.
+    printLocalized(ui(receipt));
+  }
+  void printLocalized(String receipt){
     String address=getPreferences(0).getString("printer","");
     String mode=getPreferences(0).getString("printer_mode",address.isEmpty()?"system":"thermal");
     if(!"thermal".equals(mode)){
