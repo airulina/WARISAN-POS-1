@@ -13,6 +13,7 @@ const env=await initializeTestEnvironment({
 const owner=env.authenticatedContext('owner',{email:'owner@example.test',email_verified:true}).firestore();
 const staff=env.authenticatedContext('staff',{email:'staff@example.test',email_verified:true}).firestore();
 const outsider=env.authenticatedContext('outsider',{email:'other@example.test',email_verified:true}).firestore();
+const staff2=env.authenticatedContext('staff2',{email:'staff2@example.test',email_verified:true}).firestore();
 const staffGoogle=env.authenticatedContext('staff-google',{email:'staff@example.test',email_verified:true}).firestore();
 const workspace='workspaces/owner';
 const branch=workspace+'/branches/branch1';
@@ -31,6 +32,9 @@ try{
     await setDoc(d(db,branch),{ownerUid:'owner',name:'Utama'});
     await setDoc(d(db,branch+'/members/staff'),{
       uid:'staff',email:'staff@example.test',role:'STAFF',active:true
+    });
+    await setDoc(d(db,branch+'/members/staff2'),{
+      uid:'staff2',email:'staff2@example.test',role:'STAFF',active:true
     });
     await setDoc(d(db,'staffProfiles/staff'),{
       uid:'staff',email:'staff@example.test',role:'STAFF',active:true,
@@ -140,6 +144,20 @@ try{
     ownerUid:'owner',branchId:'branch1',day:today,
     openedBy:'staff',openedByEmail:'staff@example.test',
     opening:0,open:true,updatedAt:serverTimestamp()
+  }));
+  // A colleague with verified access may CLOSE, but may never forge the opener
+  // or close under another worker's identity.
+  await assertFails(updateDoc(d(staff2,branch+'/liveSessions/'+today),{
+    open:false,closing:0,closedBy:'staff',closedByEmail:'staff@example.test',
+    updatedAt:serverTimestamp()
+  }));
+  await assertSucceeds(updateDoc(d(staff2,branch+'/liveSessions/'+today),{
+    open:false,closing:0,closedBy:'staff2',closedByEmail:'staff2@example.test',
+    updatedAt:serverTimestamp()
+  }));
+  await assertFails(updateDoc(d(staff2,branch+'/liveSessions/'+today),{
+    open:true,openedBy:'staff2',openedByEmail:'staff2@example.test',
+    updatedAt:serverTimestamp()
   }));
   await assertSucceeds(setDoc(d(staff,branch+'/loginChecks/outside'),{
     ownerUid:'owner',branchId:'branch1',employeeUid:'staff',
