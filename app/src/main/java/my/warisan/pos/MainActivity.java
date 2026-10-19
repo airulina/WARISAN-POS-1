@@ -71,6 +71,7 @@ private static final int RC_SIGN_IN = 9001;
   LiveBranchStore live;
   OwnerCashflow ownerCashflow;
   OwnerBranchOrders ownerBranchOrders;
+  SharedPaymentQr sharedPaymentQr;
   BranchPresence presence;
   FirebaseFirestore firestoreForStaff(){return firestore;}
   android.content.SharedPreferences posPrefs(){
@@ -165,7 +166,7 @@ private static final int RC_SIGN_IN = 9001;
       }else p.edit().putBoolean("fix_supplier_receipt_detail_20260926",true).commit();
     }catch(Exception ignored){}
   }
-  @Override public void onCreate(Bundle b){super.onCreate(b);firebaseAuth = FirebaseAuth.getInstance();firestore = FirebaseFirestore.getInstance();branchAccounts=new BranchAccounts(this,firebaseAuth,firestore);ownerPassword=new OwnerPassword(this);staffSecurity=new StaffSecurity(this);live=new LiveBranchStore(this);ownerCashflow=new OwnerCashflow(this);ownerBranchOrders=new OwnerBranchOrders(this);presence=new BranchPresence(this);
+  @Override public void onCreate(Bundle b){super.onCreate(b);firebaseAuth = FirebaseAuth.getInstance();firestore = FirebaseFirestore.getInstance();branchAccounts=new BranchAccounts(this,firebaseAuth,firestore);ownerPassword=new OwnerPassword(this);staffSecurity=new StaffSecurity(this);live=new LiveBranchStore(this);ownerCashflow=new OwnerCashflow(this);ownerBranchOrders=new OwnerBranchOrders(this);sharedPaymentQr=new SharedPaymentQr(this);presence=new BranchPresence(this);
 GoogleSignInOptions gso = new GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
         .requestIdToken(getString(R.string.default_web_client_id))
         .requestEmail()
@@ -175,6 +176,7 @@ googleSignInClient = GoogleSignIn.getClient(this, gso);snapshotBeforeUpdate317()
 // Some old patches used today's date and could delete today's stock records.
 // Historic repairs remain available in code for manual recovery only.
 selectedDay=date();selectedMonth=selectedDay.substring(0,7);rangeStart=selectedDay;selectedStockDay=selectedDay;selectedCashDay=selectedDay;if(b!=null){int[] saved=b.getIntArray("cart");if(saved!=null)System.arraycopy(saved,0,qty,0,Math.min(saved.length,qty.length));activePage=b.getInt("page",0);selectedDay=b.getString("selectedDay",selectedDay);selectedMonth=selectedDay.substring(0,7);rangeStart=b.getString("rangeStart",rangeStart);selectedStockDay=b.getString("selectedStockDay",selectedStockDay);selectedCashDay=b.getString("selectedCashDay",selectedCashDay);cashDailyMode=b.getBoolean("cashDailyMode",cashDailyMode);}if(branchAccounts.active()){
+  sharedPaymentQr.attach();
   live.attach();
   if(branchAccounts.staff())staffSecurity.observeWorker();
 }draw();}
@@ -193,6 +195,7 @@ selectedDay=date();selectedMonth=selectedDay.substring(0,7);rangeStart=selectedD
       }).setNegativeButton("BATAL",null).show();
   }
   void draw(){
+    if(sharedPaymentQr!=null&&branchAccounts!=null)sharedPaymentQr.attach();
     if(live!=null&&branchAccounts!=null&&branchAccounts.active())live.attachDay();
     cachedStock=null;
     LinearLayout screen=col();screen.setBackgroundColor(cream);
@@ -258,7 +261,11 @@ selectedDay=date();selectedMonth=selectedDay.substring(0,7);rangeStart=selectedD
     if(activePage!=0){drawPage();addNavigation(screen);return;}
     LinearLayout header=row();ImageView logo=new ImageView(this);setStoreLogo(logo);makeCircle(logo);add(header,logo,49,49);
     LinearLayout heading=col();heading.setPadding(dp(10),0,0,0);add(heading,text("WARISAN POS",21,blue,true),-1,-2);LinearLayout sub=row();sub.addView(text("KIOS WARISAN  ·  SISTEM JUALAN",10,muted,true),new LinearLayout.LayoutParams(0,-2,1));TextView liveClock=text("",10,gold,true);liveClock.setGravity(Gravity.RIGHT|Gravity.CENTER_VERTICAL);add(sub,liveClock,-2,-2);add(heading,sub,-1,-2);startHeaderClock(liveClock);header.addView(heading,new LinearLayout.LayoutParams(0,-2,1));
-    add(body,header,-1,-2);gap(body,18);
+    add(body,header,-1,-2);gap(body,9);
+    add(body,text("🏪  "+(branchAccounts.staff()?"BRANCH PEKERJA: ":"BRANCH AKTIF: ")+
+      branchAccounts.branchName().toUpperCase(new Locale("ms","MY")),
+      13,gold,true),-1,-2);
+    gap(body,15);
     LinearLayout title=row();title.addView(text("Pilih menu",20,ink,true),new LinearLayout.LayoutParams(0,-2,1));TextView historyButton=chip("HISTORY",0xff203f61,gold);add(title,historyButton,-2,-2);historyButton.setOnClickListener(v->{
       if(branchAccounts.staff())saleHistory(businessDay());
       else saleHistoryChooseDate();
@@ -302,7 +309,7 @@ selectedDay=date();selectedMonth=selectedDay.substring(0,7);rangeStart=selectedD
     for(int i=0;i<qty.length;i++)if(qty[i]>0){final int id=i;LinearLayout r=row();r.addView(text(names[i]+" × "+qty[i],14,ink,true),new LinearLayout.LayoutParams(0,dp(39),1));add(r,text(money(qty[i]*prices[i]),13,blue,true),-2,-2);TextView minus=chip("−",0xffc83f46,Color.WHITE);LinearLayout.LayoutParams m=params(32,30);m.leftMargin=dp(8);r.addView(minus,m);minus.setOnClickListener(v->{qty[id]--;draw();});add(basket,r,-1,-2);}
   }
   void addNavigation(LinearLayout screen){LinearLayout nav=row();nav.setBackgroundColor(cream);nav.setPadding(dp(7),dp(7),dp(7),dp(9));String[] labels=branchAccounts.staff()?new String[]{"MENU","ORDER","STOK","HARI INI","PRINTER","ACCOUNT"}:(english()?new String[]{"MENU","ORDERS","STOCK","CASH","BRANCH","SETTINGS"}:new String[]{"MENU","ORDER","STOK","DUIT","BRANCH","SETTING"});int[] pages=branchAccounts.staff()?new int[]{0,11,20,12,14,5}:new int[]{0,11,1,3,15,4};
-    for(int i=0;i<labels.length;i++){final int page=pages[i];boolean selected=(activePage==page)||(page==1&&activePage==13)||(page==3&&(activePage==2||activePage==16||activePage==17||activePage==18||activePage==19||activePage==21))||(page==4&&activePage>=4&&activePage<=10);TextView tab=text(labels[i],branchAccounts.staff()?10:9,selected?Color.rgb(19,24,34):Color.WHITE,true);tab.setGravity(Gravity.CENTER);tab.setBackground(shape(selected?gold:Color.rgb(20,58,101),11));LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(0,dp(49),1);p.setMargins(dp(3),0,dp(3),0);nav.addView(tab,p);tab.setOnClickListener(v->{activePage=page;draw();});}add(screen,nav,-1,-2);}
+    for(int i=0;i<labels.length;i++){final int page=pages[i];boolean selected=(activePage==page)||(page==1&&activePage==13)||(page==3&&(activePage==2||activePage==16||activePage==17||activePage==18||activePage==19||activePage==21||activePage==22))||(page==4&&activePage>=4&&activePage<=10);TextView tab=text(labels[i],branchAccounts.staff()?10:9,selected?Color.rgb(19,24,34):Color.WHITE,true);tab.setGravity(Gravity.CENTER);tab.setBackground(shape(selected?gold:Color.rgb(20,58,101),11));LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(0,dp(49),1);p.setMargins(dp(3),0,dp(3),0);nav.addView(tab,p);tab.setOnClickListener(v->{activePage=page;draw();});}add(screen,nav,-1,-2);}
   void heading(String title,String subtitle){
     LinearLayout brand=row();brand.setGravity(Gravity.CENTER_VERTICAL);ImageView logo=new ImageView(this);setStoreLogo(logo);makeCircle(logo);add(brand,logo,44,44);LinearLayout brandText=col();brandText.setPadding(dp(9),0,0,0);add(brandText,text("WARISAN POS",18,blue,true),-1,-2);add(brandText,text("KIOS WARISAN  ·  SISTEM JUALAN",9,muted,true),-1,-2);brand.addView(brandText,new LinearLayout.LayoutParams(0,-2,1));TextView clock=text("",9,gold,true);clock.setGravity(Gravity.RIGHT|Gravity.CENTER_VERTICAL);add(brand,clock,-2,-2);startHeaderClock(clock);add(body,brand,-1,-2);gap(body,15);
     add(body,text(title,23,ink,true),-1,-2);add(body,text(subtitle,12,muted,false),-1,-2);gap(body,16);
@@ -733,10 +740,17 @@ selectedDay=date();selectedMonth=selectedDay.substring(0,7);rangeStart=selectedD
       ownerCashflow.drawOverview();
     }else if(activePage==14){
       drawStaffPrinterSettings();
-    }else if(activePage==12){
+    }else if(activePage==12||activePage==22){
+      if(activePage==22&&!branchAccounts.owner()){
+        heading("Akses ditolak","Hanya Owner boleh buka sesi Owner.");return;
+      }
+      if(activePage==12&&!branchAccounts.staff()){
+        heading("Akses ditolak","Paparan ini khas untuk pekerja.");return;
+      }
       String day=businessDay();
       heading("HARI INI · "+branchAccounts.branchName(),
-        "Sesi operasi pekerja · Opening / Closing dan jualan hari ini.");
+        branchAccounts.owner()?"Sesi Owner · Opening / Closing dan jualan Branch aktif.":
+          "Sesi pekerja · Opening / Closing dan jualan hari ini.");
       add(body,text("OPENING / CLOSING",14,gold,true),-1,-2);gap(body,8);
       drawPosSession();
       gap(body,12);
@@ -750,8 +764,10 @@ selectedDay=date();selectedMonth=selectedDay.substring(0,7);rangeStart=selectedD
       metric(pay,"QR",money(live.enabled()?(int)live.qr():sessionQr(day)),blue,null);
       add(body,pay,-1,-2);gap(body,12);
       action("Cetak laporan harian",()->print(staffDailyReceipt(day)));
-      action("Transaksi hari ini / Mohon Refund",()->saleHistory(day));
-      action("Semak kelulusan refund",()->staffSecurity.showMyRefunds());
+      action("Transaksi hari ini / Refund",()->saleHistory(day));
+      if(branchAccounts.staff())
+        action("Semak kelulusan refund",()->staffSecurity.showMyRefunds());
+      else action("‹  Kembali ke DUIT",()->{activePage=3;draw();});
     }else if(activePage==11){
       heading(branchAccounts.owner()?"ORDER · SEMUA BRANCH":"Order belum bayar",
         branchAccounts.owner()?"Order tempatan dan order Cloud branch lain, lengkap dengan nombor resit serta asal branch.":
@@ -1449,22 +1465,58 @@ JSONArray list=entries("stock_distribution");JSONObject e=list.optJSONObject(ind
     catch(Exception e){message("Tidak dapat membuka galeri untuk logo.");}
   }
   void openQrDuitNowSettings(){
-    String existing=posPrefs().getString("tng_qr_uri","");
-    if(existing.isEmpty()){
-      darkBuilder().setTitle("QR / DuitNow")
-        .setMessage("Belum ada QR TNG / DuitNow pada telefon ini. Pilih gambar QR sekali untuk digunakan semasa bayaran.")
-        .setPositiveButton("Pilih QR", (d,w)->pickTngQr())
-        .setNegativeButton("Batal",null).show();
+    if(!branchAccounts.owner()){message("Hanya Owner boleh ubah QR.");return;}
+    if(sharedPaymentQr.hasQr()){
+      darkBuilder().setTitle("QR / DuitNow · CLOUD AKTIF")
+        .setMessage("QR rasmi disimpan dalam Firebase untuk semua branch. "+
+          "Owner sahaja boleh menukarnya. Pembayaran QR masih perlu disahkan manual.")
+        .setPositiveButton("PAPAR QR",(d,w)->previewTngQr())
+        .setNeutralButton("TUKAR QR",(d,w)->pickTngQr())
+        .setNegativeButton("TUTUP",null).show();
       return;
     }
-    darkBuilder().setTitle("QR / DuitNow · Sudah disimpan")
-      .setMessage("QR TNG / DuitNow sedia ada akan digunakan terus semasa bayaran. Tak perlu upload dalam Bank Setting.")
-      .setPositiveButton("Papar QR", (d,w)->previewTngQr())
-      .setNeutralButton("Tukar QR", (d,w)->pickTngQr())
-      .setNegativeButton("Tutup",null).show();
+    if(!sharedPaymentQr.loaded()){
+      message("Menunggu QR Cloud daripada Firebase. Pastikan sambungan internet dan Rules terkini.");
+      return;
+    }
+    String previous=posPrefs().getString("tng_qr_uri","");
+    if(!previous.isEmpty()){
+      darkBuilder().setTitle("QR / DuitNow · BELUM ADA DI CLOUD")
+        .setMessage("QR lama dijumpai dalam telefon Owner. "+
+          "Boleh pindah QR ini ke database supaya semua branch nampak QR sama.")
+        .setPositiveButton("GUNA QR LAMA",(d,w)->sharedPaymentQr.upload(Uri.parse(previous)))
+        .setNeutralButton("PILIH QR BARU",(d,w)->pickTngQr())
+        .setNegativeButton("BATAL",null).show();
+      return;
+    }
+    darkBuilder().setTitle("QR / DuitNow · BELUM DIUPLOAD")
+      .setMessage("Upload satu QR rasmi ke Firebase. Semua branch yang aktif "+
+        "akan menggunakannya tanpa upload semula.")
+      .setPositiveButton("UPLOAD QR",(d,w)->pickTngQr())
+      .setNegativeButton("BATAL",null).show();
   }
-  void pickTngQr(){Intent intent=new Intent(Intent.ACTION_OPEN_DOCUMENT);intent.setType("image/*");intent.addCategory(Intent.CATEGORY_OPENABLE);intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION|Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION);try{startActivityForResult(intent,PICK_TNG_QR);}catch(Exception e){message("Galeri tidak dapat dibuka");}}
-  void previewTngQr(){String saved=posPrefs().getString("tng_qr_uri","");if(saved.isEmpty()){message("QR Touch ’n Go belum dimasukkan.");return;}try{LinearLayout box=col();box.setPadding(dp(16),dp(14),dp(16),dp(12));box.setBackground(shape(surface,18));add(box,text("QR TOUCH ’N GO",19,ink,true),-1,-2);gap(box,10);ImageView image=new ImageView(this);loadQrFullResolution(image,saved);add(box,image,-1,430);AlertDialog dialog=darkBuilder().setView(box).setPositiveButton("OK",null).create();dialog.setOnShowListener(v->{styleDarkDialogNow(dialog);});dialog.show();}catch(Exception e){message("QR tidak dapat dibuka. Upload semula.");}}
+  void pickTngQr(){
+    if(!branchAccounts.owner()){message("Upload QR hanya Owner.");return;}
+    Intent intent=new Intent(Intent.ACTION_OPEN_DOCUMENT);
+    intent.setType("image/*");intent.addCategory(Intent.CATEGORY_OPENABLE);
+    intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION|
+      Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION);
+    try{startActivityForResult(intent,PICK_TNG_QR);}
+    catch(Exception e){message("Galeri tidak dapat dibuka");}
+  }
+  void previewTngQr(){
+    if(!sharedPaymentQr.hasQr()){
+      message("QR belum tersedia dalam Firebase. Owner perlu upload QR pada Setting.");return;
+    }
+    LinearLayout box=col();box.setPadding(dp(16),dp(14),dp(16),dp(12));
+    box.setBackground(shape(surface,18));
+    add(box,text("QR RASMI · SEMUA BRANCH",19,ink,true),-1,-2);gap(box,10);
+    ImageView image=new ImageView(this);
+    if(!sharedPaymentQr.display(image)){message("Gambar QR tidak dapat dibuka.");return;}
+    add(box,image,-1,430);
+    AlertDialog dialog=darkBuilder().setView(box).setPositiveButton("OK",null).create();
+    dialog.setOnShowListener(v->styleDarkDialogNow(dialog));dialog.show();
+  }
   void editPaymentProvider(){String[] options={"Static DuitNow","Billplz","HitPay","Maybank QRPayBiz","Custom API"};String current=posPrefs().getString("payment_provider","Static DuitNow");int checked=0;for(int i=0;i<options.length;i++)if(options[i].equals(current))checked=i;final int initial=checked;darkBuilder().setTitle("Pilih payment provider").setSingleChoiceItems(options,checked,null).setPositiveButton("Simpan",(d,w)->{AlertDialog a=(AlertDialog)d;int pos=a.getListView().getCheckedItemPosition();if(pos<0)pos=initial;android.content.SharedPreferences.Editor e=posPrefs().edit().putString("payment_provider",options[pos]);if("Billplz".equals(options[pos])&&posPrefs().getString("payment_base_url","").trim().isEmpty())e.putString("payment_base_url","https://www.billplz.com/api/v3");e.apply();draw();}).setNegativeButton("Batal",null).show();}
   void editPaymentSetting(String key,String title,String hint){EditText input=new EditText(this);input.setSingleLine(true);input.setHint(hint);String old=posPrefs().getString(key,"");input.setText(old);if(key.contains("secret")||key.contains("api_key"))input.setInputType(android.text.InputType.TYPE_CLASS_TEXT|android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD);styleInput(input);darkBuilder().setTitle(title).setView(input).setPositiveButton("Simpan",(d,w)->{posPrefs().edit().putString(key,input.getText().toString().trim()).apply();message(title+" disimpan pada device.");}).setNegativeButton("Batal",null).show();}
   String billplzBase(){String b=posPrefs().getString("payment_base_url","https://www.billplz.com/api/v3").trim();while(b.endsWith("/"))b=b.substring(0,b.length()-1);return b;}
@@ -1761,7 +1813,17 @@ JSONArray list=entries("stock_distribution");JSONObject e=list.optJSONObject(ind
       return;
     }
     if(request==PICK_IMAGE){try{getContentResolver().takePersistableUriPermission(uri,Intent.FLAG_GRANT_READ_URI_PERMISSION);if(imageItem<0||imageItem>=names.length)return;posPrefs().edit().putString("menu_image_"+imageItem,uri.toString()).apply();draw();message("Gambar menu disimpan");}catch(Exception e){message("Tidak dapat menyimpan gambar ini");}return;}
-    if(request==PICK_TNG_QR){try{getContentResolver().takePersistableUriPermission(uri,Intent.FLAG_GRANT_READ_URI_PERMISSION);posPrefs().edit().putString("tng_qr_uri",uri.toString()).apply();draw();message("QR Touch ’n Go disimpan");}catch(Exception e){message("Tidak dapat menyimpan QR Touch ’n Go");}return;}
+    if(request==PICK_TNG_QR){
+      if(!branchAccounts.owner()){message("QR hanya boleh diubah Owner.");return;}
+      try{
+        getContentResolver().takePersistableUriPermission(uri,Intent.FLAG_GRANT_READ_URI_PERMISSION);
+        // Retain the Owner's former phone URI only as a recovery option.
+        // The QR shown to cashiers comes EXCLUSIVELY from Firebase.
+        posPrefs().edit().putString("tng_qr_uri",uri.toString()).apply();
+        sharedPaymentQr.upload(uri);
+      }catch(Exception e){message("Tidak dapat menyimpan QR: "+e.getMessage());}
+      return;
+    }
     try(OutputStream out=getContentResolver().openOutputStream(uri)){
       if(out==null)throw new IOException("Gagal membuka fail");
       if(request==EXPORT_BACKUP){out.write(backupJson().toString(2).getBytes(StandardCharsets.UTF_8));message("Backup berjaya disimpan");return;}
@@ -1899,7 +1961,24 @@ JSONArray list=entries("stock_distribution");JSONObject e=list.optJSONObject(ind
   void payPendingOrder(int index){JSONArray list=entries("pending_orders");JSONObject o=list.optJSONObject(index);if(o==null||o.optBoolean("paid",false)||o.optBoolean("cancelled",false)){message("Order ini sudah dibayar, dibatalkan atau tidak dijumpai.");return;}int due=o.optInt("total");showDarkChoice("BAYAR ORDER #"+String.format(Locale.US,"%04d",o.optInt("order")),money(due),new String[]{"TUNAI","QR"},new int[]{blue,0xff203f61},which->{if(which==0)cashPaymentPending(index,due);else chooseQrPending(index,due);});}
   void cashPaymentPending(int index,int due){LinearLayout box=col();box.setPadding(dp(20),dp(18),dp(20),dp(10));box.setBackground(shape(surface,18));add(box,text("BAYARAN TUNAI",20,ink,true),-1,-2);gap(box,4);add(box,text("Jumlah",12,muted,true),-1,-2);gap(box,2);TextView dueAmount=text(money(due),30,gold,true);add(box,dueAmount,-1,-2);gap(box,12);EditText received=new EditText(this);received.setSingleLine(true);received.setInputType(android.text.InputType.TYPE_CLASS_NUMBER|android.text.InputType.TYPE_NUMBER_FLAG_DECIMAL);received.setHint("Contoh 50.00");styleInput(received);add(box,received,-1,-2);TextView change=text("Masukkan tunai diterima",14,muted,true);gap(box,8);add(box,change,-1,-2);AlertDialog dialog=darkBuilder().setView(box).setPositiveButton("BAYARAN DITERIMA",null).setNegativeButton("BATAL",null).create();dialog.setOnShowListener(v->{styleDarkDialogNow(dialog);Button ok=dialog.getButton(AlertDialog.BUTTON_POSITIVE),back=dialog.getButton(AlertDialog.BUTTON_NEGATIVE);ok.setTextColor(gold);back.setTextColor(muted);ok.setEnabled(false);received.addTextChangedListener(new android.text.TextWatcher(){public void beforeTextChanged(CharSequence s,int a,int b,int c){}public void onTextChanged(CharSequence s,int a,int b,int c){int tendered=cashCents(received);boolean enough=tendered>=due;ok.setEnabled(enough);change.setText(enough?"BAKI  "+money(tendered-due):tendered<0?"Masukkan tunai diterima":"Kurang  "+money(due-tendered));change.setTextColor(enough?gold:muted);}public void afterTextChanged(android.text.Editable e){}});ok.setOnClickListener(x->{int tendered=cashCents(received);if(tendered<due)return;dialog.dismiss();completePendingPayment(index,"Tunai",tendered);});});dialog.show();}
   void chooseQrPending(int index,int due){showDarkChoice("PILIH QR",money(due),new String[]{"TOUCH ’N GO  ·  MANUAL","BANK  ·  DYNAMIC / AUTO CONFIRM"},new int[]{0xff203f61,blue},which->{if(which==0)showTngQrPending(index,due);else showBankQrPending(index,due);});}
-  void showTngQrPending(int index,int due){String saved=posPrefs().getString("tng_qr_uri","");if(saved.isEmpty()){message("QR Touch ’n Go belum dimasukkan. Pergi Setting → QR / DuitNow.");return;}try{LinearLayout box=col();box.setPadding(dp(18),dp(16),dp(18),dp(8));box.setBackground(shape(surface,18));add(box,text("TOUCH ’N GO",20,ink,true),-1,-2);TextView dueAmount=text(money(due),30,gold,true);add(box,dueAmount,-1,-2);add(box,text("Pengesahan manual",12,muted,true),-1,-2);gap(box,10);ImageView image=new ImageView(this);loadQrFullResolution(image,saved);add(box,image,-1,400);gap(box,7);add(box,text("Tekan Bayaran Diterima selepas semak bayaran customer.",12,muted,false),-1,-2);AlertDialog dialog=darkBuilder().setView(box).setPositiveButton("BAYARAN DITERIMA",(d,w)->completePendingPayment(index,"Touch ’n Go",due)).setNegativeButton("BATAL",null).create();dialog.setOnShowListener(v->{styleDarkDialogNow(dialog);});dialog.show();}catch(Exception e){message("QR Touch ’n Go tidak dapat dibuka. Upload semula di Setting.");}}
+  void showTngQrPending(int index,int due){
+    if(!sharedPaymentQr.hasQr()){
+      message("QR Cloud belum tersedia. Minta Owner upload di Setting → QR / DuitNow.");return;
+    }
+    LinearLayout box=col();box.setPadding(dp(18),dp(16),dp(18),dp(8));
+    box.setBackground(shape(surface,18));
+    add(box,text("QR DUITNOW / TNG · "+branchAccounts.branchName(),17,ink,true),-1,-2);
+    TextView dueAmount=text(money(due),30,gold,true);add(box,dueAmount,-1,-2);
+    add(box,text("Pengesahan manual",12,muted,true),-1,-2);gap(box,10);
+    ImageView image=new ImageView(this);
+    if(!sharedPaymentQr.display(image)){message("Gambar QR Cloud tidak sah.");return;}
+    add(box,image,-1,400);gap(box,7);
+    add(box,text("Semak bayaran diterima sebelum tekan BAYARAN DITERIMA.",12,muted,false),-1,-2);
+    AlertDialog dialog=darkBuilder().setView(box)
+      .setPositiveButton("BAYARAN DITERIMA",(d,w)->completePendingPayment(index,"Touch ’n Go",due))
+      .setNegativeButton("BATAL",null).create();
+    dialog.setOnShowListener(v->styleDarkDialogNow(dialog));dialog.show();
+  }
   void showBankQrPending(int index,int due){String provider=posPrefs().getString("payment_provider","Static DuitNow");if("Billplz".equals(provider)){startBillplzPending(index,due);return;}String base=posPrefs().getString("payment_base_url","").trim(),key=posPrefs().getString("payment_api_key","").trim(),merchant=posPrefs().getString("payment_merchant_id","").trim();if(base.isEmpty()||key.isEmpty()||merchant.isEmpty()){message("Bank Dynamic QR belum lengkap. Lengkapkan tetapan provider di Setting → Bank Setting.");return;}LinearLayout box=col();box.setPadding(dp(20),dp(18),dp(20),dp(10));box.setBackground(shape(surface,18));add(box,text("BANK DYNAMIC QR",20,ink,true),-1,-2);TextView dueAmount=text(money(due),30,gold,true);add(box,dueAmount,-1,-2);gap(box,10);add(box,text("Provider ini belum mempunyai create-payment sebenar dalam build ini.",13,muted,false),-1,-2);AlertDialog dialog=darkBuilder().setView(box).setPositiveButton("OK",null).create();dialog.setOnShowListener(v->{styleDarkDialogNow(dialog);});dialog.show();}
   void startBillplzPending(int index,int due){String collection=posPrefs().getString("payment_collection_id","").trim(),secret=posPrefs().getString("payment_secret","").trim(),callback=posPrefs().getString("payment_callback_url","").trim(),email=posPrefs().getString("payment_customer_email",posPrefs().getString("receipt_email","")).trim();if(collection.isEmpty()||secret.isEmpty()||callback.isEmpty()||email.isEmpty()){message("Billplz belum lengkap. Isi Collection ID, Secret Key, Callback URL dan Email pelanggan/kaunter di Setting → Bank Setting.");return;}if(!callback.startsWith("https://")){message("Callback URL Billplz mesti HTTPS.");return;}JSONArray pending=entries("pending_orders");JSONObject o=pending.optJSONObject(index);if(o==null){message("Order tidak dijumpai.");return;}int order=o.optInt("order");LinearLayout box=col();box.setPadding(dp(20),dp(18),dp(20),dp(10));box.setBackground(shape(surface,18));add(box,text("BILLPLZ · BANK",20,ink,true),-1,-2);add(box,text(money(due),30,gold,true),-1,-2);gap(box,8);TextView status=text("Mencipta bil Billplz…",13,muted,true);add(box,status,-1,-2);AlertDialog dialog=darkBuilder().setView(box).setNegativeButton("TUTUP",null).create();dialog.setOnShowListener(v->styleDarkDialogNow(dialog));dialog.show();new Thread(()->{try{String redirect=posPrefs().getString("payment_redirect_url","").trim();String body="collection_id="+form(collection)+"&email="+form(email)+"&name="+form("Warisan POS Customer")+"&amount="+due+"&callback_url="+form(callback)+"&description="+form("WARISAN POS Order #"+String.format(Locale.US,"%04d",order))+"&reference_1_label="+form("Order")+"&reference_1="+form(String.valueOf(order))+"&deliver=false"+(redirect.isEmpty()?"":"&redirect_url="+form(redirect));JSONObject bill=new JSONObject(httpBillplz("POST",billplzBase()+"/bills",body));String billId=bill.getString("id"),billUrl=bill.getString("url");runOnUiThread(()->{status.setText("Bil siap. Selesaikan bayaran pada Billplz. Status akan disemak automatik.");try{startActivity(new Intent(Intent.ACTION_VIEW,Uri.parse(billUrl)));}catch(Exception e){message("Tidak dapat membuka halaman Billplz.");}});pollBillplzPending(index,due,billId,dialog,status);}catch(Exception e){runOnUiThread(()->{status.setText("Gagal mencipta bil Billplz.");message("Semak Collection ID, Secret Key, Callback URL dan sambungan internet.");});}}).start();}
   void pollBillplzPending(int index,int due,String billId,AlertDialog dialog,TextView status){for(int attempt=0;attempt<100;attempt++){try{Thread.sleep(3000);JSONObject bill=new JSONObject(httpBillplz("GET",billplzBase()+"/bills/"+form(billId),null));if(bill.optBoolean("paid",false)&&"paid".equalsIgnoreCase(bill.optString("state"))){runOnUiThread(()->{if(dialog.isShowing())dialog.dismiss();completePendingPayment(index,"Billplz / Bank",due);});return;}runOnUiThread(()->{if(dialog.isShowing())status.setText("Menunggu bayaran Billplz…");});}catch(Exception ignored){}}runOnUiThread(()->{if(dialog.isShowing())status.setText("Semakan automatik tamat. Buka order ini semula untuk semak/bayar.");});}
@@ -1968,15 +2047,34 @@ JSONArray list=entries("stock_distribution");JSONObject e=list.optJSONObject(ind
     dialog.setOnShowListener(v->{styleDarkDialogNow(dialog);Button next=dialog.getButton(AlertDialog.BUTTON_POSITIVE);next.setEnabled(false);
       received.addTextChangedListener(new android.text.TextWatcher(){public void beforeTextChanged(CharSequence s,int start,int count,int after){}public void onTextChanged(CharSequence s,int start,int before,int count){int tendered=cashCents(received);boolean enough=tendered>=due;next.setEnabled(enough);change.setText(enough?"BAKI PULANGAN  "+money(tendered-due):tendered<0?"Masukkan jumlah tunai diterima":"Tunai belum cukup · kurang "+money(due-tendered));change.setTextColor(enough?blue:muted);}public void afterTextChanged(android.text.Editable value){}});
       next.setOnClickListener(view->{int tendered=cashCents(received);if(tendered<due){message("Tunai diterima tidak mencukupi");return;}dialog.dismiss();completePayment("Tunai",due,tendered);});});dialog.show();}
-  void showPaymentQr(int due){LinearLayout box=col();box.setPadding(dp(18),dp(10),dp(18),dp(8));box.setBackground(shape(surface,18));TextView amountLabel=text("JUMLAH",12,muted,true);amountLabel.setGravity(Gravity.CENTER);add(box,amountLabel,-1,-2);TextView amount=text(money(due),32,gold,true);amount.setGravity(Gravity.CENTER);add(box,amount,-1,-2);gap(box,8);ImageView image=new ImageView(this);image.setImageResource(R.drawable.qr_frozen_ld);image.setAdjustViewBounds(true);image.setScaleType(ImageView.ScaleType.FIT_CENTER);add(box,image,-1,390);gap(box,7);TextView hint=text("Tunjukkan QR ini kepada pelanggan. Sahkan selepas bayaran diterima.",12,muted,false);hint.setGravity(Gravity.CENTER);add(box,hint,-1,-2);
-    AlertDialog dialog=darkBuilder().setTitle("QR DuitNow · Frozen LD").setView(box).setPositiveButton("Bayaran diterima",(d,w)->completePayment("QR / DuitNow",due,due)).setNegativeButton("Batal",null).create();dialog.setOnShowListener(v->styleDarkDialogNow(dialog));dialog.show();}
+  void showPaymentQr(int due){
+    if(!sharedPaymentQr.hasQr()){
+      message("QR rasmi belum tersedia di Firebase. Owner perlu upload pada Setting → QR / DuitNow.");return;
+    }
+    LinearLayout box=col();box.setPadding(dp(18),dp(10),dp(18),dp(8));
+    box.setBackground(shape(surface,18));
+    TextView amountLabel=text("JUMLAH · "+branchAccounts.branchName(),12,muted,true);
+    amountLabel.setGravity(Gravity.CENTER);add(box,amountLabel,-1,-2);
+    TextView amount=text(money(due),32,gold,true);amount.setGravity(Gravity.CENTER);
+    add(box,amount,-1,-2);gap(box,8);
+    ImageView image=new ImageView(this);
+    if(!sharedPaymentQr.display(image)){message("QR rasmi gagal dipaparkan.");return;}
+    add(box,image,-1,390);gap(box,7);
+    TextView hint=text("QR rasmi Owner. Semak bayaran diterima sebelum sahkan.",12,muted,false);
+    hint.setGravity(Gravity.CENTER);add(box,hint,-1,-2);
+    AlertDialog dialog=darkBuilder().setTitle("QR / DuitNow · WARISAN POS").setView(box)
+      .setPositiveButton("Bayaran diterima",(d,w)->completePayment("QR / DuitNow",due,due))
+      .setNegativeButton("Batal",null).create();
+    dialog.setOnShowListener(v->styleDarkDialogNow(dialog));dialog.show();
+  }
   String line(String left,String right){left=ui(left);right=ui(right);int spaces=Math.max(1,32-left.length()-right.length());return left+String.format(Locale.US,"%"+spaces+"s","")+right+"\n";}
   String receipt(String method,int due,int order,int tendered){StringBuilder b=new StringBuilder();
     String shopName=posPrefs().getString("shop_name","WARISAN FROZEN");
     b.append(centerReceipt(shopName));
     String phone=posPrefs().getString("receipt_phone","");if(!phone.isEmpty())b.append("       Tel: ").append(phone).append("\n");
     String email=posPrefs().getString("receipt_email","");if(!email.isEmpty())b.append(email).append("\n");
-    b.append("--------------------------------\n").append(line("No. resit",String.format(Locale.US,"#%04d",order)))
+    b.append(centerReceipt("BRANCH: "+branchAccounts.branchName()))
+      .append("--------------------------------\n").append(line("No. resit",String.format(Locale.US,"#%04d",order)))
       .append(line("Tarikh",new SimpleDateFormat("dd/MM/yy HH:mm",Locale.US).format(new Date()))).append("--------------------------------\n");
     for(int i=0;i<qty.length;i++)if(qty[i]>0){b.append(names[i]).append("\n");b.append(line("  "+qty[i]+" x "+money(prices[i]),money(qty[i]*prices[i])));}
     b.append("--------------------------------\n").append(line("JUMLAH",money(due))).append(line("BAYAR",method));
@@ -2076,6 +2174,7 @@ JSONArray list=entries("stock_distribution");JSONObject e=list.optJSONObject(ind
     receiptRule(sheet);
     receiptRowLight(sheet,"RESIT BAYARAN",String.format(Locale.US,"#%04d",order),false);gap(sheet,4);
     receiptRowLight(sheet,"Tarikh",new SimpleDateFormat("dd/MM/yyyy HH:mm",Locale.US).format(new Date()),false);
+    receiptRowLight(sheet,"Branch",branchAccounts.branchName(),true);
     receiptRule(sheet);
     for(int i=0;i<purchased.length;i++)if(purchased[i]>0){receiptRowLight(sheet,names[i],money(prices[i]*purchased[i]),false);
       TextView details=text(purchased[i]+" × "+money(prices[i]),11,receiptMuted,false);add(sheet,details,-1,-2);gap(sheet,10);}
