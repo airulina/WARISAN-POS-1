@@ -66,6 +66,16 @@ try{
     uid:'newworker',role:'STAFF',active:true,ownerUid:'owner',
     branchId:'branch1',email:'worker@example.test',branchName:'Utama',createdAt:new Date()
   }));
+  // The email lock can only be created by the authenticated Owner after
+  // a matching staff profile exists (protecting cross-provider sign-in).
+  await assertSucceeds(setDoc(d(owner,'staffEmails/worker@example.test'),{
+    email:'worker@example.test',role:'STAFF',workerUid:'newworker',
+    ownerUid:'owner',branchId:'branch1',removed:false,updatedAt:serverTimestamp()
+  }));
+  await assertFails(setDoc(d(staff,'staffEmails/fake@example.test'),{
+    email:'fake@example.test',role:'STAFF',workerUid:'fake',
+    ownerUid:'staff',branchId:'branch1',removed:false,updatedAt:serverTimestamp()
+  }));
 
   // Atomic cashier reservation: quantity 2 deducted from inventory.
   await assertSucceeds(runTransaction(staff,async tx=>{
