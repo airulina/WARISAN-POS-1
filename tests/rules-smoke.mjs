@@ -94,6 +94,30 @@ try{
   const remaining=await getDoc(d(owner,inv));
   assert.equal(remaining.data().stock[0],8);
 
+  // Staff can read quantities but cannot edit a branch's absolute balance.
+  await assertFails(setDoc(d(staff,branch+'/stockAdjustments/staff-fake'),{
+    ownerUid:'owner',branchId:'branch1',actorUid:'staff',
+    item:0,name:'Sate Ayam',before:8,after:999,difference:991,
+    type:'OWNER_CORRECTION',createdAt:serverTimestamp()
+  }));
+  // Owner edits an existing Live branch balance with an audit entry.
+  await assertSucceeds(runTransaction(owner,async tx=>{
+    const snap=await tx.get(d(owner,inv));
+    assert.equal(snap.data().stock[0],8);
+    tx.update(d(owner,inv),{
+      stock:[9,10,10,10,0,10,10],updatedAt:serverTimestamp()
+    });
+    tx.set(d(owner,branch+'/stockAdjustments/owner-correction'),{
+      ownerUid:'owner',branchId:'branch1',actorUid:'owner',
+      item:0,name:'Sate Ayam',before:8,after:9,difference:1,
+      type:'OWNER_CORRECTION',createdAt:serverTimestamp()
+    });
+  }));
+  assert.equal((await getDoc(d(staff,inv))).data().stock[0],9);
+  await assertFails(updateDoc(d(staff,branch+'/stockAdjustments/owner-correction'),{
+    after:1000
+  }));
+
   // Payment may only be linked to the approved reservation.
   await assertSucceeds(runTransaction(staff,async tx=>{
     const order=await tx.get(d(staff,ord));
