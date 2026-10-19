@@ -128,7 +128,7 @@ final class BranchAccounts {
     if(owner()){
       host.action("+ Tambah Branch",()->createBranch());
       host.action("+ Daftar pekerja · Email + Password",()->host.staffSecurity.createEmployee());
-      host.action("Urus / sekat pekerja / reset password",()->host.staffSecurity.manageWorkers());
+      host.action("👥  SENARAI SEMUA PEKERJA / BUANG AKSES",()->host.staffSecurity.manageWorkers());
       host.action("Refund menunggu kelulusan Owner",()->host.staffSecurity.ownerReview());
       host.action("Tukar Branch",()->chooseBranch());
     }
