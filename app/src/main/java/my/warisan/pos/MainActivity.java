@@ -1167,7 +1167,46 @@ selectedDay=date();selectedMonth=selectedDay.substring(0,7);rangeStart=selectedD
   }
 
   void closingHistory(){JSONArray list=entries("pos_closings");if(list.length()==0){message("Belum ada History Closing.");return;}ArrayList<JSONObject> rows=new ArrayList<>();for(int i=list.length()-1;i>=0;i--){JSONObject e=list.optJSONObject(i);if(e!=null)rows.add(e);}String[] labels=new String[rows.size()];for(int i=0;i<rows.size();i++){JSONObject e=rows.get(i);labels[i]=entryDay(e)+"   ·   "+money(e.optInt("closingBalance",0));}darkBuilder().setTitle("History Closing").setItems(labels,(d,pos)->{JSONObject e=rows.get(pos);String day=entryDay(e);int opening=e.optInt("opening"),sales=e.optInt("sales"),cash=e.optInt("cash"),qr=e.optInt("qr"),tx=e.optInt("transactions"),out=e.optInt("outstandingCarryForward"),balance=e.optInt("closingBalance"),supplierPaid=e.optInt("supplierPaid",supplierPaidTotal(day,true)),supplierOutstanding=e.optInt("supplierOutstanding",supplierDue()),oil=e.optInt("oil",closingOil(day)),rent=e.optInt("rent",closingRent(day));sales=saleTotalBetween(day,day);cash=paymentTotalBetween(day,day,"Tunai");qr=paymentTotalBetween(day,day,"QR");String receipt=posClosingReceipt(day,opening,sales,cash,qr,tx,out,balance,supplierPaid,supplierOutstanding,oil,rent);showConfirmedClosingReport(day,receipt);}).setNegativeButton("Tutup",null).show();}
-  void distributeStock(int id){int price=distributionPrice(id);if(price<=0){message("Produk ini belum ditetapkan untuk Edar.");return;}int available=stock(id);if(available<=0){message("Stok "+names[id]+" tidak cukup untuk Edar.");return;}EditText input=new EditText(this);input.setInputType(android.text.InputType.TYPE_CLASS_NUMBER);input.setHint("Kuantiti · maksimum "+available);styleInput(input);darkBuilder().setTitle("EDAR · "+names[id]).setMessage("Harga edar "+money(price)+" / unit. Stok akan keluar dari baki kedai dan masuk History Edar sebagai BELUM BAYAR.").setView(input).setPositiveButton("EDAR",(d,w)->{try{int n=Integer.parseInt(input.getText().toString().trim());if(n<=0||n>stock(id))throw new Exception();JSONObject e=new JSONObject();e.put("time",timestamp());e.put("businessDay",businessDay());e.put("item",id);e.put("qty",n);e.put("returned",0);e.put("unitPrice",price);e.put("paid",false);JSONArray list=entries("stock_distribution");list.put(e);if(!posPrefs().edit().putString("stock_distribution",list.toString()).commit())throw new Exception();draw();message(n+" "+names[id]+" direkod sebagai EDAR · BELUM BAYAR.");}catch(Exception e){message("Kuantiti Edar tidak sah.");}}).setNegativeButton("Batal",null).show();}
+  void distributeStockLive(int id){
+    if(!branchAccounts.owner()||live==null||!live.usable()){
+      message("Edar Live perlukan Owner dan sambungan Cloud.");return;
+    }
+    int price=distributionPrice(id);
+    if(price<=0){message("Tetapkan harga Edar untuk "+names[id]+" dahulu.");return;}
+    int available=stock(id);
+    if(available<=0){message("Stok "+names[id]+" habis.");return;}
+    EditText input=new EditText(this);
+    input.setInputType(android.text.InputType.TYPE_CLASS_NUMBER);
+    input.setHint("Kuantiti Edar · maksimum "+available);styleInput(input);
+    darkBuilder().setTitle("EDAR STOK LIVE · "+names[id])
+      .setMessage("Harga Edar "+money(price)+" / unit. "+
+        "Stok akan ditolak di Firestore sebelum direkod BELUM BAYAR.")
+      .setView(input).setPositiveButton("SAHKAN EDAR",(d,w)->{
+        try{
+          final int n=Integer.parseInt(input.getText().toString().trim());
+          if(n<=0||n>100000||n>stock(id))throw new NumberFormatException();
+          live.adjustStockDelta(id,-n,"EDAR",()->{
+            try{
+              JSONObject rec=new JSONObject();
+              rec.put("time",timestamp());rec.put("businessDay",businessDay());
+              rec.put("item",id);rec.put("qty",n);rec.put("returned",0);
+              rec.put("unitPrice",price);rec.put("paid",false);
+              rec.put("cloudManaged",true);
+              JSONArray list=entries("stock_distribution");list.put(rec);
+              if(!posPrefs().edit().putString("stock_distribution",list.toString()).commit())
+                throw new IOException("Storan gagal");
+              message(n+" unit ditolak daripada stok Live · EDAR BELUM BAYAR.");
+            }catch(Exception error){
+              message("Stok Cloud SUDAH ditolak, tetapi history Edar telefon gagal. "+
+                "Jangan edar kali kedua; semak History Perubahan Stok Live.");
+            }
+          });
+        }catch(Exception error){message("Kuantiti Edar tidak sah.");}
+      }).setNegativeButton("BATAL",null).show();
+  }
+  void distributeStock(int id){
+    if(live!=null&&live.enabled()){distributeStockLive(id);return;}
+int price=distributionPrice(id);if(price<=0){message("Produk ini belum ditetapkan untuk Edar.");return;}int available=stock(id);if(available<=0){message("Stok "+names[id]+" tidak cukup untuk Edar.");return;}EditText input=new EditText(this);input.setInputType(android.text.InputType.TYPE_CLASS_NUMBER);input.setHint("Kuantiti · maksimum "+available);styleInput(input);darkBuilder().setTitle("EDAR · "+names[id]).setMessage("Harga edar "+money(price)+" / unit. Stok akan keluar dari baki kedai dan masuk History Edar sebagai BELUM BAYAR.").setView(input).setPositiveButton("EDAR",(d,w)->{try{int n=Integer.parseInt(input.getText().toString().trim());if(n<=0||n>stock(id))throw new Exception();JSONObject e=new JSONObject();e.put("time",timestamp());e.put("businessDay",businessDay());e.put("item",id);e.put("qty",n);e.put("returned",0);e.put("unitPrice",price);e.put("paid",false);JSONArray list=entries("stock_distribution");list.put(e);if(!posPrefs().edit().putString("stock_distribution",list.toString()).commit())throw new Exception();draw();message(n+" "+names[id]+" direkod sebagai EDAR · BELUM BAYAR.");}catch(Exception e){message("Kuantiti Edar tidak sah.");}}).setNegativeButton("Batal",null).show();}
   void distributionHistory(){
     JSONArray list=entries("stock_distribution");
     ScrollView scroll=new ScrollView(this);LinearLayout panel=col();
@@ -1203,7 +1242,56 @@ selectedDay=date();selectedMonth=selectedDay.substring(0,7);rangeStart=selectedD
     if(shown==0)add(panel,text("Belum ada rekod Edar.",14,muted,false),-1,-2);
     AlertDialog dlg=darkBuilder().setTitle("HISTORY EDAR").setView(scroll).setPositiveButton("Tutup",null).create();applyDarkReportDialog(dlg);
   }
-  void returnDistributedStock(int index){JSONArray list=entries("stock_distribution");JSONObject e=list.optJSONObject(index);if(e==null||e.optBoolean("paid",false)){message("Rekod sudah dibayar atau tidak dijumpai.");return;}int remaining=Math.max(0,e.optInt("qty")-e.optInt("returned"));if(remaining<=0){message("Semua stok Edar sudah dipulangkan.");return;}EditText input=new EditText(this);input.setInputType(android.text.InputType.TYPE_CLASS_NUMBER);input.setHint("Maksimum "+remaining);styleInput(input);darkBuilder().setTitle("STOK PULANG").setMessage("Boleh pulang sehingga "+remaining+" unit. Stok pulang masuk semula ke Baki dan bukan Stok Rosak.").setView(input).setPositiveButton("PULANG",(d,w)->{try{int n=Integer.parseInt(input.getText().toString().trim());if(n<=0||n>remaining)throw new Exception();JSONArray fresh=entries("stock_distribution");JSONObject x=fresh.optJSONObject(index);if(x==null||x.optBoolean("paid",false))throw new Exception();x.put("returned",x.optInt("returned")+n);x.put("returnTime",timestamp());fresh.put(index,x);if(!posPrefs().edit().putString("stock_distribution",fresh.toString()).commit())throw new Exception();draw();message(n+" unit stok pulang masuk semula ke Baki.");}catch(Exception ex){message("Kuantiti stok pulang tidak sah.");}}).setNegativeButton("Batal",null).show();}
+  void returnDistributedStockLive(int index,int item,int remaining){
+    if(!branchAccounts.owner()||live==null||!live.usable()){
+      message("Stok Pulang Live memerlukan sambungan Cloud.");return;
+    }
+    if(item<0||item>=names.length){message("Produk Edar tidak sah.");return;}
+    EditText input=new EditText(this);
+    input.setInputType(android.text.InputType.TYPE_CLASS_NUMBER);
+    input.setHint("Pulangan maksimum "+remaining);styleInput(input);
+    darkBuilder().setTitle("STOK PULANG LIVE · "+names[item])
+      .setMessage("Stok yang pulang akan ditambah ke Firestore dahulu. "+
+        "Bayaran Edar dikira atas kuantiti bersih selepas pulang.")
+      .setView(input).setPositiveButton("SAHKAN PULANG",(d,w)->{
+        try{
+          final int n=Integer.parseInt(input.getText().toString().trim());
+          if(n<=0||n>remaining||n>100000)throw new NumberFormatException();
+          live.adjustStockDelta(item,n,"STOK PULANG",()->{
+            try{
+              JSONArray fresh=entries("stock_distribution");
+              JSONObject itemRec=fresh.optJSONObject(index);
+              if(itemRec==null||itemRec.optBoolean("paid",false))
+                throw new IOException("Rekod Edar berubah");
+              int stillLeft=Math.max(0,itemRec.optInt("qty")-itemRec.optInt("returned"));
+              if(n>stillLeft)throw new IOException("Kuantiti pulang tidak selaras");
+              itemRec.put("returned",itemRec.optInt("returned")+n);
+              itemRec.put("returnTime",timestamp());
+              fresh.put(index,itemRec);
+              if(!posPrefs().edit().putString("stock_distribution",fresh.toString()).commit())
+                throw new IOException("Storan gagal");
+              message(n+" unit Stok Pulang sudah masuk ke baki Live.");
+            }catch(Exception error){
+              message("Stok Cloud SUDAH ditambah tetapi rekod pulang telefon gagal. "+
+                "Semak History Perubahan Stok Live sebelum cuba lagi.");
+            }
+          });
+        }catch(Exception error){message("Kuantiti Stok Pulang tidak sah.");}
+      }).setNegativeButton("BATAL",null).show();
+  }
+  void returnDistributedStock(int index){
+    JSONArray current=entries("stock_distribution");
+    JSONObject outgoing=current.optJSONObject(index);
+    if(live!=null&&live.enabled()){
+      if(outgoing==null||outgoing.optBoolean("paid",false)){
+        message("Rekod Edar sudah dibayar atau tidak dijumpai.");return;
+      }
+      int left=Math.max(0,outgoing.optInt("qty")-outgoing.optInt("returned"));
+      if(left==0){message("Tiada stok tertunggak untuk dipulang.");return;}
+      returnDistributedStockLive(index,outgoing.optInt("item",-1),left);
+      return;
+    }
+JSONArray list=entries("stock_distribution");JSONObject e=list.optJSONObject(index);if(e==null||e.optBoolean("paid",false)){message("Rekod sudah dibayar atau tidak dijumpai.");return;}int remaining=Math.max(0,e.optInt("qty")-e.optInt("returned"));if(remaining<=0){message("Semua stok Edar sudah dipulangkan.");return;}EditText input=new EditText(this);input.setInputType(android.text.InputType.TYPE_CLASS_NUMBER);input.setHint("Maksimum "+remaining);styleInput(input);darkBuilder().setTitle("STOK PULANG").setMessage("Boleh pulang sehingga "+remaining+" unit. Stok pulang masuk semula ke Baki dan bukan Stok Rosak.").setView(input).setPositiveButton("PULANG",(d,w)->{try{int n=Integer.parseInt(input.getText().toString().trim());if(n<=0||n>remaining)throw new Exception();JSONArray fresh=entries("stock_distribution");JSONObject x=fresh.optJSONObject(index);if(x==null||x.optBoolean("paid",false))throw new Exception();x.put("returned",x.optInt("returned")+n);x.put("returnTime",timestamp());fresh.put(index,x);if(!posPrefs().edit().putString("stock_distribution",fresh.toString()).commit())throw new Exception();draw();message(n+" unit stok pulang masuk semula ke Baki.");}catch(Exception ex){message("Kuantiti stok pulang tidak sah.");}}).setNegativeButton("Batal",null).show();}
   void payDistribution(int index){try{JSONArray dist=entries("stock_distribution");JSONObject e=dist.optJSONObject(index);if(e==null||e.optBoolean("paid",false)){message("Rekod Edar ini sudah dibayar.");return;}int id=e.optInt("item"),sold=Math.max(0,e.optInt("qty")-e.optInt("returned")),total=sold*e.optInt("unitPrice"),day=0;if(sold<=0){e.put("paid",true);e.put("paidTime",timestamp());dist.put(index,e);posPrefs().edit().putString("stock_distribution",dist.toString()).commit();draw();message("Edar ditutup RM0 kerana semua stok dipulangkan.");return;}String saleDay=entryDay(e);JSONObject sale=new JSONObject();sale.put("time",timestamp());sale.put("businessDay",saleDay);sale.put("paymentDate",date());sale.put("source","edar");sale.put("total",total);sale.put("method","Edar");sale.put("refunded",false);sale.put("costTotal",restockCost(id,sold));JSONArray q=new JSONArray();for(int i=0;i<names.length;i++)q.put(i==id?sold:0);sale.put("qty",q);JSONArray sales=entries("stock_sales");sales.put(sale);e.put("paid",true);e.put("paidTime",timestamp());e.put("saleTotal",total);dist.put(index,e);android.content.SharedPreferences.Editor ed=posPrefs().edit().putString("stock_sales",sales.toString()).putString("stock_distribution",dist.toString()).putInt("sales_"+saleDay,posPrefs().getInt("sales_"+saleDay,0)+total);if(!ed.commit())throw new Exception();draw();message("Bayaran Edar "+money(total)+" masuk rekod jualan "+saleDay+".");}catch(Exception ex){message("Bayaran Edar gagal direkod.");}}
   String salesReportReceipt(String start,String end){
     int total=saleTotalBetween(start,end),items=saleCountBetween(start,end),tx=transactionCountBetween(start,end),cash=paymentTotalBetween(start,end,"tunai"),qr=paymentTotalBetween(start,end,"qr");int[] sold=soldNetBetween(start,end);
