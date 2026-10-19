@@ -81,7 +81,9 @@ final class BranchAccounts {
     identity.edit().putBoolean("configured",true).putString("sessionUid",uid)
       .putString("ownerUid",ownerUid).putString("branchId",branchId)
       .putString("branchName",branchName).putString("role",role).commit();
-    host.loadMenu();host.activePage=0;host.draw();
+    host.loadMenu();host.activePage=0;
+    if(host.live!=null)host.live.attach();
+    host.draw();
   }
   void migrateLegacyIfFirstBranch(String branchId){
     SharedPreferences target=host.getSharedPreferences("warisan_branch_"+branchId,Context.MODE_PRIVATE);
