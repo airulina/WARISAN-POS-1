@@ -178,9 +178,17 @@ try{
     day:today,status:'OUTSIDE_BRANCH',distanceMeters:1800,createdAt:serverTimestamp()
   }));
 
+  // A NEW UUID is absent. Worker must be allowed to check nonexistence,
+  // but cannot inspect another employee's existing receipt.
+  const missingOrder=await assertSucceeds(getDoc(d(staff,ord)));
+  assert.equal(missingOrder.exists(),false);
+  await assertFails(getDoc(d(outsider,ord)));
   // Atomic cashier reservation: quantity 2 deducted from inventory.
+  // Mirror Android's exact tx.get(inventory), tx.get(newOrder), tx.update, tx.set flow.
   await assertSucceeds(runTransaction(staff,async tx=>{
     const before=await tx.get(d(staff,inv));
+    const missing=await tx.get(d(staff,ord));
+    assert.equal(missing.exists(),false);
     assert.equal(before.data().stock[0],10);
     tx.update(d(staff,inv),{
       stock:[8,10,10,10,0,10,10],lastOrderId:'order1',
@@ -194,6 +202,27 @@ try{
   }));
   const remaining=await getDoc(d(owner,inv));
   assert.equal(remaining.data().stock[0],8);
+  await assertFails(getDoc(d(staff2,ord))); // employee cannot inspect colleague's order
+
+  // Unlimited product index 4: an actual WARISAN POS checkout leaves stock
+  // unchanged, but still creates the linked pending order atomically.
+  const kuahOrder=branch+'/liveOrders/kuah-only';
+  await assertSucceeds(runTransaction(staff,async tx=>{
+    const before=await tx.get(d(staff,inv));
+    const missing=await tx.get(d(staff,kuahOrder));
+    assert.equal(missing.exists(),false);
+    tx.update(d(staff,inv),{
+      stock:before.data().stock,lastOrderId:'kuah-only',
+      lastStockAction:'RESERVE',updatedAt:serverTimestamp()
+    });
+    tx.set(d(staff,kuahOrder),{
+      ownerUid:'owner',branchId:'branch1',actorUid:'staff',
+      deviceOrderId:'kuah-only',deviceId:'phone1',day:today,
+      total:100,receiptNo:2,qty:[0,0,0,0,1,0,0],
+      status:'PENDING',createdAt:serverTimestamp()
+    });
+  }));
+  assert.equal((await getDoc(d(owner,inv))).data().stock[0],8);
 
   // Staff can read quantities but cannot edit a branch's absolute balance.
   await assertFails(setDoc(d(staff,branch+'/stockAdjustments/staff-fake'),{
