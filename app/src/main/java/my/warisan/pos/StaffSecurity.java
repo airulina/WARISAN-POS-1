@@ -53,6 +53,7 @@ final class StaffSecurity {
         if(!accounts.owner()||!ownerUid.equals(accounts.ownerUid()))return;
         ArrayList<String> names=new ArrayList<>(),ids=new ArrayList<>();
         for(QueryDocumentSnapshot branch:result){
+          if(Boolean.TRUE.equals(branch.getBoolean("archived")))continue;
           ids.add(branch.getId());
           names.add(branch.getString("name")==null?branch.getId():branch.getString("name"));
         }
@@ -740,7 +741,8 @@ final class StaffSecurity {
         if(!accounts.owner()||!ownerId.equals(accounts.ownerUid()))return;
         ArrayList<String> names=new ArrayList<>(),ids=new ArrayList<>();
         for(QueryDocumentSnapshot b:branches){
-          if(b.getId().equals(sourceBranch))continue;
+          if(b.getId().equals(sourceBranch)||
+            Boolean.TRUE.equals(b.getBoolean("archived")))continue;
           ids.add(b.getId());
           String branchName=b.getString("name");
           names.add(branchName==null||branchName.trim().isEmpty()?b.getId():branchName);
@@ -793,8 +795,9 @@ final class StaffSecurity {
       com.google.firebase.firestore.DocumentSnapshot newMember=tx.get(destinationRef);
       com.google.firebase.firestore.DocumentSnapshot target=tx.get(destinationBranch);
       com.google.firebase.firestore.DocumentSnapshot index=tx.get(emailRef);
-      if(!target.exists()||!ownerId.equals(target.getString("ownerUid")))
-        throw new IllegalStateException("Branch destinasi tidak wujud atau bukan milik Owner.");
+      if(!target.exists()||!ownerId.equals(target.getString("ownerUid"))||
+        Boolean.TRUE.equals(target.getBoolean("archived")))
+        throw new IllegalStateException("Branch destinasi tidak aktif atau bukan milik Owner.");
       if(!profile.exists()||!oldMember.exists()||
         !ownerId.equals(profile.getString("ownerUid"))||
         !workerId.equals(profile.getString("uid"))||
