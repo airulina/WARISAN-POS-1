@@ -981,7 +981,7 @@ final class LiveBranchStore {
           "\nTransaksi: "+tx+"\n\n"+(byDay.length()==0?"Belum ada rekod live":byDay.toString());
         host.darkBuilder().setTitle("LAPORAN LIVE · "+month)
           .setMessage(report)
-          .setNeutralButton("CETAK A4 / PDF",(dlg,w)->WarisanPrinting.textA4(host,report,"Warisan Live "+month))
+          .setNeutralButton("CETAK A4 / PDF",(dlg,w)->WarisanPrinting.textA4(host,host.ui(report),host.ui("Warisan Live "+month)))
           .setPositiveButton("TUTUP",null).show();
       }).addOnFailureListener(e->host.message("Report Live gagal: "+e.getMessage()));
   }
