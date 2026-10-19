@@ -100,31 +100,77 @@ final class BranchAccounts {
     }
     e.commit();
   }
+  void accountAlert(String title,String detail){
+    host.darkBuilder().setTitle(title).setMessage(detail)
+      .setPositiveButton("FAHAM",null).show();
+  }
+  /** Firebase server is the source of truth for the role. Local device data
+      can NEVER grant a worker Owner access, even after account switches. */
+  void checkMayBecomeOwner(FirebaseUser candidate,Runnable allowed){
+    if(candidate==null){host.message("Login Google dahulu.");return;}
+    if(staff()&&candidate.getUid().equals(identity.getString("sessionUid",""))){
+      accountAlert("Akaun Pekerja","Email ini masih didaftarkan sebagai pekerja. "+
+        "Minta Owner BUANG AKSES pekerja dahulu sebelum daftar Owner.");return;
+    }
+    db.collection("staffProfiles").document(candidate.getUid())
+      .get(com.google.firebase.firestore.Source.SERVER)
+      .addOnSuccessListener(profile->{
+        if(profile.exists()&&"STAFF".equals(profile.getString("role"))
+          && !Boolean.TRUE.equals(profile.getBoolean("removed"))){
+          accountAlert("Tidak boleh daftar Owner",
+            "Email ini masih akaun pekerja. Minta Owner lama gunakan "+
+            "Senarai Pekerja → BUANG AKSES dahulu. Sekat sementara sahaja tidak mencukupi.");
+          return;
+        }
+        String email=candidate.getEmail();
+        if(email==null||email.trim().isEmpty()){
+          accountAlert("Email diperlukan","Daftar Owner perlu akaun Google dengan email sah.");return;
+        }
+        String key=email.trim().toLowerCase(Locale.ROOT);
+        db.collection("staffEmails").document(key)
+          .get(com.google.firebase.firestore.Source.SERVER)
+          .addOnSuccessListener(lock->{
+            if(lock.exists()&&!Boolean.TRUE.equals(lock.getBoolean("removed"))){
+              accountAlert("Email masih milik pekerja",
+                "Email ini telah didaftarkan sebagai pekerja. Hanya selepas Owner "+
+                "buang akses pekerja, email ini boleh daftar sebagai Owner.");return;
+            }
+            allowed.run();
+          }).addOnFailureListener(e->accountAlert("Tidak dapat sahkan status",
+            "Internet / Firestore Rules perlu aktif. Tiada akaun Owner baharu dibuat. "+
+            "Data POS lama kekal. "+e.getMessage()));
+      }).addOnFailureListener(e->accountAlert("Semakan akaun gagal",
+        "Tak dapat periksa role pekerja pada Firebase. Cuba semula selepas semak internet "+
+        "dan Firestore Rules. "+e.getMessage()));
+  }
   void afterLogin(){
-    FirebaseUser u=user();
-    if(u==null)return;
-    if(active()){host.loadMenu();host.draw();return;}
-    // Do not require any registration after reinstalling an APK update.
-    // Reconnect to existing Firestore Owner branches, or offer one-tap use of legacy data.
-    db.collection(ROOT).document(u.getUid()).get().addOnSuccessListener(doc->{
-      if(doc.exists())chooseBranch();
-      else {
-        host.activePage=5;host.draw();
-        if(hasLegacyRecords())host.message("Data lama masih ada. Tekan 'Guna data lama sebagai Owner' di Account.");
-      }
-    }).addOnFailureListener(e->{
-      host.activePage=5;host.draw();
-      host.message("Data POS lama kekal. Sambungan Google boleh dicuba semula kemudian.");
+    FirebaseUser u=user();if(u==null)return;
+    checkMayBecomeOwner(u,()->{
+      if(active()&&owner()){host.loadMenu();host.draw();return;}
+      db.collection(ROOT).document(u.getUid())
+        .get(com.google.firebase.firestore.Source.SERVER).addOnSuccessListener(doc->{
+          if(doc.exists())chooseBranch();
+          else {
+            host.activePage=0;host.draw();
+            // New users must explicitly choose Sign Up. Never auto-register.
+            host.message("Pengguna baru: tekan Daftar Owner / Sign Up.");
+          }
+        }).addOnFailureListener(e->accountAlert("Login Owner",
+          "Tak dapat sahkan Owner. Data lama kekal. "+e.getMessage()));
     });
   }
   void showActions(){
     FirebaseUser u=user();
     if(u==null){host.message("Sign in Google dahulu di halaman Account");return;}
-    host.action("Branch aktif: "+summary(),()->chooseBranch());
-    if(!configured() || !active()){
-      if(hasLegacyRecords())host.action("Guna data lama sebagai Owner (tanpa daftar semula)",()->linkLegacyOwner());
-      else host.action("Daftar Owner pertama kali",()->registerOwner());
+    if(staff()){
+      host.action("Branch pekerja: "+branchName(),()->host.message("Branch pekerja ditetapkan oleh Owner."));
+      host.action("Semak status refund saya",()->host.staffSecurity.showMyRefunds());
+      return; // NEVER display Owner recovery/signup or branch chooser to workers.
     }
+    if(owner())host.action("Branch aktif: "+summary(),()->chooseBranch());
+    else if(hasLegacyRecords())
+      host.action("Guna data Owner lama (Owner sahaja)",()->linkLegacyOwner());
+    else host.action("Daftar Owner / Sign Up",()->registerOwner());
     if(owner()){
       host.action("+ Tambah Branch",()->createBranch());
       host.action("+ Daftar pekerja · Email + Password",()->host.staffSecurity.createEmployee());
@@ -132,20 +178,21 @@ final class BranchAccounts {
       host.action("Refund menunggu kelulusan Owner",()->host.staffSecurity.ownerReview());
       host.action("Tukar Branch",()->chooseBranch());
     }
-    if(staff()){
-      host.action("Semak status refund saya",()->host.staffSecurity.showMyRefunds());
-    }
     if(!active())host.action("Login Pekerja · Email + Password",()->host.staffSecurity.loginEmployee());
   }
   EditText entry(String hint){
     EditText e=new EditText(host);e.setSingleLine(true);e.setHint(hint);host.styleInput(e);return e;
   }
   void registerOwner(){
-    if(hasLegacyRecords()){
-      linkLegacyOwner();return;
-    }
     FirebaseUser u=user();
     if(u==null){host.message("Sign in Google untuk daftar Owner.");return;}
+    if(staff()){accountAlert("Akses pekerja","Pekerja tidak dibenarkan daftar Owner.");return;}
+    checkMayBecomeOwner(u,()->registerOwnerVerified(u));
+  }
+  void registerOwnerVerified(FirebaseUser u){
+    if(hasLegacyRecords()){
+      linkLegacyOwnerVerified(u);return;
+    }
     LinearLayout form=host.col();form.setPadding(host.dp(18),0,host.dp(18),0);
     EditText business=entry("Nama perniagaan"),branch=entry("Nama branch pertama");
     host.add(form,business,-1,-2);host.add(form,branch,-1,-2);
@@ -179,8 +226,12 @@ final class BranchAccounts {
   void linkLegacyOwner(){
     FirebaseUser u=user();
     if(u==null){host.message("Sign in Google dahulu untuk hubungkan Owner lama.");return;}
+    if(staff()){accountAlert("Bukan Owner","Pekerja tidak boleh menuntut data Owner lama.");return;}
+    checkMayBecomeOwner(u,()->linkLegacyOwnerVerified(u));
+  }
+  void linkLegacyOwnerVerified(FirebaseUser u){
     if(!hasLegacyRecords()){
-      host.message("Tiada rekod lama pada telefon. Gunakan Daftar Owner pertama kali.");return;
+      host.message("Tiada rekod lama pada telefon. Gunakan Daftar Owner / Sign Up.");return;
     }
     String ownerId=u.getUid();
     DocumentReference workspace=db.collection(ROOT).document(ownerId);
@@ -255,32 +306,34 @@ final class BranchAccounts {
       }).addOnFailureListener(e->host.message("Gagal semak jemputan: "+e.getMessage()));
   }
   void chooseBranch(){
-    FirebaseUser u=user();if(u==null){host.message("Sign in Google dahulu");return;}
-    // A new phone or restored installation can find the Owner's branches by Google UID.
-    db.collection(ROOT).document(u.getUid()).get().addOnSuccessListener(doc->{
-      if(!doc.exists()){
-        if(hasLegacyRecords()){
-          host.darkBuilder().setTitle("Akaun lama dikesan")
-            .setMessage("Gunakan data Warisan POS sedia ada sebagai Owner, tanpa daftar dari awal?")
-            .setPositiveButton("Owner lama",(d,w)->linkLegacyOwner())
-            .setNeutralButton("Jemputan pekerja",(d,w)->showInvitations())
-            .setNegativeButton("Batal",null).show();
-        }else showInvitations();
-        return;
-      }
-      String ownerId=u.getUid();
-      db.collection(ROOT).document(ownerId).collection("branches").get()
-        .addOnSuccessListener(result->{
-          ArrayList<String> labels=new ArrayList<>(),ids=new ArrayList<>();
-          for(QueryDocumentSnapshot branch:result){
-            labels.add(branch.getString("name"));ids.add(branch.getId());
-          }
-          if(labels.isEmpty()){host.message("Belum ada branch");return;}
-          host.darkBuilder().setTitle("Pilih Branch Owner")
-            .setItems(labels.toArray(new String[0]),(d,which)->
-               setSession(u.getUid(),ownerId,ids.get(which),labels.get(which),"OWNER"))
-            .setNegativeButton("Batal",null).show();
-        }).addOnFailureListener(e->host.message("Gagal senaraikan branch: "+e.getMessage()));
-    }).addOnFailureListener(e->host.message("Gagal semak branch: "+e.getMessage()));
+    if(staff()){
+      host.message("Akaun pekerja tidak boleh masuk tetapan atau daftar Owner.");
+      return;
+    }
+    FirebaseUser u=user();if(u==null){host.message("Login Google dahulu");return;}
+    checkMayBecomeOwner(u,()->chooseOwnerBranchVerified(u));
+  }
+  void chooseOwnerBranchVerified(FirebaseUser u){
+    db.collection(ROOT).document(u.getUid()).get()
+      .addOnSuccessListener(doc->{
+        if(!doc.exists()){
+          host.activePage=0;host.draw();
+          host.message("Belum ada akaun Owner. Pilih Daftar Owner / Sign Up.");
+          return;
+        }
+        String ownerId=u.getUid();
+        db.collection(ROOT).document(ownerId).collection("branches").get()
+          .addOnSuccessListener(result->{
+            ArrayList<String> labels=new ArrayList<>(),ids=new ArrayList<>();
+            for(QueryDocumentSnapshot branch:result){
+              labels.add(branch.getString("name"));ids.add(branch.getId());
+            }
+            if(labels.isEmpty()){host.message("Belum ada branch");return;}
+            host.darkBuilder().setTitle("Pilih Branch Owner")
+              .setItems(labels.toArray(new String[0]),(d,which)->
+                 setSession(u.getUid(),ownerId,ids.get(which),labels.get(which),"OWNER"))
+              .setNegativeButton("Batal",null).show();
+          }).addOnFailureListener(e->host.message("Gagal senaraikan branch: "+e.getMessage()));
+      }).addOnFailureListener(e->host.message("Gagal semak branch: "+e.getMessage()));
   }
 }
