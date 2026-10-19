@@ -266,15 +266,14 @@ final class OwnerCashflow {
   }
   void drawOverview(){
     if(!accounts.owner()){host.heading("Akses Owner","Cashflow semua branch hanya untuk Owner.");return;}
-    host.heading("DUIT / CASHFLOW · OVERALL",
-      "Keseluruhan jualan semua branch. Tekan Jumlah Jualan untuk pecahan mengikut branch.");
-    modeSelector();
+    host.cashDailyMode=false;
+    host.heading("DUIT · OVERALL",
+      "Keseluruhan jualan. Tekan TOTAL SALE untuk pilih branch.");
     ensureLoaded();
-    host.action("↻  REFRESH JUALAN SEMUA BRANCH",()->refresh());
-    host.add(host.body,host.text("OVERALL · "+period(),12,host.gold,true),-1,-2);
+    host.add(host.body,host.text("SEMUA BRANCH · "+period(),12,host.gold,true),-1,-2);
     host.gap(host.body,7);
     Day total=overall();
-    String label=host.cashDailyMode?"JUMLAH JUALAN HARI INI  ›":"JUMLAH JUALAN BULAN INI  ›";
+    String label="TOTAL SALE · SEMUA BRANCH  ›";
     LinearLayout big=host.row();
     host.metric(big,label,ready()?rm(total.sales):"—",host.blue,()->{
       host.activePage=16;host.draw();
@@ -291,20 +290,17 @@ final class OwnerCashflow {
         host.gold,null);
       host.add(host.body,misc,-1,-2);host.gap(host.body,8);
     }
-    host.action("🧾  REKOD BAYARAN QR / TNG / DUITNOW  ›",
-      ()->showQrHistory(null));
     LinearLayout tx=host.row();
     host.metric(tx,"TRANSAKSI SEMUA BRANCH",ready()?String.valueOf(total.transactions):"—",
       host.blue,()->{host.activePage=16;host.draw();});
     host.add(host.body,tx,-1,-2);host.gap(host.body,9);
-    host.action("LIHAT JUALAN MENGIKUT BRANCH  ›",()->{host.activePage=16;host.draw();});
     host.gap(host.body,8);
     dataMessage();
   }
   void drawBranchList(){
     if(!accounts.owner()){host.heading("Akses ditolak","Owner sahaja.");return;}
     ensureLoaded();
-    host.heading("Jualan Mengikut Branch",period()+" · Pilih branch untuk lihat laporan lengkap.");
+    host.heading("Pilih Branch",period()+" · Tekan nama branch untuk melihat TOTAL SALE masing-masing.");
     host.action("‹  Kembali ke OVERALL",()->{host.activePage=3;host.draw();});
     if(!loadError.isEmpty()){dataMessage();host.action("↻  Cuba Lagi",()->refresh());return;}
     if(!ready()){dataMessage();return;}
@@ -336,30 +332,27 @@ final class OwnerCashflow {
       return;
     }
     final BranchRow chosen=branch;
-    host.heading("Jualan · "+chosen.name,period()+"  ·  "+chosen.status);
+    host.heading(chosen.name,"Jualan "+period()+" · "+chosen.status);
     host.action("‹  Kembali ke Jualan Semua Branch",()->{host.activePage=16;host.draw();});
     if(!branch.seen){dataMessage();return;}
     Day total=branch.totals();
     LinearLayout main=host.row();
-    host.metric(main,"JUMLAH JUALAN BRANCH",rm(total.sales),host.blue,null);
+    host.metric(main,"TOTAL SALE · "+chosen.name+"  ›",rm(total.sales),host.blue,
+      ()->{host.activePage=19;host.draw();});
     host.add(host.body,main,-1,-2);host.gap(host.body,9);
     LinearLayout pay=host.row();
     host.metric(pay,"TUNAI",rm(total.cash),host.gold,null);
     host.metric(pay,"QR / DUITNOW  ›",rm(total.qr),host.blue,
       ()->showQrHistory(chosen));
     host.add(host.body,pay,-1,-2);host.gap(host.body,9);
-    host.action("🧾  REKOD TRANSAKSI QR · "+chosen.name,()->showQrHistory(chosen));
     if(total.unknown>0)
       host.add(host.body,host.text("Bayaran belum dikelaskan: "+rm(total.unknown)+
         " · Semak rekod lama yang tidak menyimpan kaedah pembayaran.",12,host.gold,true),-1,-2);
     LinearLayout count=host.row();
     host.metric(count,"BILANGAN TRANSAKSI",String.valueOf(total.transactions),host.ink,null);
     host.add(host.body,count,-1,-2);host.gap(host.body,10);
-    // Branch dashboard stays compact; all historical and new dates belong
-    // in the unified LAPORAN page, never as hundreds of cards here.
-    host.action("📊  LAPORAN · JUALAN LAMA + BARU  ›",()->{
-      host.activePage=19;host.draw();
-    });
+    host.add(host.body,host.text("Tekan TOTAL SALE di atas untuk melihat semua laporan jualan, "+
+      "QR, kos dan sejarah tempatan branch ini.",12,host.muted,false),-1,-2);
     host.gap(host.body,8);
     dataMessage();
   }
@@ -382,10 +375,11 @@ final class OwnerCashflow {
       return;
     }
     final BranchRow chosen=branch;
+    host.cashDailyMode=false;
     host.heading("LAPORAN · "+chosen.name,
-      "Rekod lama dan jualan Live dalam satu laporan mengikut tarikh.");
-    host.action("‹  KEMBALI KE "+chosen.name,()->{host.activePage=17;host.draw();});
-    modeSelector();
+      "Semua rekod jualan lama dan Live, tunai, QR, serta kos tempatan dalam satu halaman.");
+    host.action("‹  KEMBALI KE TOTAL SALE "+chosen.name,()->{host.activePage=17;host.draw();});
+    host.action("Bulan: "+host.monthLabel(host.selectedMonth)+"  ▼",()->host.chooseMonth());
     if(!loadError.isEmpty()||!ready()){
       dataMessage();
       host.action("↻  SEMAK SEMULA",()->refresh());
@@ -417,10 +411,36 @@ final class OwnerCashflow {
       WarisanPrinting.textA4(host,printable,"Warisan Laporan "+chosen.name);
     });
     host.action("🧾  REKOD RESIT QR / TNG / DUITNOW",()->showQrHistory(chosen));
+    host.gap(host.body,12);
+    host.add(host.body,host.text("KOS & UNTUNG · REKOD TEMPATAN",13,host.gold,true),-1,-2);
+    host.gap(host.body,7);
     if(chosen.id.equals(accounts.branchId())){
-      host.action("📒  KOS, UNTUNG & LAPORAN POS TEMPATAN",()->{
-        host.activePage=18;host.draw();
-      });
+      // Only this branch's locally stored receipts/costs are visible.
+      // Cloud sales from other phones must never be labelled local profit.
+      String first=host.selectedMonth+"-01",last=host.selectedMonth+"-31";
+      int localSales=host.saleTotalBetween(first,last);
+      int cost=host.productCostBetween(first,last);
+      int operations=host.operatingExpenseTotal(host.selectedMonth,false);
+      int profit=host.businessProfit(host.selectedMonth,false);
+      int personal=host.personalTotal(host.selectedMonth,false);
+      LinearLayout local=host.row();
+      host.metric(local,"JUALAN POS TEMPATAN",rm(localSales),host.blue,null);
+      host.metric(local,"KOS PRODUK",rm(cost),host.ink,null);
+      host.add(host.body,local,-1,-2);host.gap(host.body,8);
+      LinearLayout expenses=host.row();
+      host.metric(expenses,"BELANJA OPERASI",rm(operations),host.ink,null);
+      host.metric(expenses,"UNTUNG POS TEMPATAN",rm(profit),
+        profit>=0?host.gold:0xffff6b6b,null);
+      host.add(host.body,expenses,-1,-2);host.gap(host.body,8);
+      host.add(host.body,host.text("Pengeluaran peribadi: "+rm(personal)+
+        "  ·  Baki pembekal perlu bayar: "+rm(host.supplierDue()),12,host.muted,false),-1,-2);
+      host.gap(host.body,6);
+      host.add(host.body,host.text("Kos dan untung di sini dikira daripada rekod POS "+
+        "tempatan branch aktif sahaja. Jangan samakan dengan untung keseluruhan Cloud.",11,host.muted,false),-1,-2);
+    }else{
+      host.add(host.body,host.text("Jualan Cloud branch ini tersedia. Kos dan "+
+        "untung tempatan belum diselaraskan daripada telefon branch ini; "+
+        "angka kos tidak ditunjukkan supaya tidak tersalah sebagai RM0.",12,host.muted,false),-1,-2);
     }
     host.gap(host.body,13);
     host.add(host.body,host.text("REKOD JUALAN MENGIKUT TARIKH",13,host.gold,true),-1,-2);
@@ -435,8 +455,14 @@ final class OwnerCashflow {
         final Day figures=item.getValue();
         String kind=figures.cloud?
           (figures.hasLocalSupplement?"Live + Rekod Lama":"Live"):"Rekod Lama";
-        host.action(dayDate+" · "+rm(figures.sales)+"  ·  "+kind,
-          ()->showDay(dayDate,figures,chosen.name));
+        android.widget.TextView itemRow=host.text(
+          dayDate+"     "+rm(figures.sales)+"\n"+kind+
+          "   ·   Tunai "+rm(figures.cash)+"   ·   QR "+rm(figures.qr),
+          12,host.ink,false);
+        itemRow.setPadding(host.dp(12),host.dp(11),host.dp(10),host.dp(11));
+        itemRow.setBackground(host.shape(host.surface,10));
+        host.add(host.body,itemRow,-1,-2);host.gap(host.body,5);
+        itemRow.setOnClickListener(v->showDay(dayDate,figures,chosen.name));
       }
     }
     host.gap(host.body,12);
@@ -466,9 +492,20 @@ final class OwnerCashflow {
         .append(d.hasLocalSupplement?"+Lama":"")
         .append("\n");
     }
+    if(row.id.equals(accounts.branchId())){
+      String begin=host.selectedMonth+"-01",finish=host.selectedMonth+"-31";
+      b.append("-------------------------------\n")
+        .append("KOS & UNTUNG POS TEMPATAN SAHAJA\n")
+        .append("Jualan tempatan: ").append(rm(host.saleTotalBetween(begin,finish))).append("\n")
+        .append("Kos produk: ").append(rm(host.productCostBetween(begin,finish))).append("\n")
+        .append("Kos operasi: ").append(rm(host.operatingExpenseTotal(host.selectedMonth,false))).append("\n")
+        .append("Untung tempatan: ").append(rm(host.businessProfit(host.selectedMonth,false))).append("\n");
+    }else{
+      b.append("Kos branch lain belum diselaraskan.\n");
+    }
     b.append("-------------------------------\n")
-      .append("Data lama yang masih di telefon lain mungkin belum sync.\n")
-      .append("Kos dan untung bersih hanya dari rekod POS tempatan.\n");
+      .append("Data lama pada telefon lain mungkin belum sync.\n")
+      .append("Untung POS tempatan tidak termasuk semua jualan Cloud.\n");
     return b.toString();
   }
   static final class QrReceipt {
