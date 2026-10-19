@@ -406,9 +406,8 @@ final class OwnerCashflow {
         12,host.muted,false),-1,-2);
     }
     host.gap(host.body,12);
-    host.action("🖨  LAPORAN A4 / PDF · REKOD LAMA + LIVE",()->{
-      String printable=reportText(chosen);
-      WarisanPrinting.textA4(host,printable,"Warisan Laporan "+chosen.name);
+    host.action("📊  EXPORT PDF A4 · GRAF & REKOD JUALAN",()->{
+      OwnerReportPdf.print(host,chosen,period(),chosen.id.equals(accounts.branchId()));
     });
     host.action("🧾  REKOD RESIT QR / TNG / DUITNOW",()->showQrHistory(chosen));
     host.gap(host.body,12);
