@@ -207,7 +207,7 @@ final class StaffSecurity {
         if(docs.isEmpty()){host.message("Belum ada permintaan refund.");return;}
         host.darkBuilder().setTitle("Status Refund").setItems(labels.toArray(new String[0]),(dialog,index)->{
           QueryDocumentSnapshot selected=docs.get(index);
-          if(!"APPROVED".equals(selected.getString("status"))){
+          if(!"APPROVED".equals(selected.getString("status"))&&!"CLAIMED".equals(selected.getString("status"))){
             host.message("Status refund: "+selected.getString("status"));return;
           }
           claimRefund(selected.getReference(),selected.getString("saleFingerprint"));
@@ -217,29 +217,43 @@ final class StaffSecurity {
   void claimRefund(DocumentReference ref,String key){
     if(!accounts.staff()||accounts.user()==null)return;
     JSONArray sales=host.entries("stock_sales");
-    int match=-1;
+    int match=-1;String orderId="";
     for(int i=0;i<sales.length();i++){
       JSONObject sale=sales.optJSONObject(i);
       if(sale!=null&&!sale.optBoolean("refunded",false)&&
-         key.equals(fingerprint(sale,host.saleTotal(sale)))){match=i;break;}
+        key.equals(fingerprint(sale,host.saleTotal(sale)))){
+        match=i;orderId=sale.optString("liveOrderId","");break;
+      }
     }
-    if(match<0){host.message("Transaksi tidak dijumpai dalam telefon ini. Refund tidak dibuat.");return;}
-    final int saleIndex=match;
-    String uid=accounts.user().getUid();
+    if(match<0){host.message("Jualan asal tidak ada pada telefon ini.");return;}
+    if(orderId.isEmpty()){host.message("Refund lama bukan transaksi Live. Minta Owner urus.");return;}
+    if(!host.live.usable()){host.message("Perlu sambungan Live untuk refund.");return;}
+    final int index=match;final String id=orderId,workerUid=accounts.user().getUid();
     db.runTransaction(tx->{
       com.google.firebase.firestore.DocumentSnapshot doc=tx.get(ref);
-      if(!"APPROVED".equals(doc.getString("status"))||
-          !uid.equals(doc.getString("employeeUid"))||
-          !key.equals(doc.getString("saleFingerprint")))throw new IllegalStateException("Kelulusan tidak sah");
-      Map<String,Object> update=new HashMap<>();
-      update.put("status","CLAIMED");update.put("claimedAt",FieldValue.serverTimestamp());
-      tx.update(ref,update);return null;
+      String status=doc.getString("status");
+      if(!workerUid.equals(doc.getString("employeeUid"))||
+        !key.equals(doc.getString("saleFingerprint"))||
+        (!"APPROVED".equals(status)&&!"CLAIMED".equals(status)))
+        throw new IllegalStateException("Refund belum diluluskan");
+      if("APPROVED".equals(status)){
+        Map<String,Object> update=new HashMap<>();
+        update.put("status","CLAIMED");
+        update.put("claimedAt",FieldValue.serverTimestamp());
+        tx.update(ref,update);
+      }
+      return null;
     }).addOnSuccessListener(v->{
-      boolean success=host.refundSaleAuthorized(saleIndex,ref.getId());
-      if(success){
-        ref.update("status","COMPLETED","completedAt",FieldValue.serverTimestamp())
-          .addOnFailureListener(e->host.message("Refund lokal direkod, status cloud belum disahkan."));
-      } else host.message("Refund lokal gagal selepas claim. Hubungi Owner untuk semakan.");
-    }).addOnFailureListener(e->host.message("Refund tidak dibenarkan: "+e.getMessage()));
+      // Cloud sales totals reversed atomically BEFORE changing local records.
+      // CLAIMED requests may be retried safely if the phone crashes.
+      host.live.refund(id,ref.getId(),()->{
+        boolean ok=host.refundSaleAuthorized(index,ref.getId());
+        if(ok){
+          ref.update("status","COMPLETED","completedAt",FieldValue.serverTimestamp())
+            .addOnFailureListener(e->host.message("Refund lokal selesai; status cloud perlu semak semula."));
+        }else host.message("Refund cloud sudah diproses. Rekod telefon perlu semakan manual oleh Owner.");
+      });
+    }).addOnFailureListener(e->host.message("Refund tak dibenarkan: "+e.getMessage()));
   }
+
 }
