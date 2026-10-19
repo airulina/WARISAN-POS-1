@@ -933,6 +933,14 @@ final class WarisanLanguage {
     alias("No. telefon", "No. telefon", "Phone No.");
     alias("Tiada data", "Tiada data", "No data");
     alias("Belum ada", "Belum ada", "Not available yet");
+    // Traditional menu names remain unchanged in database. Only English
+    // display names use simple descriptions for international customers.
+    pair("Kuih Siput", "Spiral Snacks");
+    alias("Harga mentah", "Harga kos", "Unit cost");
+    alias("Harga edar", "Harga edaran", "Distribution price");
+    alias("KELUAR BRANCH", "KELUAR CAWANGAN", "LEAVE BRANCH");
+    alias("STOK PULANG", "STOK DIPULANGKAN", "RETURNED STOCK");
+    alias("REKOD KEWANGAN", "REKOD KEWANGAN", "FINANCIAL RECORDS");
     toEnglish=matcher(EN);
     toMalay=matcher(MS);
   }
