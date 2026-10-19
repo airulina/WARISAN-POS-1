@@ -1252,6 +1252,16 @@ final class WarisanLanguage {
     suffix(" · OFFLINE", " · LUAR TALIAN", " · OFFLINE");
     suffix("  ·  ARKIB", "  ·  ARKIB", "  ·  ARCHIVED");
     suffix("  ·  AKTIF", "  ·  AKTIF", "  ·  ACTIVE");
-    suffix("  ·  SEDANG DIPILIH", "  ·  SEDANG DIPILIH", "  ·  SELECTED");    // Full labels and deliberately-approved templates are initialized above.
+    suffix("  ·  SEDANG DIPILIH", "  ·  SEDANG DIPILIH", "  ·  SELECTED");    exact("ORDER · SEMUA BRANCH", "PESANAN · SEMUA CAWANGAN", "ORDERS · ALL BRANCHES");
+    exact("DUIT · OVERALL", "KEWANGAN · KESELURUHAN", "FINANCES · OVERALL");
+    exact("UNTUNG BERSIH POS TEMPATAN", "UNTUNG BERSIH POS TEMPATAN", "LOCAL POS NET PROFIT");
+    exact("KIOS WARISAN · SISTEM JUALAN", "KIOS WARISAN · SISTEM JUALAN", "WARISAN KIOSK · SALES SYSTEM");
+    exact("PEMBEKAL · BRANCH AKTIF", "PEMBEKAL · CAWANGAN AKTIF", "SUPPLIERS · ACTIVE BRANCH");
+    exact("Sesi Owner · Opening / Closing dan jualan Branch aktif.", "Sesi pemilik · Buka / Tutup Sesi dan jualan cawangan aktif.", "Owner session · Opening / Closing and active branch sales.");
+    exact("Sesi pekerja · Opening / Closing dan jualan hari ini.", "Sesi pekerja · Buka / Tutup Sesi dan jualan hari ini.", "Employee session · Opening / Closing and today's sales.");
+    exact("Order tempatan dan order Cloud branch lain, lengkap dengan nombor resit serta asal branch.", "Pesanan tempatan dan pesanan awan daripada cawangan lain, lengkap dengan nombor resit serta cawangan asal.", "Local orders and Cloud orders from other branches, including receipt numbers and originating branches.");
+    exact("Pilih menu", "Pilih menu", "Select items");
+    exact("Owner only · Select a branch to edit or add stock.", "Pemilik sahaja · Pilih cawangan untuk mengubah atau menambah stok.", "Owner only · Select a branch to edit or add stock.");
+    // Full labels and deliberately-approved templates are initialized above.
   }
 }
