@@ -15,8 +15,10 @@ const staff=env.authenticatedContext('staff',{email:'staff@example.test',email_v
 const outsider=env.authenticatedContext('outsider',{email:'other@example.test',email_verified:true}).firestore();
 const staff2=env.authenticatedContext('staff2',{email:'staff2@example.test',email_verified:true}).firestore();
 const staffGoogle=env.authenticatedContext('staff-google',{email:'staff@example.test',email_verified:true}).firestore();
+const staffOtherBranch=env.authenticatedContext('staff-branch-two',{email:'branch-two@example.test',email_verified:true}).firestore();
 const workspace='workspaces/owner';
 const branch=workspace+'/branches/branch1';
+const branchTwo=workspace+'/branches/jalan-kebun';
 const inv=branch+'/live/current';
 const ord=branch+'/liveOrders/order1';
 const daily=branch+'/daily/'+today;
@@ -30,11 +32,21 @@ try{
     const db=c.firestore();
     await setDoc(d(db,workspace),{ownerUid:'owner',name:'Warisan'});
     await setDoc(d(db,branch),{ownerUid:'owner',name:'Utama'});
+    await setDoc(d(db,branchTwo),{ownerUid:'owner',name:'Warisan Jalan Kebun'});
     await setDoc(d(db,branch+'/members/staff'),{
       uid:'staff',email:'staff@example.test',role:'STAFF',active:true
     });
     await setDoc(d(db,branch+'/members/staff2'),{
       uid:'staff2',email:'staff2@example.test',role:'STAFF',active:true
+    });
+    await setDoc(d(db,branchTwo+'/members/staff-branch-two'),{
+      uid:'staff-branch-two',email:'branch-two@example.test',
+      role:'STAFF',active:true
+    });
+    await setDoc(d(db,'staffProfiles/staff-branch-two'),{
+      uid:'staff-branch-two',email:'branch-two@example.test',
+      role:'STAFF',active:true,ownerUid:'owner',branchId:'jalan-kebun',
+      branchName:'Warisan Jalan Kebun',createdAt:new Date()
     });
     await setDoc(d(db,'staffProfiles/staff'),{
       uid:'staff',email:'staff@example.test',role:'STAFF',active:true,
@@ -61,8 +73,13 @@ try{
     updatedAt:serverTimestamp()
   }));
   await assertSucceeds(getDoc(workerQr));
+  await assertSucceeds(getDoc(d(staffOtherBranch,workspace+'/paymentConfig/mainQr')));
   await assertFails(getDoc(outsiderQr));
   await assertFails(setDoc(workerQr,{
+    contentType:'image/png',imageBase64:'c3B5',
+    updatedAt:serverTimestamp()
+  }));
+  await assertFails(setDoc(d(staffOtherBranch,workspace+'/paymentConfig/mainQr'),{
     contentType:'image/png',imageBase64:'c3B5',
     updatedAt:serverTimestamp()
   }));
@@ -84,6 +101,8 @@ try{
   await assertSucceeds(getDoc(d(staff,branch))); // staff may see why login is blocked
   await assertFails(getDoc(d(staff,inv)));
   await assertFails(getDoc(workerQr)); // branch closed: staff QR access suspended
+  await assertSucceeds(getDoc(d(staffOtherBranch,workspace+'/paymentConfig/mainQr')));
+  // Another active branch keeps its QR access when Branch Utama is OFF DAY.
   await assertFails(getDoc(d(staff,branch+'/liveSessions/'+today)));
   await assertFails(updateDoc(d(staff,branch),{operatingStatus:'OPEN'}));
   await assertSucceeds(getDoc(d(owner,inv)));
