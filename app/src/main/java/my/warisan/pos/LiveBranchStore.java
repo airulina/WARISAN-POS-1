@@ -272,6 +272,108 @@ final class LiveBranchStore {
         }catch(Exception e){host.message("Isi jumlah stok yang sah.");}
       }).setNegativeButton("BATAL",null).show();
   }
+  void refund(String cloudId,String approvalId,Done onSuccess){
+    if(!usable()||busy){host.message("Refund Live memerlukan internet.");return;}
+    if(!accounts.owner()&&(approvalId==null||approvalId.isEmpty()||"OWNER".equals(approvalId))){
+      host.message("Kelulusan refund diperlukan.");return;
+    }
+    busy=true;DocumentReference orderRef=orders(cloudId);
+    db.runTransaction(tx->{
+      DocumentSnapshot order=tx.get(orderRef);
+      if(!order.exists())throw new IllegalStateException("Order asal tiada");
+      String status=order.getString("status");
+      if("REFUNDED".equals(status))return null;
+      if(!"PAID".equals(status))throw new IllegalStateException("Order belum dibayar atau sudah dibatalkan");
+      DocumentReference dayRef=daily(order.getString("day"));
+      DocumentSnapshot today=tx.get(dayRef);
+      if(!today.exists())throw new IllegalStateException("Laporan jualan cloud tiada");
+      long total=order.getLong("total");
+      String method=order.getString("method");
+      long sales=today.getLong("sales")==null?0:today.getLong("sales");
+      long cash=today.getLong("cash")==null?0:today.getLong("cash");
+      long qr=today.getLong("qr")==null?0:today.getLong("qr");
+      if(sales<total)throw new IllegalStateException("Baki jualan cloud tak sepadan");
+      Map<String,Object> report=new HashMap<>();
+      report.put("sales",sales-total);
+      report.put("cash",Math.max(0,cash-("Tunai".equals(method)?total:0)));
+      report.put("qr",Math.max(0,qr-("Tunai".equals(method)?0:total)));
+      report.put("lastRefundId",cloudId);report.put("updatedAt",FieldValue.serverTimestamp());
+      tx.set(dayRef,report,com.google.firebase.firestore.SetOptions.merge());
+      tx.update(orderRef,"status","REFUNDED","refundApprovalId",approvalId,
+        "refundBy",accounts.user().getUid(),"refundedAt",FieldValue.serverTimestamp());
+      return null;
+    }).addOnSuccessListener(v->{busy=false;onSuccess.apply();})
+      .addOnFailureListener(e->{busy=false;host.message("Refund Live gagal: "+e.getMessage());});
+  }
+  void session(boolean open,String day,int amount){
+    if(!accounts.active()||!usable())return;
+    DocumentReference doc=branch().collection("liveSessions").document(day);
+    Map<String,Object> state=new HashMap<>();
+    state.put("day",day);state.put("branchId",accounts.branchId());
+    state.put("ownerUid",accounts.ownerUid());
+    if(open){
+      state.put("openedBy",accounts.user().getUid());
+      state.put("opening",amount);state.put("open",true);
+    }else{
+      state.put("closedBy",accounts.user().getUid());
+      state.put("closing",amount);state.put("open",false);
+    }
+    state.put("updatedAt",FieldValue.serverTimestamp());
+    doc.set(state,com.google.firebase.firestore.SetOptions.merge())
+      .addOnFailureListener(e->host.message("Sesi lokal direkod, tetapi sync Opening/Closing gagal: "+e.getMessage()));
+  }
+  void showMonth(String month){
+    if(!accounts.owner()||!accounts.active())return;
+    branch().collection("daily")
+      .whereGreaterThanOrEqualTo(com.google.firebase.firestore.FieldPath.documentId(),month+"-01")
+      .whereLessThanOrEqualTo(com.google.firebase.firestore.FieldPath.documentId(),month+"-31")
+      .get().addOnSuccessListener(results->{
+        long sale=0,cash=0,qr=0,tx=0;
+        StringBuilder byDay=new StringBuilder();
+        for(QueryDocumentSnapshot doc:results){
+          long s=doc.getLong("sales")==null?0:doc.getLong("sales");
+          sale+=s;cash+=doc.getLong("cash")==null?0:doc.getLong("cash");
+          qr+=doc.getLong("qr")==null?0:doc.getLong("qr");
+          tx+=doc.getLong("transactions")==null?0:doc.getLong("transactions");
+          byDay.append(doc.getId()).append("   ").append(host.money((int)s)).append("\n");
+        }
+        host.darkBuilder().setTitle("LAPORAN LIVE · "+month)
+          .setMessage(accounts.branchName()+"\nJualan: "+host.money((int)sale)+
+            "\nTunai: "+host.money((int)cash)+"\nQR: "+host.money((int)qr)+
+            "\nTransaksi: "+tx+"\n\n"+(byDay.length()==0?"Belum ada rekod live":byDay.toString()))
+          .setPositiveButton("TUTUP",null).show();
+      }).addOnFailureListener(e->host.message("Report Live gagal: "+e.getMessage()));
+  }
+  void showAllBranches(){
+    if(!accounts.owner())return;
+    final String owner=accounts.ownerUid(),day=host.businessDay();
+    db.collection("workspaces").document(owner).collection("branches").get()
+      .addOnSuccessListener(branches->{
+        List<com.google.android.gms.tasks.Task<DocumentSnapshot>> tasks=new ArrayList<>();
+        List<String> labels=new ArrayList<>();
+        for(QueryDocumentSnapshot location:branches){
+          labels.add(location.getString("name")==null?location.getId():location.getString("name"));
+          tasks.add(location.getReference().collection("daily").document(day).get());
+        }
+        if(tasks.isEmpty()){host.message("Tiada branch.");return;}
+        com.google.android.gms.tasks.Tasks.whenAllSuccess(tasks).addOnSuccessListener(data->{
+          StringBuilder result=new StringBuilder("Tarikh "+day+"\n\n");
+          long overall=0;
+          for(int i=0;i<data.size();i++){
+            DocumentSnapshot snap=(DocumentSnapshot)data.get(i);
+            long sale=snap.getLong("sales")==null?0:snap.getLong("sales");
+            long tx=snap.getLong("transactions")==null?0:snap.getLong("transactions");
+            overall+=sale;
+            result.append(labels.get(i)).append("\n")
+              .append(host.money((int)sale)).append(" · ")
+              .append(tx).append(" transaksi\n\n");
+          }
+          result.append("JUMLAH LIVE: ").append(host.money((int)overall));
+          host.darkBuilder().setTitle("SEMUA BRANCH · LIVE")
+            .setMessage(result.toString()).setPositiveButton("TUTUP",null).show();
+        }).addOnFailureListener(e->host.message("Ada branch belum dapat disemak: "+e.getMessage()));
+      }).addOnFailureListener(e->host.message("Gagal senarai branch: "+e.getMessage()));
+  }
   void showDashboard(){
     if(!accounts.active()){host.message("Log masuk Owner dahulu");return;}
     if(!enabled()){if(accounts.owner())activate();else host.message("Owner belum aktifkan Live.");return;}
