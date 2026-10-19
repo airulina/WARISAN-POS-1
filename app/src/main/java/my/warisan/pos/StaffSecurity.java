@@ -188,10 +188,19 @@ final class StaffSecurity {
           FirebaseUser u=accounts.user();
           if(u==null){host.message("Login gagal.");return;}
           if(!u.isEmailVerified()){
-            u.sendEmailVerification();
-            accounts.auth.signOut();
-            host.message("Sahkan email pekerja dahulu, kemudian login semula.");
-            host.draw();return;
+            // Wait for the server to queue the verification email BEFORE logout.
+            u.sendEmailVerification().addOnCompleteListener(mailResult->{
+              accounts.auth.signOut();
+              host.draw();
+              String note=mailResult.isSuccessful()
+                ?"Email pengesahan telah diminta dihantar kepada "+mail+". Semak Inbox, Spam/Junk dan tekan Verify Email. Selepas disahkan, login semula."
+                :"Akaun pekerja wujud tetapi email pengesahan gagal dihantar. Semak Firebase Authentication → Templates dan internet. Ralat: "+
+                  (mailResult.getException()==null?"Tidak diketahui":mailResult.getException().getMessage());
+              host.darkBuilder().setTitle("SAHKAN EMAIL PEKERJA")
+                .setMessage(note+"\n\nTak perlu daftar pekerja semula atau padam data.")
+                .setPositiveButton("FAHAM",null).show();
+            });
+            return;
           }
           db.collection("staffProfiles").document(u.getUid()).get()
             .addOnSuccessListener(profile->{
@@ -296,9 +305,9 @@ final class StaffSecurity {
             String state=row.removed()?"DIBUANG":(row.active()?"AKTIF":"DISEKAT");
             labels.add(row.email()+"\n"+row.branchName+"  ·  "+state);
           }
-          host.darkBuilder().setTitle("SENARAI PEKERJA · "+all.size())
-            .setMessage("Aktif: "+enabled+"  ·  Tidak aktif: "+(all.size()-enabled)+
-              "\nPilih pekerja untuk sekat, buang akses, aktifkan semula atau reset password.")
+          // Android AlertDialog chooses the message panel INSTEAD of its list when
+          // setMessage and setItems are both used: this hid actual employees.
+          host.darkBuilder().setTitle("PEKERJA · "+all.size()+"  |  AKTIF "+enabled)
             .setItems(labels.toArray(new String[0]),(dialog,index)->workerDetails(all.get(index)))
             .setNegativeButton("Tutup",null).show();
         }).addOnFailureListener(e->host.message("Gagal baca pekerja semua branch: "+e.getMessage()));
@@ -316,9 +325,8 @@ final class StaffSecurity {
     }
     options.add("Hantar pautan reset password ke email");
     options.add("Kembali ke senarai");
-    host.darkBuilder().setTitle(worker.email())
-      .setMessage("Branch: "+worker.branchName+"\nStatus: "+status+
-        "\n\nBuang pekerja tidak memadam jualan, resit atau laporan lama.")
+    // Do not setMessage() together with setItems(): list actions would disappear.
+    host.darkBuilder().setTitle(worker.email()+"\n"+worker.branchName+" · "+status)
       .setItems(options.toArray(new String[0]),(dialog,choice)->{
         String action=options.get(choice);
         if(action.startsWith("BUANG")){
