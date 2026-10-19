@@ -32,6 +32,76 @@ final class BranchAccounts {
   final SharedPreferences identity;
   static final String ROOT="workspaces";
   static final String LEGACY_BRANCH="utama_legacy";
+  final ArrayList<String> stockBranchIds=new ArrayList<>();
+  final ArrayList<String> stockBranchNames=new ArrayList<>();
+  boolean stockBranchesLoaded=false,stockBranchesLoading=false;
+  String stockListOwner="";
+  void showStockBranches(){
+    if(!owner()){host.message("Hanya Owner boleh urus stok branch.");return;}
+    String uid=ownerUid();
+    if(!uid.equals(stockListOwner)){
+      stockBranchesLoaded=false;stockBranchIds.clear();stockBranchNames.clear();
+      stockListOwner=uid;
+    }
+    host.heading("Stok Mengikut Branch","Owner sahaja · Pilih branch untuk edit atau tambah stok.");
+    host.action("↻  Refresh Senarai Branch",()->{
+      stockBranchesLoaded=false;loadStockBranches();
+    });
+    if(!stockBranchesLoaded){
+      host.add(host.body,host.text(stockBranchesLoading?
+        "Sedang mendapatkan senarai branch...":"Memuatkan senarai branch...",12,host.muted,false),-1,-2);
+      loadStockBranches();
+      return;
+    }
+    if(stockBranchIds.isEmpty()){
+      host.add(host.body,host.text("Belum ada branch. Daftar branch melalui Setting → Account.",13,host.muted,false),-1,-2);
+      return;
+    }
+    host.add(host.body,host.text("JUMLAH BRANCH: "+stockBranchIds.size(),12,host.gold,true),-1,-2);
+    host.gap(host.body,8);
+    for(int i=0;i<stockBranchIds.size();i++){
+      final String id=stockBranchIds.get(i),name=stockBranchNames.get(i);
+      boolean selected=id.equals(branchId());
+      host.action((selected?"●  ":"🏪  ")+name+(selected?" · Branch aktif":"")+"  ›",
+        ()->openStockBranch(id,name));
+    }
+    host.gap(host.body,8);
+    host.add(host.body,host.text("Masuk branch dahulu sebelum ubah stok. Branch lain tidak akan terjejas.",12,host.muted,false),-1,-2);
+  }
+  void loadStockBranches(){
+    if(!owner()||stockBranchesLoading)return;
+    final String uid=ownerUid();stockBranchesLoading=true;
+    db.collection(ROOT).document(uid).collection("branches").get()
+      .addOnSuccessListener(result->{
+        stockBranchesLoading=false;
+        if(!owner()||!uid.equals(ownerUid()))return;
+        stockBranchIds.clear();stockBranchNames.clear();
+        for(QueryDocumentSnapshot doc:result){
+          stockBranchIds.add(doc.getId());
+          String name=doc.getString("name");
+          stockBranchNames.add(name==null||name.trim().isEmpty()?"Branch "+doc.getId():name);
+        }
+        stockBranchesLoaded=true;
+        if(host.activePage==1)host.draw();
+      }).addOnFailureListener(error->{
+        stockBranchesLoading=false;
+        if(host.activePage==1)host.message("Senarai branch gagal: "+error.getMessage());
+      });
+  }
+  void openStockBranch(String id,String name){
+    if(!owner()||user()==null){host.message("Sesi Owner diperlukan.");return;}
+    if(!stockBranchIds.contains(id)){host.message("Branch belum disahkan.");return;}
+    // Branch selection reuses the Owner's saved login without registering or
+    // clearing any previous branch or legacy sales/stock data.
+    if(!id.equals(branchId())){
+      if(host.live!=null)host.live.stop();
+      setSession(user().getUid(),ownerUid(),id,name,"OWNER");
+    }
+    host.selectedStockDay=host.businessDay();
+    host.activePage=13;
+    host.draw();
+  }
+
   boolean hasLegacyRecords(){
     // Ignore housekeeping flags: they do not mean a shop has real data.
     for(String key:host.getPreferences(Context.MODE_PRIVATE).getAll().keySet()){
