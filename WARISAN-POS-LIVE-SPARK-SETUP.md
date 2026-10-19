@@ -100,3 +100,16 @@ Pastikan semua ini lulus:
 - Nombor resit/order **lokal** masih boleh sama antara dua telefon; ID cloud `liveOrderId` ialah ID unik bagi mengelakkan transaksi stok dan bayaran berganda.
 - Transaksi berjaya di cloud tetapi gagal disimpan pada telefon dipulihkan melalui semakan order cloud selepas app dibuka semula; ini perlu diuji secara nyata.
 - Rules diuji oleh emulator; ia mesti **diterbitkan ke Firebase Console** untuk berkuat kuasa.
+
+## Off Day / Stock Habis — Owner mengunci branch (tanpa GPS)
+- **Setting / Account / Duit (Cashflow)** → **URUS STATUS BRANCH · BUKA / OFF DAY / STOK HABIS**.
+- Pilih **nama branch tertentu**; Owner boleh set **BUKA**, **OFF DAY (cuti)**, atau **TUTUP · STOK HABIS**. Setiap branch bebas: Jenjarom boleh OFF DAY sementara Jalan Kebun kekal BUKA.
+- Status disimpan pada `workspaces/{ownerUid}/branches/{branchId}.operatingStatus` dalam Firestore. App versi lama yang tidak ada medan ini dianggap BUKA bagi keserasian.
+- Pekerja yang ditetapkan pada branch OFF DAY/STOK HABIS **tidak dapat melengkapkan login POS**, walaupun Firebase Authentication sempat menerima email/password. Tiada paparan jualan, Opening, atau transaksi Live dibenarkan.
+- Jika Owner menutup branch ketika pekerja sudah login, aplikasi pekerja baharu menerima kemas kini server dan mengeluarkan sesi. Security Rules turut menolak akses kepada order, jualan dan stok ketika status tertutup.
+- **Tidak menggunakan GPS**. Tiada kebenaran lokasi diperlukan. Peranti pekerja masih terikat seperti polisi peranti sedia ada (Owner boleh reset peranti).
+- Dalam **Duit / Cashflow → Status Opening Semua Branch**, Owner lihat nama branch, status operasi (OFF DAY/STOK HABIS/BUKA) serta rekod Opening/Closing yang berasingan.
+- **PENTING**: Jika branch sudah buat Opening sebelum Owner menutupnya, transaksi dan Closing lama tidak dipadam. Owner mesti semak dan lengkapkan Closing seperti prosedur kaunter sebelum membuka sesi baharu.
+- Pekerja yang offline tidak dapat mengesahkan status server. App terkunci sehingga menerima pengesahan branch BUKA daripada Firebase, dan order Live kekal memerlukan internet.
+- **WAJIB Publish `firestore.rules` terkini kepada Firebase production**. Fail di GitHub atau APK sahaja tidak mengubah Rules yang diterbitkan.
+- Selepas Publish, uji dua akaun pada telefon: Owner set OFF DAY → pekerja cuba login dan pekerja yang sedang login disekat; Owner tukar kepada BUKA → pekerja login semula. Jangan uji dengan transaksi sebenar sebelum semak baki stok dan data lama.
