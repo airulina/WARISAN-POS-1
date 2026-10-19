@@ -177,6 +177,19 @@ selectedDay=date();selectedMonth=selectedDay.substring(0,7);rangeStart=selectedD
   if(branchAccounts.staff())staffSecurity.observeWorker();
 }draw();}
   @Override protected void onSaveInstanceState(Bundle b){b.putIntArray("cart",qty);b.putInt("page",activePage);b.putString("selectedDay",selectedDay);b.putString("rangeStart",rangeStart);b.putString("selectedStockDay",selectedStockDay);b.putString("selectedCashDay",selectedCashDay);b.putBoolean("cashDailyMode",cashDailyMode);super.onSaveInstanceState(b);}
+  void showNewUserSignup(){
+    if(firebaseAuth.getCurrentUser()!=null){
+      branchAccounts.registerOwner();return;
+    }
+    darkBuilder().setTitle("SIGN UP · PENGGUNA BARU")
+      .setItems(new String[]{
+        "Daftar menggunakan Email + Password",
+        "Daftar menggunakan Google"
+      },(d,choice)->{
+        if(choice==0)staffSecurity.signupOwnerWithEmail();
+        else startActivityForResult(googleSignInClient.getSignInIntent(),RC_SIGN_IN);
+      }).setNegativeButton("BATAL",null).show();
+  }
   void draw(){
     if(live!=null&&branchAccounts!=null&&branchAccounts.active())live.attachDay();
     cachedStock=null;
@@ -194,22 +207,41 @@ selectedDay=date();selectedMonth=selectedDay.substring(0,7);rangeStart=selectedD
     ScrollView scroll=new ScrollView(this);scroll.setVerticalScrollBarEnabled(false);screen.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
     body=col();body.setPadding(dp(17),dp(15),dp(17),dp(25));scroll.addView(body);
     if(branchAccounts!=null&&branchAccounts.blocked()){
-      heading("WARISAN POS","Log masuk atau daftar Owner baharu. Pekerja gunakan email dan password.");
+      heading("WARISAN POS","Log In · Email / Password atau Google");
       FirebaseUser signed=firebaseAuth.getCurrentUser();
       if(signed==null){
-        action("Owner · Log masuk Google",()->startActivityForResult(googleSignInClient.getSignInIntent(),RC_SIGN_IN));
-        action("Pekerja · Email + Password",()->staffSecurity.loginEmployee());
-      }
-      else {
-        if(!branchAccounts.staff()){
-          action("Owner sedia ada · Pilih Branch",()->branchAccounts.chooseBranch());
-          action("Pengguna Baru · DAFTAR OWNER / SIGN UP",()->branchAccounts.registerOwner());
-          if(branchAccounts.hasLegacyRecords())
-            action("Owner lama · Gunakan data POS asal",()->branchAccounts.linkLegacyOwner());
-        }
+        add(body,text("EMAIL",12,gold,true),-1,-2);
+        EditText loginEmail=new EditText(this);
+        loginEmail.setSingleLine(true);
+        loginEmail.setHint("Email");
+        loginEmail.setInputType(android.text.InputType.TYPE_CLASS_TEXT|
+          android.text.InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS);
+        styleInput(loginEmail);add(body,loginEmail,-1,-2);gap(body,10);
+        add(body,text("PASSWORD",12,gold,true),-1,-2);
+        EditText loginPassword=new EditText(this);
+        loginPassword.setSingleLine(true);
+        loginPassword.setHint("Password");
+        loginPassword.setInputType(android.text.InputType.TYPE_CLASS_TEXT|
+          android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD);
+        styleInput(loginPassword);add(body,loginPassword,-1,-2);gap(body,12);
+        action("LOG IN",()->staffSecurity.loginWithCredentials(
+          loginEmail.getText().toString(),loginPassword.getText().toString()));
+        gap(body,12);
+        add(body,text("ATAU",13,muted,true),-1,-2);gap(body,8);
+        action("Teruskan dengan Google",()->
+          startActivityForResult(googleSignInClient.getSignInIntent(),RC_SIGN_IN));
+        gap(body,20);
+        add(body,text("Belum ada akaun? Sign Up untuk pengguna baru sahaja.",12,muted,false),-1,-2);
+        action("SIGN UP · DAFTAR AKAUN BAHARU",()->showNewUserSignup());
+      }else{
+        action("Log In Owner Sedia Ada",()->branchAccounts.chooseBranch());
+        action("Daftar Owner Baharu / Sign Up",()->branchAccounts.registerOwner());
+        if(branchAccounts.hasLegacyRecords())
+          action("Owner Lama · Gunakan Data POS Asal",()->branchAccounts.linkLegacyOwner());
         action("Log keluar",()->{
           if(live!=null)live.stop();
-          firebaseAuth.signOut();googleSignInClient.signOut().addOnCompleteListener(task->draw());
+          firebaseAuth.signOut();
+          googleSignInClient.signOut().addOnCompleteListener(task->draw());
         });
       }
       return;
