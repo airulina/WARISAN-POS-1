@@ -290,6 +290,8 @@ final class StaffSecurity {
       observeWorker();
       recordStaffLogin(uid,mailOf(user),assignedOwner,assignedBranch,device);
       host.message("Log In berjaya · "+accounts.branchName());
+      // Only one foreground GPS check on login; not continuous surveillance.
+      host.presence.checkStaffLoginLocation();
     }).addOnFailureListener(e->{
       accounts.auth.signOut();host.draw();
       host.darkBuilder().setTitle("LOG IN PEKERJA DISEKAT")
