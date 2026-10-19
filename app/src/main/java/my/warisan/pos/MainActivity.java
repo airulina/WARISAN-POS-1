@@ -2062,7 +2062,67 @@ selectedDay=date();selectedMonth=selectedDay.substring(0,7);rangeStart=selectedD
   int damagedQty(int id){int n=0;JSONArray list=entries("stock_damage");for(int i=0;i<list.length();i++){JSONObject e=list.optJSONObject(i);if(e!=null&&!e.optBoolean("stockReset",false)&&e.optInt("item",-1)==id)n+=e.optInt("qty");}return n;}
   int damageTotal(String month){int n=0;JSONArray list=entries("stock_damage");for(int i=0;i<list.length();i++){JSONObject e=list.optJSONObject(i);if(e!=null&&entryDay(e).startsWith(month+"-"))n+=e.optInt("cost");}return n;}
   void resetStockRecords(){try{JSONArray losses=entries("stock_damage");for(int i=0;i<losses.length();i++)losses.getJSONObject(i).put("stockReset",true);posPrefs().edit().remove("stock_entries").remove("stock_sales").putString("stock_damage",losses.toString()).commit();}catch(Exception e){message("Reset gagal");}}
-  void damageEntry(int id){if(costUnit(id)<=0){message("Tetapkan harga mentah dahulu untuk kira kerugian");editMenuPrice(id);return;}if(stock(id)==0){message("Tiada stok untuk direkod rosak");return;}LinearLayout form=col();form.setPadding(dp(18),dp(6),dp(18),0);
+  void damageLiveEntry(int id){
+    if(!branchAccounts.owner()||live==null||!live.usable()){
+      message("Owner mesti online untuk merekod stok rosak Live.");return;
+    }
+    if(costUnit(id)<=0){
+      message("Tetapkan harga mentah dahulu untuk mengira kerugian.");
+      editMenuPrice(id);return;
+    }
+    if(stock(id)<=0){message("Stok Live sudah habis.");return;}
+    LinearLayout form=col();form.setPadding(dp(18),dp(6),dp(18),0);
+    add(form,text("Baki Cloud: "+stock(id)+" · Kos "+money(costUnit(id))+
+      " / "+costPack(id)+" unit",12,ink,true),-1,-2);
+    EditText qtyInput=new EditText(this);
+    qtyInput.setInputType(android.text.InputType.TYPE_CLASS_NUMBER);
+    qtyInput.setHint("Kuantiti rosak");styleInput(qtyInput);add(form,qtyInput,-1,-2);
+    EditText reason=new EditText(this);
+    reason.setHint("Sebab: basi / jatuh / terbakar");
+    styleInput(reason);add(form,reason,-1,-2);
+    AlertDialog dlg=darkBuilder().setTitle("STOK ROSAK LIVE · "+names[id])
+      .setMessage("Stok rosak akan ditolak daripada Firestore dahulu, "+
+        "kemudian direkodkan sebagai kerugian pada telefon Owner.")
+      .setView(form).setPositiveButton("SAHKAN ROSAK",null)
+      .setNegativeButton("BATAL",null).create();
+    dlg.setOnShowListener(v->{
+      styleDarkDialogNow(dlg);
+      dlg.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(view->{
+        try{
+          final int count=Integer.parseInt(qtyInput.getText().toString().trim());
+          final String note=reason.getText().toString().trim();
+          if(count<=0||count>stock(id)||count>100000||note.isEmpty()){
+            message("Semak kuantiti dan nyatakan sebab rosak.");return;
+          }
+          final int loss=restockCost(id,count),unitPrice=costUnit(id),pack=costPack(id);
+          live.adjustStockDelta(id,-count,"ROSAK: "+
+            note.substring(0,Math.min(note.length(),42)),()->{
+            try{
+              JSONObject record=new JSONObject();
+              record.put("time",timestamp());record.put("businessDay",businessDay());
+              record.put("item",id);record.put("name",names[id]);
+              record.put("qty",count);record.put("cost",loss);
+              record.put("unitCost",unitPrice);record.put("pack",pack);
+              record.put("note",note);record.put("cloudManaged",true);
+              JSONArray history=entries("stock_damage");history.put(record);
+              if(!posPrefs().edit().putString("stock_damage",history.toString()).commit())
+                throw new IOException("Gagal simpan");
+              qty[id]=Math.min(qty[id],stock(id));
+              message("Stok Live ditolak "+count+" · kerugian "+money(loss));
+            }catch(Exception e){
+              message("Stok Cloud SUDAH ditolak, tetapi rekod kos telefon gagal. "+
+                "Rujuk History Perubahan Stok Live sebelum cuba lagi.");
+            }
+          });
+          dlg.dismiss();
+        }catch(Exception e){message("Masukkan kuantiti rosak yang sah.");}
+      });
+    });
+    dlg.show();
+  }
+  void damageEntry(int id){
+    if(live!=null&&live.enabled()){damageLiveEntry(id);return;}
+if(costUnit(id)<=0){message("Tetapkan harga mentah dahulu untuk kira kerugian");editMenuPrice(id);return;}if(stock(id)==0){message("Tiada stok untuk direkod rosak");return;}LinearLayout form=col();form.setPadding(dp(18),dp(6),dp(18),0);
     add(form,text("Baki: "+stock(id)+" unit · Kos "+money(costUnit(id))+" / "+costPack(id)+" unit",13,ink,true),-1,-2);
     EditText units=new EditText(this);units.setInputType(android.text.InputType.TYPE_CLASS_NUMBER);units.setHint("Bilangan stok rosak");styleInput(units);add(form,units,-1,-2);
     EditText reason=new EditText(this);reason.setHint("Sebab: basi / jatuh / terbakar");styleInput(reason);add(form,reason,-1,-2);
@@ -2073,7 +2133,7 @@ selectedDay=date();selectedMonth=selectedDay.substring(0,7);rangeStart=selectedD
       JSONObject e=new JSONObject();e.put("time",timestamp());e.put("businessDay",businessDay());e.put("item",id);e.put("name",names[id]);e.put("qty",n);e.put("cost",restockCost(id,n));e.put("unitCost",costUnit(id));e.put("pack",costPack(id));e.put("note",note);JSONArray list=entries("stock_damage");list.put(e);
       if(!posPrefs().edit().putString("stock_damage",list.toString()).commit())throw new IOException();qty[id]=Math.min(qty[id],stock(id));dialog.dismiss();draw();message("Stok rosak direkod · kerugian "+money(e.optInt("cost")));
      }catch(Exception e){message("Gagal simpan. Semak bilangan dan simpanan telefon.");}});});dialog.show();}
-  void damageHistory(){JSONArray list=entries("stock_damage");ScrollView scroll=new ScrollView(this);scroll.setVerticalScrollBarEnabled(false);LinearLayout panel=col();panel.setPadding(dp(14),dp(10),dp(14),dp(14));panel.setBackgroundColor(cream);scroll.addView(panel);boolean dayMode=activePage==1||cashDailyMode;String day=activePage==1?selectedStockDay:selectedCashDay;String month=selectedMonth;int totalLoss=0,countLoss=0;
+  void damageHistory(){JSONArray list=entries("stock_damage");ScrollView scroll=new ScrollView(this);scroll.setVerticalScrollBarEnabled(false);LinearLayout panel=col();panel.setPadding(dp(14),dp(10),dp(14),dp(14));panel.setBackgroundColor(cream);scroll.addView(panel);boolean dayMode=activePage==1||activePage==13||cashDailyMode;String day=(activePage==1||activePage==13)?selectedStockDay:selectedCashDay;String month=selectedMonth;int totalLoss=0,countLoss=0;
     for(int i=list.length()-1;i>=0;i--){JSONObject e=list.optJSONObject(i);if(e==null||e.optBoolean("stockReset",false))continue;String d=entryDay(e);if(dayMode?!day.equals(d):!d.startsWith(month+"-"))continue;countLoss++;totalLoss+=e.optInt("cost");LinearLayout card=col();card.setPadding(dp(12),dp(10),dp(12),dp(10));card.setBackground(shape(surface,11));LinearLayout r=row();r.addView(text(e.optString("name","Stok"),14,ink,true),new LinearLayout.LayoutParams(0,-2,1));add(r,text(money(e.optInt("cost")),14,0xffd45a55,true),-2,-2);add(card,r,-1,-2);add(card,text(e.optString("time")+"  ·  "+e.optInt("qty")+" unit",11,muted,true),-1,-2);String note=e.optString("note");if(!note.isEmpty())add(card,text(note,12,muted,false),-1,-2);add(panel,card,-1,-2);gap(panel,7);}
     LinearLayout summary=col();summary.setPadding(dp(12),dp(10),dp(12),dp(10));summary.setBackground(shape(0xff2b3f55,11));add(summary,text("JUMLAH KERUGIAN",11,muted,true),-1,-2);add(summary,text(money(totalLoss),21,totalLoss>0?0xffd45a55:blue,true),-1,-2);panel.addView(summary,0);if(countLoss==0){TextView empty=text("Tiada stok rosak untuk tempoh ini.",13,muted,false);empty.setPadding(0,dp(12),0,0);add(panel,empty,-1,-2);}AlertDialog reportDialog=darkBuilder().setTitle("Stok rosak · "+(dayMode?day:monthLabel(month))).setView(scroll).setPositiveButton("Tutup",null).create();applyDarkReportDialog(reportDialog);}
   int[][] cashSeries(String month){int days=daysInMonth(month);int[][] values=new int[3][days];for(int d=0;d<days;d++)values[0][d]=posPrefs().getInt("sales_"+month+String.format(Locale.US,"-%02d",d+1),0);
