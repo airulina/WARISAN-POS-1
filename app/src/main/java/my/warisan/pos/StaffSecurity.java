@@ -28,6 +28,7 @@ final class StaffSecurity {
   final FirebaseFirestore db;
   final FirebaseAuth staffProvisionAuth;
   private ListenerRegistration workerAccessListener;
+  private ListenerRegistration branchAccessListener;
   StaffSecurity(MainActivity a){
     host=a;accounts=a.branchAccounts;db=a.firestoreForStaff();
     FirebaseApp secondary;
@@ -269,7 +270,18 @@ final class StaffSecurity {
       accounts.auth.signOut();host.message("Profil branch pekerja tidak lengkap.");return;
     }
     DocumentReference ref=db.collection("staffProfiles").document(uid);
+    DocumentReference branchRef=db.collection("workspaces").document(assignedOwner)
+      .collection("branches").document(assignedBranch);
     db.runTransaction(tx->{
+      com.google.firebase.firestore.DocumentSnapshot branch=tx.get(branchRef);
+      if(!branch.exists()||!assignedOwner.equals(branch.getString("ownerUid")))
+        throw new IllegalStateException("Branch pekerja tidak sah / tiada akses.");
+      String operation=branch.getString("operatingStatus");
+      if("OFFDAY".equals(operation)||"STOCK_OUT".equals(operation))
+        throw new IllegalStateException("BRANCH "+(operation.equals("OFFDAY")?"OFF DAY":"STOK HABIS")+
+          " · Owner telah menutup "+assignedName+". Hubungi Owner.");
+      if(operation!=null&&!"OPEN".equals(operation))
+        throw new IllegalStateException("Status branch tidak dikenali. Hubungi Owner.");
       com.google.firebase.firestore.DocumentSnapshot current=tx.get(ref);
       if(!current.exists()||!Boolean.TRUE.equals(current.getBoolean("active"))||
         !"STAFF".equals(current.getString("role"))||
@@ -287,17 +299,18 @@ final class StaffSecurity {
       if(accounts.user()==null||!uid.equals(accounts.user().getUid()))return;
       accounts.setSession(uid,assignedOwner,assignedBranch,
         assignedName==null?"Branch":assignedName,"STAFF");
+      accounts.staffBranchVerified=true;
       observeWorker();
+      host.draw();
       recordStaffLogin(uid,mailOf(user),assignedOwner,assignedBranch,device);
       host.message("Log In berjaya · "+accounts.branchName());
-      // Only one foreground GPS check on login; not continuous surveillance.
-      host.presence.checkStaffLoginLocation();
+      // No GPS is needed. Server branch status determines access.
     }).addOnFailureListener(e->{
       accounts.auth.signOut();host.draw();
       host.darkBuilder().setTitle("LOG IN PEKERJA DISEKAT")
-        .setMessage(e.getMessage()+"\n\nSetiap pekerja hanya dibenarkan satu pemasangan telefon. "+
-          "Jika bertukar telefon, Owner perlu reset peranti dalam Senarai Pekerja. "+
-          "Login tidak membuktikan lokasi; GPS diperiksa ketika Opening.")
+        .setMessage(e.getMessage()+"\n\nAkaun ini ditetapkan kepada satu branch "+
+          "dan satu telefon. Jika Owner tetapkan OFF DAY atau STOK HABIS, "+
+          "pekerja tidak boleh login sehingga Owner buka semula branch. Tiada GPS diperlukan.")
         .setPositiveButton("FAHAM",null).show();
     });
   }
@@ -374,7 +387,9 @@ final class StaffSecurity {
   }
   void observeWorker(){
     if(workerAccessListener!=null){workerAccessListener.remove();workerAccessListener=null;}
+    if(branchAccessListener!=null){branchAccessListener.remove();branchAccessListener=null;}
     if(!accounts.staff()||accounts.user()==null)return;
+    observeBranchAccess();
     final String uid=accounts.user().getUid();
     workerAccessListener=db.collection("staffProfiles").document(uid)
       .addSnapshotListener((profile,error)->{
@@ -403,6 +418,55 @@ final class StaffSecurity {
         }
       });
   }
+  void revokeBranchAccess(String message){
+    if(!accounts.staff())return;
+    accounts.staffBranchVerified=false;
+    if(branchAccessListener!=null){branchAccessListener.remove();branchAccessListener=null;}
+    if(workerAccessListener!=null){workerAccessListener.remove();workerAccessListener=null;}
+    host.live.stop();
+    accounts.auth.signOut();
+    host.draw();
+    host.darkBuilder().setTitle("AKSES BRANCH DITUTUP")
+      .setMessage(message+"\n\nOwner boleh buka semula branch dari menu Operasi Branch. "+
+        "Sila login semula selepas branch dibuka.")
+      .setPositiveButton("FAHAM",null).show();
+  }
+  void observeBranchAccess(){
+    if(branchAccessListener!=null){branchAccessListener.remove();branchAccessListener=null;}
+    if(!accounts.staff()||accounts.user()==null)return;
+    final String uid=accounts.user().getUid();
+    final String owner=accounts.ownerUid(),branch=accounts.branchId();
+    // Listen to the ONE assigned branch; a worker cannot select another branch.
+    branchAccessListener=db.collection("workspaces").document(owner)
+      .collection("branches").document(branch)
+      .addSnapshotListener(com.google.firebase.firestore.MetadataChanges.INCLUDE,(doc,error)->{
+        if(!accounts.staff()||accounts.user()==null||
+          !uid.equals(accounts.user().getUid())||!owner.equals(accounts.ownerUid())
+          ||!branch.equals(accounts.branchId()))return;
+        if(error!=null){
+          accounts.staffBranchVerified=false;host.draw();
+          return; // No POS access while the server cannot verify branch state.
+        }
+        if(doc==null||doc.getMetadata().isFromCache()||doc.getMetadata().hasPendingWrites()){
+          accounts.staffBranchVerified=false;host.draw();
+          return;
+        }
+        if(!doc.exists()){
+          revokeBranchAccess("Branch tidak wujud lagi.");return;
+        }
+        String status=doc.getString("operatingStatus");
+        if(!owner.equals(doc.getString("ownerUid"))||
+          (status!=null&&!"OPEN".equals(status))){
+          revokeBranchAccess("Branch "+accounts.branchName()+" berstatus "+
+            BranchAccounts.operatingLabel(status)+". Login pekerja tidak dibenarkan.");
+          return;
+        }
+        if(!accounts.staffBranchVerified){
+          accounts.staffBranchVerified=true;host.draw();
+        }
+      });
+  }
+
   /** One Owner screen covers all branches; "remove" means permanent access revocation
    *  with the audit/transaction history retained, NOT deletion of historical sales. */
   static final class WorkerRow {
