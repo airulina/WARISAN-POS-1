@@ -393,6 +393,7 @@ final class LiveBranchStore {
     if(accounts.user()==null)return;
     final String key=accounts.ownerUid()+":"+accounts.branchId()+":"+accounts.user().getUid();
     final String[] result=new String[4];
+    final int[] actualCloudSlots={-1};
     final java.util.concurrent.atomic.AtomicInteger pending=new java.util.concurrent.atomic.AtomicInteger(4);
     final Runnable completed=()->{
       if(pending.decrementAndGet()!=0)return;
@@ -407,8 +408,8 @@ final class LiveBranchStore {
       report.append("SLOT MENU / ORDER: ").append(menuSlots).append("\n\n");
       if(result[1].startsWith("DITOLAK"))
         report.append("Kemungkinan Rules Firestore yang diterbitkan belum membenarkan bacaan order yang belum wujud.\n\n");
-      if(result[0].startsWith("OK")&&!result[0].contains(" / "+menuSlots+" slot"))
-        report.append("Panjang stok Cloud tidak sama dengan panjang order; semak menu versi lama.\n\n");
+      if(actualCloudSlots[0]>=0&&actualCloudSlots[0]!=menuSlots)
+        report.append("Panjang stok Cloud tidak sama dengan panjang menu. Aplikasi cuba menambah slot kuantiti sifar tanpa mengubah stok lama.\\n\\n");
       report.append("Tiada data ditulis oleh diagnostik. Jangan ulang order sebelum stok dan order disemak.");
       host.darkBuilder().setTitle("DIAGNOSTIK ORDER LIVE · PEKERJA")
         .setMessage(report.toString()).setPositiveButton("FAHAM",null).show();
@@ -419,6 +420,7 @@ final class LiveBranchStore {
           DocumentSnapshot doc=task.getResult();
           Object raw=doc.get("stock");
           int count=raw instanceof List?((List<?>)raw).size():-1;
+          actualCloudSlots[0]=count;
           result[0]=doc.exists()?"OK · "+count+" / "+menuSlots+" slot":"TIADA DOKUMEN";
         }else result[0]="DITOLAK / GAGAL · "+diagnosticCode(task.getException());
         completed.run();
