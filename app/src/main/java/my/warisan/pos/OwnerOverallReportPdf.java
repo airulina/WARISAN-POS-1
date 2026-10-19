@@ -14,6 +14,12 @@ import java.util.TreeMap;
 
 /** Graphical A4 overall report, with gross sales only while branch costs remain local. */
 final class OwnerOverallReportPdf {
+  // Printing happens in background. Thread-local language prevents reports
+  // printed concurrently by separate jobs from changing each other's labels.
+  private static final ThreadLocal<Boolean> PDF_ENGLISH=new ThreadLocal<>();
+  private static String localized(String label){
+    return WarisanLanguage.translate(label,Boolean.TRUE.equals(PDF_ENGLISH.get()));
+  }
   private static final int NAVY=Color.rgb(13,35,58);
   private static final int BLUE=Color.rgb(61,123,198);
   private static final int GOLD=Color.rgb(201,150,51);
@@ -43,6 +49,7 @@ final class OwnerOverallReportPdf {
       overall.add(src);
     }
     WarisanPrinting.print(host,"Warisan POS · Semua Branch · "+month,out->{
+      PDF_ENGLISH.set(host.english());
       PdfDocument pdf=new PdfDocument();
       try{
         Paint p=new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -103,7 +110,7 @@ final class OwnerOverallReportPdf {
         label(c,p,"Kos pembekal/operasi/rosak branch lain belum semuanya diselaraskan.",44,812,9,GRAY,false);
         pdf.finishPage(page);
         pdf.writeTo(out);
-      }finally{pdf.close();}
+      }finally{pdf.close();PDF_ENGLISH.remove();}
     });
   }
 
@@ -162,7 +169,7 @@ final class OwnerOverallReportPdf {
     p.setColor(color);
     p.setTextSize(size);
     p.setTypeface(Typeface.create("sans-serif",bold?Typeface.BOLD:Typeface.NORMAL));
-    c.drawText(value,x,y,p);
+    c.drawText(localized(value),x,y,p);
   }
   private static String money(long cents){return String.format(Locale.US,"RM %,.2f",cents/100.0);}
   private static String shortMoney(long cents){return String.format(Locale.US,"%.2f",cents/100.0);}
