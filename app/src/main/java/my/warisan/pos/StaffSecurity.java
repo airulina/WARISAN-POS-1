@@ -336,10 +336,10 @@ final class StaffSecurity {
           // If email credentials are an existing Owner, verify workspace on
           // server before restoring previous branches. Workers cannot elevate.
           accounts.afterLogin();
-        }).addOnFailureListener(e->{
-          accounts.auth.signOut();host.draw();
-          host.message("Semak peranan akaun gagal: "+e.getMessage());
-        });
+        }).addOnFailureListener(e->failWorkerLogin("BACA PROFIL PEKERJA",e,
+          "Firebase Authentication mungkin berjaya, tetapi Firestore tidak "+
+          "membenarkan bacaan profil. Owner perlu semak akaun dan Publish "+
+          "firestore.rules terkini daripada WARISAN-POS-1."));
     }).addOnFailureListener(e->host.message("Email / Password gagal: "+e.getMessage()));
   }
 
