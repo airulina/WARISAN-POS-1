@@ -47,8 +47,12 @@ jobs:
             -storepass android \
             -keypass android
 
-      - name: Validate Firebase Functions JavaScript
-        run: node --check functions/index.js
+      - name: Verify no paid Firebase Functions in app
+        run: |
+          if grep -q "firebase-functions" app/build.gradle; then
+            echo "Cloud Functions dependency detected in Spark-only app"
+            exit 1
+          fi
 
       - name: Build APK
         run: gradle assembleDebug --no-daemon
