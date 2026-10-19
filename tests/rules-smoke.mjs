@@ -500,7 +500,7 @@ try{
   assert.deepEqual((await getDoc(d(owner,inv))).data().stock,originalStock);
   await assertFails(updateDoc(d(staff,'staffProfiles/staff'),{branchId:'branch1'}));
   await assertFails(updateDoc(d(staff,'staffEmails/staff@example.test'),{branchId:'branch1'}));
-  await assertFails(deleteDoc(destinationMember));
+  await assertFails(deleteDoc(d(staff,branchTwo+'/members/staff')));
   // A legacy worker may lack staffEmails completely. The same move must
   // atomically CREATE the missing index without creating a new Auth account.
   await env.withSecurityRulesDisabled(async c=>{
