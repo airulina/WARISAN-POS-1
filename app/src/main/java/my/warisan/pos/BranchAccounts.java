@@ -230,6 +230,7 @@ final class BranchAccounts {
     // After a successful worker login, show the Opening/Closing dashboard first.
     // Owner continues to land on MENU; role and branch records are unchanged.
     host.activePage="STAFF".equals(role)?12:0;
+    if(host.sharedPaymentQr!=null)host.sharedPaymentQr.attach();
     if(host.live!=null)host.live.attach();
     host.draw();
   }
@@ -295,7 +296,11 @@ final class BranchAccounts {
       .remove("ownerUid").remove("branchId").remove("branchName").commit();
     if(host.live!=null)host.live.stop();
     checkMayBecomeOwner(u,()->{
-      if(active()&&owner()){host.loadMenu();host.draw();return;}
+      if(active()&&owner()){
+        // Login always returns Owner to Branch Utama, not the last branch.
+        // Switching via BRANCH is still available after successful login.
+        chooseOwnerBranchVerified(u);return;
+      }
       db.collection(ROOT).document(u.getUid())
         .get(com.google.firebase.firestore.Source.SERVER).addOnSuccessListener(doc->{
           if(doc.exists())chooseBranch();
@@ -479,7 +484,26 @@ final class BranchAccounts {
               labels.add(branch.getString("name"));ids.add(branch.getId());
             }
             if(labels.isEmpty()){host.message("Belum ada branch");return;}
+            // Prefer legacy Branch Utama: its original local sales/stock
+            // preferences must not be silently replaced with another branch.
+            int primary=-1;
+            for(int i=0;i<ids.size();i++){
+              if(LEGACY_BRANCH.equals(ids.get(i))){primary=i;break;}
+            }
+            if(primary<0)for(int i=0;i<labels.size();i++){
+              if("Branch Utama".equalsIgnoreCase(
+                labels.get(i)==null?"":labels.get(i).trim())){
+                primary=i;break;
+              }
+            }
+            if(primary>=0){
+              String display=labels.get(primary)==null?"Branch Utama":labels.get(primary);
+              setSession(u.getUid(),ownerId,ids.get(primary),display,"OWNER");
+              return;
+            }
+            // Never automatically select a non-primary shop.
             host.darkBuilder().setTitle("Pilih Branch Owner")
+              .setMessage("Branch Utama tidak ditemui. Pilih branch dengan teliti.")
               .setItems(labels.toArray(new String[0]),(d,which)->
                  setSession(u.getUid(),ownerId,ids.get(which),labels.get(which),"OWNER"))
               .setNegativeButton("Batal",null).show();
