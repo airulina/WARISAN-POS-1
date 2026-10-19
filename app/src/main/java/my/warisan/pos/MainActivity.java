@@ -735,7 +735,12 @@ selectedDay=date();selectedMonth=selectedDay.substring(0,7);rangeStart=selectedD
       drawStaffPrinterSettings();
     }else if(activePage==12){
       String day=businessDay();
-      heading("Laporan Hari Ini","Paparan pekerja untuk branch "+branchAccounts.branchName());
+      heading("HARI INI · "+branchAccounts.branchName(),
+        "Sesi operasi pekerja · Opening / Closing dan jualan hari ini.");
+      add(body,text("OPENING / CLOSING",14,gold,true),-1,-2);gap(body,8);
+      drawPosSession();
+      gap(body,12);
+      add(body,text("RINGKASAN JUALAN HARI INI",12,gold,true),-1,-2);gap(body,7);
       LinearLayout overview=row();
       metric(overview,"JUALAN HARI INI",money(live.enabled()?(int)live.sales():saleTotalBetween(day,day)),blue,null);
       metric(overview,"TRANSAKSI HARI INI",String.valueOf(live.enabled()?live.transactions():transactionCountBetween(day,day)),gold,null);
@@ -744,8 +749,6 @@ selectedDay=date();selectedMonth=selectedDay.substring(0,7);rangeStart=selectedD
       metric(pay,"TUNAI",money(live.enabled()?(int)live.cash():sessionCash(day)),0xff46c979,null);
       metric(pay,"QR",money(live.enabled()?(int)live.qr():sessionQr(day)),blue,null);
       add(body,pay,-1,-2);gap(body,12);
-      add(body,text("OPENING / CLOSING",13,gold,true),-1,-2);gap(body,7);
-      drawPosSession();
       action("Cetak laporan harian",()->print(staffDailyReceipt(day)));
       action("Transaksi hari ini / Mohon Refund",()->saleHistory(day));
       action("Semak kelulusan refund",()->staffSecurity.showMyRefunds());
