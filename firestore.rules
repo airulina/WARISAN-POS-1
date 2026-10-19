@@ -31,6 +31,28 @@ service cloud.firestore {
       return signedIn() && request.auth.uid == ownerUid
         && !staffRoleStillReserved();
     }
+    // Worker relocation must be one atomic transaction. The source
+    // membership is removed (sales/receipts are separate, never deleted).
+    // The destination membership AND staff email index must match the new
+    // staffProfiles branch. Incomplete moves cannot be committed.
+    function completedStaffMove(ownerUid,workerUid,sourceBranch,destBranch,email) {
+      let destMember = getAfter(/databases/$(database)/documents/workspaces/$(ownerUid)/branches/$(destBranch)/members/$(workerUid)).data;
+      let mail = getAfter(/databases/$(database)/documents/staffEmails/$(email)).data;
+      return sourceBranch != destBranch
+        && exists(/databases/$(database)/documents/workspaces/$(ownerUid)/branches/$(destBranch))
+        && !existsAfter(/databases/$(database)/documents/workspaces/$(ownerUid)/branches/$(sourceBranch)/members/$(workerUid))
+        && destMember.uid == workerUid
+        && destMember.ownerUid == ownerUid
+        && destMember.branchId == destBranch
+        && destMember.role == "STAFF"
+        && destMember.active == true
+        && destMember.get("removed",false) == false
+        && mail.email == email
+        && mail.ownerUid == ownerUid
+        && mail.workerUid == workerUid
+        && mail.branchId == destBranch
+        && mail.get("removed",false) == false;
+    }
     function verifiedEmail() {
       return signedIn() && request.auth.token.email_verified == true;
     }
@@ -497,7 +519,40 @@ service cloud.firestore {
         && request.resource.data.diff(resource.data).affectedKeys()
           .hasOnly(["removed","updatedAt"])
         && getAfter(/databases/$(database)/documents/staffProfiles/$(resource.data.workerUid)).data.get("removed",false) == request.resource.data.removed;
+      // During a staff move the role index MUST track the same worker and
+      // new branch. Other Owners' email reservations stay untouchable.
+      allow update: if owner(resource.data.ownerUid)
+        && resource.data.role == "STAFF"
+        && resource.data.get("removed",false) == false
+        && request.resource.data.role == resource.data.role
+        && request.resource.data.email == resource.data.email
+        && request.resource.data.workerUid == resource.data.workerUid
+        && request.resource.data.ownerUid == resource.data.ownerUid
+        && request.resource.data.get("removed",false) == false
+        && request.resource.data.branchId != resource.data.branchId
+        && request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(["branchId","updatedAt"])
+        && getAfter(/databases/$(database)/documents/staffProfiles/$(resource.data.workerUid)).data.branchId
+          == request.resource.data.branchId
+        && !existsAfter(/databases/$(database)/documents/workspaces/$(resource.data.ownerUid)/branches/$(resource.data.branchId)/members/$(resource.data.workerUid))
+        && existsAfter(/databases/$(database)/documents/workspaces/$(resource.data.ownerUid)/branches/$(request.resource.data.branchId)/members/$(resource.data.workerUid));
       allow delete: if false;
+    }
+    // Owner-only, immutable audit of worker moves. Never contains payments
+    // or modifies an existing branch's inventory or receipts.
+    match /workspaces/{ownerUid}/staffTransfers/{transferId} {
+      allow get, list: if owner(ownerUid);
+      allow create: if owner(ownerUid)
+        && request.resource.data.ownerUid == ownerUid
+        && request.resource.data.actorUid == request.auth.uid
+        && request.resource.data.workerUid is string
+        && request.resource.data.fromBranch is string
+        && request.resource.data.toBranch is string
+        && request.resource.data.fromBranch != request.resource.data.toBranch
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.keys().hasOnly([
+          "ownerUid","actorUid","workerUid","fromBranch","toBranch","createdAt"]);
+      allow update, delete: if false;
     }
     match /staffProfiles/{uid} {
       allow get: if signedIn() && (request.auth.uid == uid
@@ -537,6 +592,26 @@ service cloud.firestore {
           && request.resource.data.deviceId.size() <= 128
           && request.resource.data.diff(resource.data).affectedKeys()
             .hasOnly(["deviceId","deviceBoundAt"]));
+      // Owner can reassign an ACTIVE employee to a different branch only
+      // if old membership is removed and new membership + index exist in
+      // the very same atomic transaction. Historical branch data untouched.
+      allow update: if owner(resource.data.ownerUid)
+        && resource.data.uid == uid
+        && resource.data.role == "STAFF"
+        && resource.data.active == true
+        && resource.data.get("removed",false) == false
+        && request.resource.data.uid == resource.data.uid
+        && request.resource.data.email == resource.data.email
+        && request.resource.data.ownerUid == resource.data.ownerUid
+        && request.resource.data.role == "STAFF"
+        && request.resource.data.active == true
+        && request.resource.data.get("removed",false) == false
+        && request.resource.data.branchId is string
+        && request.resource.data.branchName is string
+        && request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(["branchId","branchName","updatedAt"])
+        && completedStaffMove(resource.data.ownerUid,uid,
+          resource.data.branchId,request.resource.data.branchId,resource.data.email);
       allow delete: if false;
     }
     // Legacy Google invitation writes are disabled; email/password staff
