@@ -585,6 +585,7 @@ selectedDay=date();selectedMonth=selectedDay.substring(0,7);rangeStart=selectedD
       add(body,item,-1,-2);gap(body,8);
     }
     ownerSection("HISTORY & LAPORAN STOK");
+    action("Tarikh rekod tempatan: "+selectedStockDay+"   ▼",()->chooseStockDay());
     action("HISTORY EDAR / BAYAR / STOK PULANG",()->distributionHistory());
     action("REKOD STOK ROSAK",()->damageHistory());
     action("HISTORY PERUBAHAN STOK LIVE · CLOUD",()->live.showStockAdjustmentHistory());
@@ -595,8 +596,8 @@ selectedDay=date();selectedMonth=selectedDay.substring(0,7);rangeStart=selectedD
       11,muted,false),-1,-2);
   }
   void showLiveStockSummary(){
-    if(!branchAccounts.owner()||live==null||!live.enabled()){
-      message("Ringkasan ini hanya untuk stok Owner Live.");return;
+    if(!branchAccounts.owner()||live==null||!live.usable()){
+      message("Ringkasan Live perlukan Owner dan sambungan Cloud yang disahkan.");return;
     }
     StringBuilder report=new StringBuilder("BRANCH: "+branchAccounts.branchName()+
       "\nSUMBER: FIRESTORE LIVE\n\n");
