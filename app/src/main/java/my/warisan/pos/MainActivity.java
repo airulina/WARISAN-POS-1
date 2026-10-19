@@ -626,7 +626,8 @@ selectedDay=date();selectedMonth=selectedDay.substring(0,7);rangeStart=selectedD
       action("🏪  Maklumat Kedai",()->{activePage=8;draw();});
       action("⚠  Reset",()->{activePage=9;draw();});
     }else if(activePage==5){
-      heading("Account","Akaun, backup cloud dan salinan pada telefon.");
+      heading("Account",branchAccounts.staff()?
+        "Akaun pekerja, branch aktif dan tetapan printer telefon.":"Akaun Owner, backup cloud dan salinan pada telefon.");
       action(branchAccounts.staff()?"‹  Kembali ke HARI INI":"‹  Kembali ke Setting",()->{activePage=branchAccounts.staff()?12:4;draw();});
       add(body,text("ACCOUNT",11,muted,true),-1,-2);gap(body,7);
       if(!branchAccounts.staff())action(ownerPassword.isSet()?"🔐  Tukar Password Owner":"🔐  Tetapkan Password Owner",()->ownerPassword.change());
