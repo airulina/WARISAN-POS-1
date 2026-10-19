@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import assert from 'node:assert/strict';
 import { initializeTestEnvironment, assertSucceeds, assertFails } from '@firebase/rules-unit-testing';
-import { doc, setDoc, updateDoc, getDoc, runTransaction, serverTimestamp } from 'firebase/firestore';
+import { doc, setDoc, updateDoc, getDoc, runTransaction, serverTimestamp, writeBatch, deleteField } from 'firebase/firestore';
 
 const projectId='demo-warisan-pos-live';
 const today=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Kuala_Lumpur',
@@ -30,6 +30,10 @@ try{
     await setDoc(d(db,branch),{ownerUid:'owner',name:'Utama'});
     await setDoc(d(db,branch+'/members/staff'),{
       uid:'staff',email:'staff@example.test',role:'STAFF',active:true
+    });
+    await setDoc(d(db,'staffProfiles/staff'),{
+      uid:'staff',email:'staff@example.test',role:'STAFF',active:true,
+      ownerUid:'owner',branchId:'branch1',branchName:'Utama',createdAt:new Date()
     });
     await setDoc(d(db,inv),inventory);
     await setDoc(d(db,lastYear),{sales:100,cash:100,qr:0,transactions:1});
@@ -118,5 +122,31 @@ try{
   await assertSucceeds(updateDoc(d(staff,reqPath),{
     status:'COMPLETED',completedAt:serverTimestamp()
   }));
-  console.log('PASS: Owner/staff permissions, historical report privacy, atomic reserve/pay/refund, staff tampering denied.');
+  // Owner removes a former employee. Archive credentials/access but retain sales history.
+  const membership=d(owner,branch+'/members/staff');
+  const profile=d(owner,'staffProfiles/staff');
+  const revocation=writeBatch(owner);
+  revocation.update(membership,{
+    active:false,removed:true,removedAt:serverTimestamp(),updatedAt:serverTimestamp()
+  });
+  revocation.update(profile,{
+    active:false,removed:true,removedAt:serverTimestamp(),updatedAt:serverTimestamp()
+  });
+  await assertSucceeds(revocation.commit());
+  await assertFails(getDoc(d(staff,inv)));
+  await assertFails(getDoc(d(staff,daily)));
+  await assertFails(updateDoc(d(staff,reqPath),{status:'DENIED'}));
+  await assertSucceeds(getDoc(d(owner,profile)));
+  await assertSucceeds(getDoc(d(owner,daily))); // historical sales remain
+  await assertFails(updateDoc(d(staff,'staffProfiles/staff'),{active:true,removed:false}));
+  const restore=writeBatch(owner);
+  restore.update(membership,{
+    active:true,removed:false,removedAt:deleteField(),updatedAt:serverTimestamp()
+  });
+  restore.update(profile,{
+    active:true,removed:false,removedAt:deleteField(),updatedAt:serverTimestamp()
+  });
+  await assertSucceeds(restore.commit());
+  await assertSucceeds(getDoc(d(staff,inv)));
+  console.log('PASS: Owner/staff access, atomic sale/refund, archive former employee, restore access, preserve history.');
 }finally{await env.cleanup();}
