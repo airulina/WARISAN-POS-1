@@ -61,34 +61,119 @@ final class StaffSecurity {
         // Email/Password + Firestore work on the no-cost Spark plan.
         if(!accounts.owner()){host.message("Sesi Owner sudah tamat.");return;}
         final String oid=accounts.ownerUid(),bid=accounts.branchId(),name=accounts.branchName();
-        staffProvisionAuth.createUserWithEmailAndPassword(mail,p).addOnSuccessListener(result->{
-          FirebaseUser worker=result.getUser();
-          if(worker==null){host.message("Gagal cipta akaun pekerja.");return;}
-          Map<String,Object> profile=new HashMap<>();
-          profile.put("uid",worker.getUid());profile.put("email",mail);
-          profile.put("role","STAFF");profile.put("active",true);
-          profile.put("ownerUid",oid);profile.put("branchId",bid);
-          profile.put("branchName",name);profile.put("createdAt",new Date());
-          DocumentReference member=db.collection("workspaces").document(oid)
-            .collection("branches").document(bid).collection("members").document(worker.getUid());
-          Map<String,Object> m=new HashMap<>(profile);
-          com.google.firebase.firestore.WriteBatch batch=db.batch();
-          batch.set(db.collection("staffProfiles").document(worker.getUid()),profile);
-          batch.set(member,m);
-          batch.commit().addOnSuccessListener(done->{
-            worker.sendEmailVerification().addOnCompleteListener(verification->{
-              staffProvisionAuth.signOut();
-              host.message("Akaun pekerja didaftarkan. Sahkan email sebelum login.");
-            });
-          }).addOnFailureListener(error->{
-            worker.delete().addOnCompleteListener(deleted->staffProvisionAuth.signOut());
-            host.message("Profil pekerja gagal disimpan: "+error.getMessage());
-          });
-        }).addOnFailureListener(error->host.message(
-          "Gagal daftar pekerja. Aktifkan Email/Password dalam Firebase Authentication: "+error.getMessage()));
+        // Before creating a Firebase Auth account, validate the exact Owner branch
+        // against the server. Otherwise failed Firestore setup can leave orphan users.
+        db.collection("workspaces").document(oid).collection("branches").document(bid)
+          .get(com.google.firebase.firestore.Source.SERVER)
+          .addOnSuccessListener(branch->{
+            if(!accounts.owner()||!oid.equals(accounts.ownerUid())||
+               !bid.equals(accounts.branchId())){
+              showRegistrationProblem("Sesi Owner sudah berubah. Login Owner semula dan pilih branch.",null);
+              return;
+            }
+            if(!branch.exists()){
+              showRegistrationProblem("Branch Owner belum wujud dalam Firestore. Pilih semula Branch Utama melalui Account.",null);
+              return;
+            }
+            provisionWorker(mail,p,oid,bid,name);
+          }).addOnFailureListener(error->
+            showRegistrationProblem(friendlyRegistrationError("FIRESTORE",error),error));
 
       }).setNegativeButton("Batal",null).show();
   }
+  void showRegistrationProblem(String text,Exception ignored){
+    // A dialog is deliberately used instead of a truncated Android Toast.
+    host.darkBuilder().setTitle("DAFTAR PEKERJA GAGAL")
+      .setMessage(text+"\n\nJangan uninstall aplikasi atau padam data POS.")
+      .setPositiveButton("FAHAM",null).show();
+  }
+  String friendlyRegistrationError(String stage,Exception e){
+    String code="";
+    if(e instanceof com.google.firebase.auth.FirebaseAuthException)
+      code=((com.google.firebase.auth.FirebaseAuthException)e).getErrorCode();
+    if(e instanceof com.google.firebase.firestore.FirebaseFirestoreException)
+      code=((com.google.firebase.firestore.FirebaseFirestoreException)e).getCode().name();
+    if(code==null)code="";
+    String err=String.valueOf(e==null?"":e.getMessage());
+    if("ERROR_EMAIL_ALREADY_IN_USE".equals(code)||err.toLowerCase(Locale.ROOT).contains("already in use")){
+      return "Email ini SUDAH ada dalam Firebase Authentication. Bukan masalah Email/Password belum aktif. "+
+        "Semak Firebase Console → Authentication → Users. Jika akaun ini baru dicipta dalam cubaan tadi, "+
+        "jangan daftar semula berulang kali; hubungi Owner untuk semak rekod pekerja.";
+    }
+    if("ERROR_OPERATION_NOT_ALLOWED".equals(code)){
+      return "Kaedah Email/Password tidak dibenarkan oleh Firebase untuk projek app. "+
+        "Sahkan projek Firebase WARISAN POS yang digunakan oleh APK, bukan projek lain.";
+    }
+    if("ERROR_WEAK_PASSWORD".equals(code)){
+      return "Password ditolak Firebase kerana terlalu lemah. Gunakan password yang lebih panjang dan sukar diteka.";
+    }
+    if("ERROR_INVALID_EMAIL".equals(code)){
+      return "Format email tidak diterima oleh Firebase.";
+    }
+    if("PERMISSION_DENIED".equals(code)||err.contains("PERMISSION_DENIED")){
+      return "Firebase Authentication mungkin berjaya, tetapi Firestore menolak akses. "+
+        "Buka Firebase Console → Firestore Database → Rules. "+
+        "Peraturan keselamatan WARISAN POS terkini perlu disemak dan di-Publish dahulu. "+
+        "Aktifkan Email/Password SAHAJA tidak mencukupi.";
+    }
+    if("UNAVAILABLE".equals(code)||"DEADLINE_EXCEEDED".equals(code)||
+      err.toLowerCase(Locale.ROOT).contains("network")){
+      return "Server Firebase tidak dapat dicapai. Semak sambungan internet dan cuba lagi.";
+    }
+    if("NOT_FOUND".equals(code)){
+      return "Dokumen Owner/branch atau Firestore Database belum wujud. "+
+        "Pastikan Firebase Firestore Database telah diaktifkan untuk projek warisan-pos.";
+    }
+    String label="FIRESTORE".equals(stage)?"Firestore":"Firebase Authentication";
+    return label+" gagal: "+(code.isEmpty()?"":code+" · ")+
+      (err.length()>180?err.substring(0,180):err)+
+      "\n\nLihat Firebase Console → Authentication → Users dan Firestore Database → Rules.";
+  }
+  void provisionWorker(String mail,String password,String oid,String bid,String name){
+    if(!accounts.owner()||accounts.user()==null||!oid.equals(accounts.ownerUid())){
+      showRegistrationProblem("Owner belum log masuk atau branch telah berubah.",null);return;
+    }
+    if(staffProvisionAuth.getCurrentUser()!=null)staffProvisionAuth.signOut();
+    staffProvisionAuth.createUserWithEmailAndPassword(mail,password)
+      .addOnSuccessListener(result->{
+        FirebaseUser worker=result.getUser();
+        if(worker==null){showRegistrationProblem("Firebase tidak memulangkan ID pekerja.",null);return;}
+        Map<String,Object> profile=new HashMap<>();
+        profile.put("uid",worker.getUid());profile.put("email",mail);
+        profile.put("role","STAFF");profile.put("active",true);
+        profile.put("ownerUid",oid);profile.put("branchId",bid);
+        profile.put("branchName",name);profile.put("createdAt",new Date());
+        DocumentReference member=db.collection("workspaces").document(oid)
+          .collection("branches").document(bid).collection("members").document(worker.getUid());
+        com.google.firebase.firestore.WriteBatch batch=db.batch();
+        batch.set(db.collection("staffProfiles").document(worker.getUid()),profile);
+        batch.set(member,new HashMap<>(profile));
+        batch.commit().addOnSuccessListener(done->
+          worker.sendEmailVerification().addOnCompleteListener(task->{
+            staffProvisionAuth.signOut();
+            if(task.isSuccessful())host.darkBuilder().setTitle("PEKERJA BERJAYA DIDAFTAR")
+              .setMessage(mail+"\n\nPekerja perlu buka email, sahkan alamat, "+
+                "kemudian login melalui Email + Password.")
+              .setPositiveButton("OK",null).show();
+            else host.darkBuilder().setTitle("AKAUN PEKERJA SUDAH DIDAFTAR")
+              .setMessage("Akaun dan akses branch sudah disimpan, tetapi email pengesahan gagal dihantar. "+
+                "Semak internet/Firebase Authentication. Jangan daftar email sama kali kedua.")
+              .setPositiveButton("OK",null).show();
+          })
+        ).addOnFailureListener(error->{
+          // The Auth user has been created already; try to remove an orphaned
+          // account without changing existing Worker / Owner Firebase accounts.
+          final String reason=friendlyRegistrationError("FIRESTORE",error);
+          worker.delete().addOnCompleteListener(cleanup->{
+            staffProvisionAuth.signOut();
+            showRegistrationProblem(reason+
+              (cleanup.isSuccessful()?"\n\nAkaun sementara dibatalkan.":"\n\nAkaun mungkin masih dalam Firebase Users; jangan cuba daftar email yang sama lagi."),error);
+          });
+        });
+      }).addOnFailureListener(error->
+        showRegistrationProblem(friendlyRegistrationError("AUTH",error),error));
+  }
+
   void loginEmployee(){
     LinearLayout form=host.col();form.setPadding(host.dp(18),0,host.dp(18),0);
     EditText email=input("Email pekerja",false),password=input("Password pekerja",true);
