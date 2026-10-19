@@ -334,8 +334,6 @@ service cloud.firestore {
           allow list: if owner(ownerUid);
           allow create: if owner(ownerUid) ||
             (member(ownerUid,branchId)
-              && get(/databases/$(database)/documents/workspaces/$(ownerUid)/branches/$(branchId))
-                .data.get("openingEnabled",true) == true
               && request.resource.data.ownerUid == ownerUid
               && request.resource.data.branchId == branchId
               && request.resource.data.day == dayId
@@ -350,9 +348,6 @@ service cloud.firestore {
               && request.resource.data.ownerUid == ownerUid
               && request.resource.data.branchId == branchId
               && request.resource.data.day == dayId
-              && (request.resource.data.open == false ||
-                get(/databases/$(database)/documents/workspaces/$(ownerUid)/branches/$(branchId))
-                  .data.get("openingEnabled",true) == true)
               && request.resource.data.diff(resource.data).affectedKeys()
                 .hasOnly(["open","opening","closing","openedBy","closedBy",
                           "openedByEmail","closedByEmail","updatedAt"])
