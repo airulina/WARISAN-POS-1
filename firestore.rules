@@ -182,6 +182,25 @@ service cloud.firestore {
               && inviteMatch(request.resource.data.invitationId,ownerUid,branchId));
           allow update, delete: if owner(ownerUid);
         }
+        // Owner-only corrections to server inventory. Never a worker operation.
+        match /stockAdjustments/{adjustmentId} {
+          allow get, list: if owner(ownerUid);
+          allow create: if owner(ownerUid)
+            && request.resource.data.ownerUid == ownerUid
+            && request.resource.data.branchId == branchId
+            && request.resource.data.actorUid == request.auth.uid
+            && request.resource.data.type == "OWNER_CORRECTION"
+            && request.resource.data.item is int
+            && request.resource.data.before is number
+            && request.resource.data.after is number
+            && request.resource.data.difference is number
+            && request.resource.data.difference ==
+              request.resource.data.after-request.resource.data.before
+            && request.resource.data.keys().hasOnly([
+              "ownerUid","branchId","actorUid","item","name","before","after",
+              "difference","type","createdAt"]);
+          allow update, delete: if false;
+        }
         match /live/{docId} {
           allow read: if owner(ownerUid) || member(ownerUid,branchId);
           allow create: if owner(ownerUid) && docId == "current"
