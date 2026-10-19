@@ -534,35 +534,82 @@ selectedDay=date();selectedMonth=selectedDay.substring(0,7);rangeStart=selectedD
     add(body,text("Tetapan ini disimpan untuk telefon ini sahaja. Pekerja tidak boleh mengubah stok, duit atau laporan Owner.",12,muted,false),-1,-2);
   }
   void drawLiveBranchStock(){
-    heading("Stok · "+branchAccounts.branchName(),"OWNER · Baki Live daripada Firestore mengikut branch.");
+    heading("Stok · "+branchAccounts.branchName(),
+      "OWNER · Baki stok sebenar daripada Firebase bagi branch ini.");
     action("‹  Kembali ke semua Branch",()->{activePage=1;draw();});
     action("☁  Live Branch: "+(live.usable()?"ONLINE":"Menunggu Server"),()->live.showDashboard());
-    if(!live.usable()){
-      add(body,text("Tidak boleh edit atau restock sehingga server Live online. Sambung internet dahulu.",12,0xffff6b6b,true),-1,-2);
-    }
+    if(!live.usable())
+      add(body,text("Offline: semua tindakan tambah, edit, rosak, Edar dan stok pulang "+
+        "dikunci sehingga Cloud disahkan.",12,0xffff6b6b,true),-1,-2);
+    add(body,text("Stok awal branch Live ditetapkan semasa Live diaktifkan. "+
+      "Gunakan EDIT BAKI untuk pembetulan stok awal/semasa, bukan pembelian baru.",
+      11,muted,false),-1,-2);gap(body,9);
     for(int i=0;i<names.length;i++){
       final int id=i;
       if(posPrefs().getBoolean("menu_hidden_"+id,false))continue;
-      if(unlimited(id)){action(names[id]+" · tanpa had unit",()->message("Item ini tiada had stok unit."));continue;}
+      if(unlimited(id)){action(names[id]+" · tanpa had unit",()->
+        message("Item ini tiada had stok unit."));continue;}
       LinearLayout item=col();item.setPadding(dp(12),dp(12),dp(12),dp(12));
       item.setBackground(shape(surface,13));
       add(item,text(names[id],16,ink,true),-1,-2);gap(item,5);
-      add(item,text("BAKI STOK LIVE: "+stock(id)+" "+(id<3?"cucuk":"unit"),17,gold,true),-1,-2);
-      gap(item,8);
+      add(item,text("BAKI STOK LIVE: "+stock(id)+" "+(id<3?"cucuk":"unit"),
+        17,gold,true),-1,-2);gap(item,8);
       LinearLayout actions=row();
       TextView restock=chip("+ TAMBAH STOK",blue,Color.WHITE);
       restock.setGravity(Gravity.CENTER);
       TextView edit=chip("EDIT BAKI",0xffffd54f,0xff6d3b16);
       edit.setGravity(Gravity.CENTER);
       actions.addView(restock,new LinearLayout.LayoutParams(0,dp(44),1));
-      LinearLayout.LayoutParams params=new LinearLayout.LayoutParams(0,dp(44),1);
-      params.leftMargin=dp(8);actions.addView(edit,params);
-      restock.setAlpha(live.usable()?1f:.4f);edit.setAlpha(live.usable()?1f:.4f);
+      LinearLayout.LayoutParams ep=new LinearLayout.LayoutParams(0,dp(44),1);
+      ep.leftMargin=dp(8);actions.addView(edit,ep);
       restock.setEnabled(live.usable());edit.setEnabled(live.usable());
+      restock.setAlpha(live.usable()?1f:.4f);edit.setAlpha(live.usable()?1f:.4f);
       restock.setOnClickListener(v->live.restockDialog(id));
       edit.setOnClickListener(v->live.editStockDialog(id));
-      add(item,actions,-1,-2);add(body,item,-1,-2);gap(body,8);
+      add(item,actions,-1,-2);gap(item,7);
+      LinearLayout extras=row();
+      TextView damage=chip("− STOK ROSAK",0xffaa3844,Color.WHITE);
+      damage.setGravity(Gravity.CENTER);
+      extras.addView(damage,new LinearLayout.LayoutParams(0,dp(42),1));
+      damage.setEnabled(live.usable());damage.setAlpha(live.usable()?1f:.4f);
+      damage.setOnClickListener(v->damageEntry(id));
+      if(distributionPrice(id)>0){
+        TextView edar=chip("EDAR STOK",0xff865c25,Color.WHITE);
+        edar.setGravity(Gravity.CENTER);
+        LinearLayout.LayoutParams pp=new LinearLayout.LayoutParams(0,dp(42),1);
+        pp.leftMargin=dp(8);extras.addView(edar,pp);
+        edar.setEnabled(live.usable());edar.setAlpha(live.usable()?1f:.4f);
+        edar.setOnClickListener(v->distributeStock(id));
+      }
+      add(item,extras,-1,-2);
+      add(body,item,-1,-2);gap(body,8);
     }
+    ownerSection("HISTORY & LAPORAN STOK");
+    action("HISTORY EDAR / BAYAR / STOK PULANG",()->distributionHistory());
+    action("REKOD STOK ROSAK",()->damageHistory());
+    action("HISTORY PERUBAHAN STOK LIVE · CLOUD",()->live.showStockAdjustmentHistory());
+    action("RINGKASAN BAKI STOK LIVE",()->showLiveStockSummary());
+    add(body,text("History Edar, bayaran dan rosak terdahulu disimpan pada "+
+      "telefon branch ini. History perubahan Cloud dibaca terus dari Firebase. "+
+      "Jangan anggap rekod tempatan sebagai semua sejarah Cloud.",
+      11,muted,false),-1,-2);
+  }
+  void showLiveStockSummary(){
+    if(!branchAccounts.owner()||live==null||!live.enabled()){
+      message("Ringkasan ini hanya untuk stok Owner Live.");return;
+    }
+    StringBuilder report=new StringBuilder("BRANCH: "+branchAccounts.branchName()+
+      "\\nSUMBER: FIRESTORE LIVE\\n\\n");
+    for(int i=0;i<names.length;i++){
+      if(posPrefs().getBoolean("menu_hidden_"+i,false))continue;
+      if(unlimited(i)){report.append(names[i]).append(": tanpa had unit\\n");continue;}
+      report.append(names[i]).append(": ").append(stock(i))
+        .append(i<3?" cucuk":" unit").append("\\n");
+    }
+    report.append("\\nBaki semasa disahkan melalui Cloud. "+
+      "Untuk sejarah pembetulan, tekan HISTORY PERUBAHAN STOK LIVE.");
+    darkBuilder().setTitle("RINGKASAN STOK LIVE").setMessage(report.toString())
+      .setPositiveButton("TUTUP",null).show();
   }
   /** Compact two-column owner cards replace tall duplicate actions. */
   void ownerTile(LinearLayout line,String name,String detail,Runnable onClick){
