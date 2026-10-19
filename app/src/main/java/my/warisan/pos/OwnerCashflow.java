@@ -295,6 +295,96 @@ final class OwnerCashflow {
       host.blue,()->{host.activePage=16;host.draw();});
     host.add(host.body,tx,-1,-2);host.gap(host.body,9);
     host.gap(host.body,8);
+    host.action("📊  LAPORAN KESELURUHAN · SEMUA BRANCH",()->{
+      host.activePage=21;host.draw();
+    });
+    host.action("🏪  PILIH LAPORAN SATU BRANCH",()->{
+      host.activePage=16;host.draw();
+    });
+    host.gap(host.body,8);
+    host.add(host.body,host.text("PEMBEKAL · BRANCH AKTIF: "+
+      accounts.branchName(),12,host.gold,true),-1,-2);
+    host.gap(host.body,5);
+    host.action("BAYARAN PEMBEKAL · "+host.money(host.supplierDue()),()->host.supplierHub());
+    host.action("HISTORY BAYARAN PEMBEKAL",()->host.supplierAllHistory());
+    host.add(host.body,host.text("Bayaran pembekal hanya rekod pada telefon Owner bagi branch "+
+      "aktif, bukan hutang gabungan semua branch. Kos pembelian tidak ditolak dua kali.",
+      11,host.muted,false),-1,-2);
+    host.gap(host.body,8);
+    dataMessage();
+  }
+  TreeMap<String,Day> overallDays(){
+    TreeMap<String,Day> byDay=new TreeMap<>();
+    for(BranchRow branch:rows){
+      for(Map.Entry<String,Day> record:branch.combined().entrySet()){
+        Day day=byDay.get(record.getKey());
+        if(day==null){day=new Day();byDay.put(record.getKey(),day);}
+        day.add(record.getValue());
+      }
+    }
+    return byDay;
+  }
+  void drawOverallReport(){
+    if(!accounts.owner()){
+      host.heading("Akses Ditolak","Laporan gabungan hanya untuk Owner.");return;
+    }
+    host.cashDailyMode=false;
+    host.heading("LAPORAN KESELURUHAN · SEMUA BRANCH",
+      "Jumlah jualan gabungan dan pecahan setiap branch, tanpa menggandakan resit Live.");
+    host.action("‹  KEMBALI KE DUIT",()->{host.activePage=3;host.draw();});
+    host.action("Bulan: "+host.monthLabel(host.selectedMonth)+"  ▼",()->host.chooseMonth());
+    ensureLoaded();
+    if(!ready()){
+      dataMessage();
+      host.action("↻  CUBA SEMULA",()->refresh());
+      return;
+    }
+    Day total=overall();
+    host.add(host.body,host.text("SEMUA BRANCH · "+period(),12,host.gold,true),-1,-2);
+    host.gap(host.body,7);
+    LinearLayout summary=host.row();
+    host.metric(summary,"JUMLAH JUALAN",rm(total.sales),host.blue,null);
+    host.metric(summary,"TRANSAKSI",String.valueOf(total.transactions),host.gold,null);
+    host.add(host.body,summary,-1,-2);host.gap(host.body,8);
+    LinearLayout methods=host.row();
+    host.metric(methods,"TUNAI",rm(total.cash),host.ink,null);
+    host.metric(methods,"QR / DUITNOW",rm(total.qr),host.blue,null);
+    host.add(host.body,methods,-1,-2);host.gap(host.body,10);
+    if(total.unknown>0)
+      host.add(host.body,host.text("BAYARAN TIDAK DIKELASKAN: "+rm(total.unknown),
+        12,host.gold,true),-1,-2);
+    host.add(host.body,host.text("GRAF JUALAN · SEMUA BRANCH",13,host.gold,true),-1,-2);
+    host.gap(host.body,7);
+    host.add(host.body,new OwnerSalesChart(host,overallDays(),host.selectedMonth),
+      -1,host.dp(218));
+    host.gap(host.body,11);
+    host.action("📄  EXPORT PDF A4 · LAPORAN SEMUA BRANCH",()->{
+      OwnerOverallReportPdf.print(host,host.selectedMonth,rows,overallDays());
+    });
+    host.add(host.body,host.text("PECAHAN IKUT BRANCH",13,host.gold,true),-1,-2);
+    host.gap(host.body,7);
+    for(BranchRow branch:rows){
+      Day figure=branch.totals();
+      host.action("🏪  "+branch.name+"  ·  "+rm(figure.sales)+
+        "  ·  "+figure.transactions+" transaksi",()->{
+        selectedBranchId=branch.id;
+        host.activePage=19;host.draw();
+      });
+    }
+    host.gap(host.body,7);
+    host.add(host.body,host.text("Untung bersih dan kos keseluruhan belum dipaparkan: "+
+      "kos pembekal, stok rosak dan operasi setiap branch belum semuanya "+
+      "diselaraskan ke Cloud. Jangan anggap jualan kasar sebagai untung.",
+      12,host.muted,false),-1,-2);
+    host.gap(host.body,8);
+    host.add(host.body,host.text("JUALAN MENGIKUT TARIKH · SEMUA BRANCH",13,host.gold,true),-1,-2);
+    host.gap(host.body,6);
+    for(Map.Entry<String,Day> entry:overallDays().descendingMap().entrySet()){
+      Day d=entry.getValue();
+      host.add(host.body,host.text(entry.getKey()+"  ·  "+rm(d.sales)+
+        "  ·  Tunai "+rm(d.cash)+"  ·  QR "+rm(d.qr),12,host.ink,false),-1,-2);
+      host.gap(host.body,4);
+    }
     dataMessage();
   }
   void drawBranchList(){
