@@ -406,6 +406,11 @@ final class OwnerCashflow {
         12,host.muted,false),-1,-2);
     }
     host.gap(host.body,12);
+    host.add(host.body,host.text("GRAF JUALAN · "+chosen.name,13,host.gold,true),-1,-2);
+    host.gap(host.body,7);
+    host.add(host.body,new OwnerSalesChart(host,chosen.combined(),host.selectedMonth),
+      -1,host.dp(218));
+    host.gap(host.body,9);
     host.action("📊  EXPORT PDF A4 · GRAF & REKOD JUALAN",()->{
       OwnerReportPdf.print(host,chosen,period(),chosen.id.equals(accounts.branchId()));
     });
