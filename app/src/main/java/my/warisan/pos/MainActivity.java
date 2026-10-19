@@ -234,10 +234,15 @@ selectedDay=date();selectedMonth=selectedDay.substring(0,7);rangeStart=selectedD
         add(body,text("Belum ada akaun? Sign Up untuk pengguna baru sahaja.",12,muted,false),-1,-2);
         action("SIGN UP · DAFTAR AKAUN BAHARU",()->showNewUserSignup());
       }else{
-        action("Log In Owner Sedia Ada",()->branchAccounts.chooseBranch());
-        action("Daftar Owner Baharu / Sign Up",()->branchAccounts.registerOwner());
-        if(branchAccounts.hasLegacyRecords())
-          action("Owner Lama · Gunakan Data POS Asal",()->branchAccounts.linkLegacyOwner());
+        if(branchAccounts.staff()){
+          add(body,text("Menyemak status branch pekerja di Firebase. "+
+            "Akses hanya dibuka apabila branch berstatus BUKA.",13,gold,true),-1,-2);
+        }else{
+          action("Log In Owner Sedia Ada",()->branchAccounts.chooseBranch());
+          action("Daftar Owner Baharu / Sign Up",()->branchAccounts.registerOwner());
+          if(branchAccounts.hasLegacyRecords())
+            action("Owner Lama · Gunakan Data POS Asal",()->branchAccounts.linkLegacyOwner());
+        }
         action("Log keluar",()->{
           if(live!=null)live.stop();
           firebaseAuth.signOut();
@@ -622,9 +627,10 @@ selectedDay=date();selectedMonth=selectedDay.substring(0,7);rangeStart=selectedD
       action("History customer / Refund",()->{if(salesReportMode==0)saleHistory(selectedDay);else if(salesReportMode==1)saleHistory(selectedMonth);else new AlertDialog.Builder(this).setTitle("History Tarikh Dipilih").setMessage("History transaksi untuk "+rs+" hingga "+re+" dipaparkan pada bahagian Transaksi Terkini di atas.").setPositiveButton("OK",null).show();});action("Export laporan Excel / PDF",()->exportMenu());
     }else if(activePage==3){heading("Duit / POS","Fokus jualan harian dan sesi POS. Operasi bermula sekitar 4 petang; sesi kekal pada tarikh Opening sehingga Closing dibuat.");
       if(branchAccounts.owner()){
+        action("🏪  URUS STATUS BRANCH · BUKA / OFF DAY / STOK HABIS",
+          ()->branchAccounts.manageBranchOperatingStatus());
         action("🏪  CASHFLOW LIVE · Status Opening Semua Branch",()->live.showOpeningBranches());
         live.drawOpeningSummary();
-        action("⚠  Semak Cubaan Opening Di Luar Kawasan",()->live.showOpeningAlerts());
       }
       LinearLayout mode=row();TextView daily=chip("HARIAN",cashDailyMode?gold:0xff294563,cashDailyMode?0xff17202c:Color.WHITE),monthlyBtn=chip("BULANAN",!cashDailyMode?gold:0xff294563,!cashDailyMode?0xff17202c:Color.WHITE);daily.setGravity(Gravity.CENTER);monthlyBtn.setGravity(Gravity.CENTER);mode.addView(daily,new LinearLayout.LayoutParams(0,dp(42),1));LinearLayout.LayoutParams mlp=new LinearLayout.LayoutParams(0,dp(42),1);mlp.leftMargin=dp(7);mode.addView(monthlyBtn,mlp);add(body,mode,-1,-2);gap(body,9);daily.setOnClickListener(v->{cashDailyMode=true;draw();});monthlyBtn.setOnClickListener(v->{cashDailyMode=false;draw();});
       if(cashDailyMode)action("Tarikh: "+selectedCashDay+"   ▼",()->chooseCashDay());else action("Bulan: "+monthLabel(selectedMonth)+"   ▼",()->chooseMonth());
@@ -690,8 +696,8 @@ selectedDay=date();selectedMonth=selectedDay.substring(0,7);rangeStart=selectedD
       gap(body,7);
       add(body,text(branchAccounts.staff()?"AKSES PEKERJA":"OWNER / BRANCH / PEKERJA",11,gold,true),-1,-2);gap(body,7);
       if(branchAccounts.owner()){
-        action("📍  Tetapkan Lokasi GPS Branch "+branchAccounts.branchName(),()->presence.ownerSetBranchLocation());
-        action("🏪  Buka / Tutup Opening Branch Ini",()->presence.ownerSetBranchOpenState());
+        action("🏪  URUS OFF DAY / STOK HABIS SEMUA BRANCH",
+          ()->branchAccounts.manageBranchOperatingStatus());
         action("👥  LIHAT SEMUA PEKERJA · Aktif / Berhenti",()->staffSecurity.manageWorkers());
         gap(body,8);
       }
@@ -870,9 +876,13 @@ selectedDay=date();selectedMonth=selectedDay.substring(0,7);rangeStart=selectedD
       if(live==null||!live.usable()){
         message("Opening pekerja memerlukan Cloud Live ONLINE.");return;
       }
-      presence.verifyOpening(amount,day,()->{
-        if(!branchAccounts.staff()||posSessionOpen())return;
-        live.sessionConfirmed(true,day,amount,()->persistPosOpening(day,amount));
+      if(!branchAccounts.staffBranchVerified){
+        message("Branch belum disahkan BUKA oleh Firebase.");return;
+      }
+      // Firestore checks the operating status again when creating the session.
+      live.sessionConfirmed(true,day,amount,()->{
+        if(!branchAccounts.staff()||!branchAccounts.staffBranchVerified||posSessionOpen())return;
+        persistPosOpening(day,amount);
       });
     }else persistPosOpening(day,amount);
   }
