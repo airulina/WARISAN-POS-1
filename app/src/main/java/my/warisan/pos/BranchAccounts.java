@@ -226,7 +226,10 @@ final class BranchAccounts {
     identity.edit().putBoolean("configured",true).putString("sessionUid",uid)
       .putString("ownerUid",ownerUid).putString("branchId",branchId)
       .putString("branchName",branchName).putString("role",role).commit();
-    host.loadMenu();host.activePage=0;
+    host.loadMenu();
+    // After a successful worker login, show the Opening/Closing dashboard first.
+    // Owner continues to land on MENU; role and branch records are unchanged.
+    host.activePage="STAFF".equals(role)?12:0;
     if(host.live!=null)host.live.attach();
     host.draw();
   }
