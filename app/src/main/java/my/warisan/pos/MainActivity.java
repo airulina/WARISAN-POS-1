@@ -1235,9 +1235,65 @@ googleSignInClient = GoogleSignIn.getClient(this, gso);snapshotBeforeUpdate317()
   }
   String orderItemsText(JSONArray q){StringBuilder b=new StringBuilder();if(q!=null)for(int i=0;i<Math.min(q.length(),names.length);i++){int n=q.optInt(i);if(n>0){if(b.length()>0)b.append("  •  ");b.append(names[i]).append(" × ").append(n);}}return b.toString();}
   String orderSlip(JSONObject o){StringBuilder b=new StringBuilder();b.append(centerReceipt(posPrefs().getString("shop_name","WARISAN FROZEN"))).append("--------------------------------\n").append(centerReceipt("SLIP ORDER")).append(line("Order",String.format(Locale.US,"#%04d",o.optInt("order")))).append(line("Masa",o.optString("time"))).append("--------------------------------\n");JSONArray q=o.optJSONArray("qty");if(q!=null)for(int i=0;i<Math.min(q.length(),names.length);i++){int n=q.optInt(i);if(n>0)b.append(names[i]).append("\n").append(line("  "+n+" x "+money(prices[i]),money(n*prices[i])));}return b.append("--------------------------------\n").append(line("JUMLAH",money(o.optInt("total")))).append(centerReceipt("BELUM BAYAR")).append("\n\n").toString();}
-  void confirmOrder(){if(sum()==0){message("Tambah menu dahulu");return;}for(int i=0;i<qty.length;i++)if(!unlimited(i)&&qty[i]>stock(i)){message("Stok "+names[i]+" tidak cukup. Semak pesanan.");return;}try{String orderDay=businessDay();int order=posPrefs().getInt("order_seq_"+orderDay,0)+1;JSONObject o=new JSONObject();o.put("time",timestamp());o.put("businessDay",orderDay);o.put("order",order);o.put("total",sum());o.put("paid",false);o.put("cancelled",false);JSONArray q=new JSONArray();for(int n:qty)q.put(n);o.put("qty",q);JSONArray list=entries("pending_orders");list.put(o);if(!posPrefs().edit().putString("pending_orders",list.toString()).putInt("order_seq_"+orderDay,order).putInt("orders_"+orderDay,posPrefs().getInt("orders_"+orderDay,0)+1).commit())throw new IOException();String slip=orderSlip(o);Arrays.fill(qty,0);draw();showOrderConfirmed(order,slip);}catch(Exception e){message("Order gagal disimpan.");}}
+  void confirmOrder(){
+    if(sum()<=0){message("Tambah menu dahulu");return;}
+    int[] purchased=Arrays.copyOf(qty,qty.length);
+    for(int i=0;i<purchased.length;i++)if(!unlimited(i)&&purchased[i]>stock(i)){
+      message("Stok "+names[i]+" tidak cukup. Semak pesanan.");return;
+    }
+    String day=businessDay();int total=sum();
+    if(branchAccounts.staff()&&!live.enabled()){
+      message("Owner belum aktifkan Live. Pekerja tidak boleh jual tanpa stok cloud.");return;
+    }
+    if(live.enabled()){
+      if(!live.usable()){message("Live OFFLINE. Sambung internet sebelum simpan order.");return;}
+      String id=UUID.randomUUID().toString();
+      live.reserve(purchased,total,day,id,()->saveConfirmedOrder(purchased,total,day,id));
+      return;
+    }
+    saveConfirmedOrder(purchased,total,day,"");
+  }
+  void saveConfirmedOrder(int[] purchased,int due,String orderDay,String cloudId){
+    try{
+      int order=posPrefs().getInt("order_seq_"+orderDay,0)+1;
+      JSONObject o=new JSONObject();
+      o.put("time",timestamp());o.put("businessDay",orderDay);
+      o.put("order",order);o.put("total",due);
+      o.put("paid",false);o.put("cancelled",false);
+      if(!cloudId.isEmpty())o.put("liveId",cloudId);
+      JSONArray q=new JSONArray();for(int n:purchased)q.put(n);o.put("qty",q);
+      JSONArray list=entries("pending_orders");list.put(o);
+      android.content.SharedPreferences.Editor editor=posPrefs().edit()
+        .putString("pending_orders",list.toString())
+        .putInt("order_seq_"+orderDay,order)
+        .putInt("orders_"+orderDay,posPrefs().getInt("orders_"+orderDay,0)+1);
+      if(!editor.commit())throw new IOException("Storan gagal");
+      String slip=orderSlip(o);Arrays.fill(qty,0);draw();showOrderConfirmed(order,slip);
+    }catch(Exception e){
+      message(cloudId.isEmpty()?"Order gagal disimpan.":"Order disimpan di cloud tetapi telefon gagal simpan. JANGAN buat order baru; semak pemulihan Live.");
+    }
+  }
   void showOrderConfirmed(int order,String slip){LinearLayout box=col();box.setPadding(dp(20),dp(18),dp(20),dp(8));box.setBackground(shape(surface,18));TextView title=text("ORDER #"+String.format(Locale.US,"%04d",order)+" DISAHKAN",20,ink,true);add(box,title,-1,-2);gap(box,8);add(box,text("Order disimpan sebagai BELUM BAYAR.",14,muted,false),-1,-2);add(box,text("Print slip untuk dapur / rujukan jika perlu.",13,muted,false),-1,-2);gap(box,12);AlertDialog dialog=darkBuilder().setView(box).setPositiveButton("PRINT ORDER",(d,w)->print(slip)).setNegativeButton("TERUSKAN TANPA PRINT",null).create();dialog.setOnShowListener(v->{styleDarkDialogNow(dialog);dialog.getButton(AlertDialog.BUTTON_NEGATIVE).setTextColor(ink);});dialog.show();}
-  void cancelPendingOrder(int index){JSONArray list=entries("pending_orders");JSONObject o=list.optJSONObject(index);if(o==null||o.optBoolean("paid",false)||o.optBoolean("cancelled",false)){message("Order ini sudah dibayar, dibatalkan atau tidak dijumpai.");return;}int order=o.optInt("order");LinearLayout box=col();box.setPadding(dp(20),dp(18),dp(20),dp(8));box.setBackground(shape(surface,18));add(box,text("BATAL ORDER #"+String.format(Locale.US,"%04d",order),20,0xffff6b6b,true),-1,-2);gap(box,8);add(box,text(orderItemsText(o.optJSONArray("qty")),13,ink,true),-1,-2);gap(box,6);add(box,text("Order belum dibayar. Jika dibatalkan, stok yang ditempah akan dipulangkan semula.",13,muted,false),-1,-2);AlertDialog dialog=darkBuilder().setView(box).setPositiveButton("BATAL ORDER",null).setNegativeButton("KEMBALI",null).create();dialog.setOnShowListener(v->{styleDarkDialogNow(dialog);Button yes=dialog.getButton(AlertDialog.BUTTON_POSITIVE);yes.setTextColor(0xffff6b6b);dialog.getButton(AlertDialog.BUTTON_NEGATIVE).setTextColor(ink);yes.setOnClickListener(x->{try{JSONArray fresh=entries("pending_orders");JSONObject target=fresh.optJSONObject(index);if(target==null||target.optBoolean("paid",false)||target.optBoolean("cancelled",false)){dialog.dismiss();message("Order sudah berubah. Sila semak semula.");return;}target.put("cancelled",true);target.put("cancelledTime",timestamp());fresh.put(index,target);String day=entryDay(target);android.content.SharedPreferences.Editor ed=posPrefs().edit().putString("pending_orders",fresh.toString());if(!day.isEmpty())ed.putInt("orders_"+day,Math.max(0,posPrefs().getInt("orders_"+day,0)-1));if(!ed.commit())throw new IOException();dialog.dismiss();draw();message("Order #"+String.format(Locale.US,"%04d",order)+" dibatalkan. Stok dipulangkan.");}catch(Exception e){message("Order gagal dibatalkan.");}});});dialog.show();}
+  void cancelPendingOrder(int index){JSONArray list=entries("pending_orders");JSONObject o=list.optJSONObject(index);if(o==null||o.optBoolean("paid",false)||o.optBoolean("cancelled",false)){message("Order ini sudah dibayar, dibatalkan atau tidak dijumpai.");return;}int order=o.optInt("order");LinearLayout box=col();box.setPadding(dp(20),dp(18),dp(20),dp(8));box.setBackground(shape(surface,18));add(box,text("BATAL ORDER #"+String.format(Locale.US,"%04d",order),20,0xffff6b6b,true),-1,-2);gap(box,8);add(box,text(orderItemsText(o.optJSONArray("qty")),13,ink,true),-1,-2);gap(box,6);add(box,text("Order belum dibayar. Jika dibatalkan, stok yang ditempah akan dipulangkan semula.",13,muted,false),-1,-2);AlertDialog dialog=darkBuilder().setView(box).setPositiveButton("BATAL ORDER",null).setNegativeButton("KEMBALI",null).create();dialog.setOnShowListener(v->{styleDarkDialogNow(dialog);Button yes=dialog.getButton(AlertDialog.BUTTON_POSITIVE);yes.setTextColor(0xffff6b6b);dialog.getButton(AlertDialog.BUTTON_NEGATIVE).setTextColor(ink);yes.setOnClickListener(x->{
+      JSONObject current=entries("pending_orders").optJSONObject(index);
+      String liveId=current==null?"":current.optString("liveId","");
+      if(!liveId.isEmpty()){
+        if(!live.usable()){message("Cloud offline. Batal order belum dibenarkan.");return;}
+        live.cancel(liveId,()->{dialog.dismiss();cancelPendingLocally(index);});return;
+      }
+      try{JSONArray fresh=entries("pending_orders");JSONObject target=fresh.optJSONObject(index);if(target==null||target.optBoolean("paid",false)||target.optBoolean("cancelled",false)){dialog.dismiss();message("Order sudah berubah. Sila semak semula.");return;}target.put("cancelled",true);target.put("cancelledTime",timestamp());fresh.put(index,target);String day=entryDay(target);android.content.SharedPreferences.Editor ed=posPrefs().edit().putString("pending_orders",fresh.toString());if(!day.isEmpty())ed.putInt("orders_"+day,Math.max(0,posPrefs().getInt("orders_"+day,0)-1));if(!ed.commit())throw new IOException();dialog.dismiss();draw();message("Order #"+String.format(Locale.US,"%04d",order)+" dibatalkan. Stok dipulangkan.");}catch(Exception e){message("Order gagal dibatalkan.");}});});dialog.show();}
+  void cancelPendingLocally(int index){
+    try{
+      JSONArray list=entries("pending_orders");JSONObject order=list.optJSONObject(index);
+      if(order==null||order.optBoolean("cancelled",false)||order.optBoolean("paid",false))return;
+      order.put("cancelled",true);order.put("cancelledTime",timestamp());list.put(index,order);
+      String day=entryDay(order);
+      android.content.SharedPreferences.Editor e=posPrefs().edit().putString("pending_orders",list.toString());
+      if(!day.isEmpty())e.putInt("orders_"+day,Math.max(0,posPrefs().getInt("orders_"+day,0)-1));
+      if(!e.commit())throw new IOException();
+      draw();message("Order dibatalkan dan stok Live dipulangkan.");
+    }catch(Exception e){message("Order cloud sudah dibatalkan tetapi rekod telefon perlu dibaiki.");}
+  }
   void showDarkChoice(String titleText,String subtitle,String[] labels,int[] colors,java.util.function.IntConsumer onPick){
     LinearLayout box=col();box.setPadding(dp(20),dp(18),dp(20),dp(14));box.setBackground(shape(surface,18));
     add(box,text(titleText,21,ink,true),-1,-2);if(subtitle!=null&&!subtitle.isEmpty()){gap(box,5);add(box,text(subtitle,12,muted,false),-1,-2);}gap(box,14);
@@ -1253,7 +1309,21 @@ googleSignInClient = GoogleSignIn.getClient(this, gso);snapshotBeforeUpdate317()
   void startBillplzPending(int index,int due){String collection=posPrefs().getString("payment_collection_id","").trim(),secret=posPrefs().getString("payment_secret","").trim(),callback=posPrefs().getString("payment_callback_url","").trim(),email=posPrefs().getString("payment_customer_email",posPrefs().getString("receipt_email","")).trim();if(collection.isEmpty()||secret.isEmpty()||callback.isEmpty()||email.isEmpty()){message("Billplz belum lengkap. Isi Collection ID, Secret Key, Callback URL dan Email pelanggan/kaunter di Setting → Payment / DuitNow.");return;}if(!callback.startsWith("https://")){message("Callback URL Billplz mesti HTTPS.");return;}JSONArray pending=entries("pending_orders");JSONObject o=pending.optJSONObject(index);if(o==null){message("Order tidak dijumpai.");return;}int order=o.optInt("order");LinearLayout box=col();box.setPadding(dp(20),dp(18),dp(20),dp(10));box.setBackground(shape(surface,18));add(box,text("BILLPLZ · BANK",20,ink,true),-1,-2);add(box,text(money(due),30,gold,true),-1,-2);gap(box,8);TextView status=text("Mencipta bil Billplz…",13,muted,true);add(box,status,-1,-2);AlertDialog dialog=darkBuilder().setView(box).setNegativeButton("TUTUP",null).create();dialog.setOnShowListener(v->styleDarkDialogNow(dialog));dialog.show();new Thread(()->{try{String redirect=posPrefs().getString("payment_redirect_url","").trim();String body="collection_id="+form(collection)+"&email="+form(email)+"&name="+form("Warisan POS Customer")+"&amount="+due+"&callback_url="+form(callback)+"&description="+form("WARISAN POS Order #"+String.format(Locale.US,"%04d",order))+"&reference_1_label="+form("Order")+"&reference_1="+form(String.valueOf(order))+"&deliver=false"+(redirect.isEmpty()?"":"&redirect_url="+form(redirect));JSONObject bill=new JSONObject(httpBillplz("POST",billplzBase()+"/bills",body));String billId=bill.getString("id"),billUrl=bill.getString("url");runOnUiThread(()->{status.setText("Bil siap. Selesaikan bayaran pada Billplz. Status akan disemak automatik.");try{startActivity(new Intent(Intent.ACTION_VIEW,Uri.parse(billUrl)));}catch(Exception e){message("Tidak dapat membuka halaman Billplz.");}});pollBillplzPending(index,due,billId,dialog,status);}catch(Exception e){runOnUiThread(()->{status.setText("Gagal mencipta bil Billplz.");message("Semak Collection ID, Secret Key, Callback URL dan sambungan internet.");});}}).start();}
   void pollBillplzPending(int index,int due,String billId,AlertDialog dialog,TextView status){for(int attempt=0;attempt<100;attempt++){try{Thread.sleep(3000);JSONObject bill=new JSONObject(httpBillplz("GET",billplzBase()+"/bills/"+form(billId),null));if(bill.optBoolean("paid",false)&&"paid".equalsIgnoreCase(bill.optString("state"))){runOnUiThread(()->{if(dialog.isShowing())dialog.dismiss();completePendingPayment(index,"Billplz / Bank",due);});return;}runOnUiThread(()->{if(dialog.isShowing())status.setText("Menunggu bayaran Billplz…");});}catch(Exception ignored){}}runOnUiThread(()->{if(dialog.isShowing())status.setText("Semakan automatik tamat. Buka order ini semula untuk semak/bayar.");});}
   String paymentReceiptFor(int[] purchased,String method,int due,int order,int tendered){int[] before=qty;try{qty=Arrays.copyOf(purchased,purchased.length);return receipt(method,due,order,tendered);}finally{qty=before;}}
-  void completePendingPayment(int index,String method,int tendered){try{JSONArray pending=entries("pending_orders");JSONObject o=pending.optJSONObject(index);if(o==null||o.optBoolean("paid",false))throw new Exception();int due=o.optInt("total"),order=o.optInt("order");JSONArray q=o.optJSONArray("qty");int[] purchased=new int[names.length];for(int i=0;i<purchased.length;i++)purchased[i]=q==null?0:q.optInt(i);JSONObject sale=new JSONObject();sale.put("time",timestamp());String originalDay=entryDay(o);sale.put("businessDay",originalDay);sale.put("orderTime",o.optString("time",""));sale.put("paymentDate",date());sale.put("order",order);sale.put("total",due);sale.put("method",method);sale.put("refunded",false);sale.put("paid",true);int cost=0;for(int i=0;i<purchased.length;i++)if(purchased[i]>0&&!unlimited(i))cost+=restockCost(i,purchased[i]);sale.put("costTotal",cost);JSONArray sq=new JSONArray();for(int n:purchased)sq.put(n);sale.put("qty",sq);JSONArray sales=entries("stock_sales");sales.put(sale);o.put("paid",true);o.put("paidTime",timestamp());o.put("method",method);pending.put(index,o);if(!posPrefs().edit().putString("pending_orders",pending.toString()).putString("stock_sales",sales.toString()).putInt("sales_"+originalDay,posPrefs().getInt("sales_"+originalDay,0)+due).commit())throw new IOException();String printed=paymentReceiptFor(purchased,method,due,order,tendered);playPaymentSound();draw();previewReceipt(printed,purchased,method,due,order,tendered);}catch(Exception e){message("Bayaran gagal direkod. Cuba semula.");}}
+  void completePendingPayment(int index,String method,int tendered){
+    JSONArray pending=entries("pending_orders");JSONObject order=pending.optJSONObject(index);
+    if(order==null||order.optBoolean("paid",false)){message("Order sudah dibayar atau tidak ditemui");return;}
+    String id=order.optString("liveId","");
+    if(!id.isEmpty()){
+      if(!live.usable()){message("Tiada internet. Pembayaran belum direkod di Cloud.");return;}
+      live.paid(id,method,()->completePendingPaymentLocal(index,method,tendered));
+      return;
+    }
+    if(branchAccounts.staff()&&live.enabled()){
+      message("Order ini tiada rekod cloud. Minta Owner semak.");return;
+    }
+    completePendingPaymentLocal(index,method,tendered);
+  }
+  void completePendingPaymentLocal(int index,String method,int tendered){try{JSONArray pending=entries("pending_orders");JSONObject o=pending.optJSONObject(index);if(o==null||o.optBoolean("paid",false))throw new Exception();int due=o.optInt("total"),order=o.optInt("order");JSONArray q=o.optJSONArray("qty");int[] purchased=new int[names.length];for(int i=0;i<purchased.length;i++)purchased[i]=q==null?0:q.optInt(i);JSONObject sale=new JSONObject();sale.put("time",timestamp());String originalDay=entryDay(o);sale.put("businessDay",originalDay);sale.put("orderTime",o.optString("time",""));sale.put("paymentDate",date());sale.put("order",order);sale.put("total",due);sale.put("method",method);sale.put("refunded",false);sale.put("paid",true);sale.put("liveOrderId",o.optString("liveId",""));int cost=0;for(int i=0;i<purchased.length;i++)if(purchased[i]>0&&!unlimited(i))cost+=restockCost(i,purchased[i]);sale.put("costTotal",cost);JSONArray sq=new JSONArray();for(int n:purchased)sq.put(n);sale.put("qty",sq);JSONArray sales=entries("stock_sales");sales.put(sale);o.put("paid",true);o.put("paidTime",timestamp());o.put("method",method);pending.put(index,o);if(!posPrefs().edit().putString("pending_orders",pending.toString()).putString("stock_sales",sales.toString()).putInt("sales_"+originalDay,posPrefs().getInt("sales_"+originalDay,0)+due).commit())throw new IOException();String printed=paymentReceiptFor(purchased,method,due,order,tendered);playPaymentSound();draw();previewReceipt(printed,purchased,method,due,order,tendered);}catch(Exception e){message("Bayaran gagal direkod. Cuba semula.");}}
 
   void pay(){if(sum()==0){Toast.makeText(this,"Tambah menu dahulu",Toast.LENGTH_SHORT).show();return;}for(int i=0;i<qty.length;i++)if(!unlimited(i)&&qty[i]>stock(i)){message("Stok "+names[i]+" tidak cukup. Semak pesanan.");draw();return;}final int due=sum();
     darkBuilder().setTitle("Bayaran "+money(due)).setItems(new String[]{"Tunai","QR / DuitNow"},(dialog,index)->{if(index==0)cashPayment(due);else showPaymentQr(due);}).setNegativeButton("Batal",null).show();}
