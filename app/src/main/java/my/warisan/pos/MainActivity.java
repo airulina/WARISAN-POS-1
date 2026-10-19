@@ -1189,13 +1189,63 @@ selectedDay=date();selectedMonth=selectedDay.substring(0,7);rangeStart=selectedD
     JSONObject e=new JSONObject();e.put("time",timestamp());e.put("businessDay",day);e.put("month",day.substring(0,7));e.put("amount",-cents);e.put("category",category);e.put("note","Closing POS");cash.put(e);
   }
   void previewPosClosing(){if(!posSessionOpen()){message("Tiada sesi POS yang sedang dibuka.");return;}String day=posSessionDay();int opening=posOpening(),sales=sessionSales(day),cash=sessionCash(day),qr=sessionQr(day),tx=transactionCountBetween(day,day),out=outstandingCount(),supplierPaid=supplierPaidTotal(day,true),supplierOutstanding=supplierDue(),oil=closingOil(day)+Math.max(0,pendingClosingOil),rent=closingRent(day)+Math.max(0,pendingClosingRent),balance=Math.max(0,opening+cash);LinearLayout box=col();box.setPadding(dp(18),dp(14),dp(18),dp(10));box.setBackgroundColor(Color.WHITE);int dark=0xff26384c;TextView brand=text(posPrefs().getString("shop_name","WARISAN FROZEN"),17,blue,true);brand.setGravity(Gravity.CENTER);add(box,brand,-1,-2);TextView ttl=text("PENUTUPAN POS",14,dark,true);ttl.setGravity(Gravity.CENTER);add(box,ttl,-1,-2);gap(box,7);receiptRowLight(box,"Tarikh sesi",day,false);receiptRowLight(box,"Baki permulaan",money(opening),false);receiptRule(box);TextView soldTitle=text("JUALAN",11,0xff66788a,true);add(box,soldTitle,-1,-2);gap(box,4);addClosingSoldRows(box,day);receiptRule(box);receiptRowLight(box,"JUMLAH JUALAN",money(sales),true);receiptRule(box);TextView op=text("PERBELANJAAN OPERASI",11,0xff66788a,true);add(box,op,-1,-2);receiptRowLight(box,"Minyak",money(oil),false);receiptRowLight(box,"Sewa",money(rent),false);receiptRule(box);TextView sp=text("PEMBEKAL",11,0xff66788a,true);add(box,sp,-1,-2);receiptRowLight(box,"Dibayar hari ini",money(supplierPaid),false);receiptRowLight(box,"Belum dibayar",money(supplierOutstanding),true);receiptRowLight(box,"Pesanan belum bayar",""+out,false);receiptRule(box);receiptRowLight(box,"BAKI TUNAI POS",money(balance),true);if(cash+qr!=sales){gap(box,7);add(box,text("Nota: Jumlah Tunai + QR tidak sama dengan jualan. Semak transaksi lama sebelum penutupan.",11,0xffc83f46,true),-1,-2);}AlertDialog dlg=darkBuilder().setView(box).setPositiveButton("SAHKAN PENUTUPAN",null).setNegativeButton("BATAL",null).create();dlg.setOnShowListener(v->{styleDarkDialogNow(dlg);dlg.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(x->{confirmPosClosing(day,opening,sales,cash,qr,tx,out,balance,supplierPaid,supplierOutstanding,oil,rent);dlg.dismiss();});});dlg.show();}
-  void confirmPosClosing(String day,int opening,int sales,int cash,int qr,int tx,int outstanding,int balance,int supplierPaid,int supplierOutstanding,int oil,int rent){try{String closedAt=timestamp();String receipt=posClosingReceipt(day,opening,sales,cash,qr,tx,outstanding,balance,supplierPaid,supplierOutstanding,oil,rent);JSONObject c=new JSONObject();c.put("time",closedAt);c.put("businessDay",day);c.put("opening",opening);c.put("sales",sales);c.put("cash",cash);c.put("qr",qr);c.put("transactions",tx);c.put("outstandingCarryForward",outstanding);c.put("supplierPaid",supplierPaid);c.put("supplierOutstanding",supplierOutstanding);c.put("oil",oil);c.put("rent",rent);c.put("closingBalance",balance);c.put("receipt",receipt);JSONArray list=entries("pos_closings");list.put(c);
-    JSONArray closingCash=entries("cash_entries");
-    saveClosingExpense(closingCash,day,"Minyak kereta",Math.max(0,pendingClosingOil));
-    saveClosingExpense(closingCash,day,"Sewa",Math.max(0,pendingClosingRent));
-    if(!posPrefs().edit().putString("cash_entries",closingCash.toString()).putString("pos_closings",list.toString()).putBoolean("pos_session_open",false).putString("pos_last_closed_day",day).putInt("pos_opening",0).commit())throw new Exception();
-    if(live!=null&&live.enabled())live.session(false,day,balance);
-    pendingClosingOil=-1;pendingClosingRent=-1;draw();showConfirmedClosingReport(day,receipt);}catch(Exception e){message("Closing gagal disimpan.");}}
+  void confirmPosClosing(String day,int opening,int sales,int cash,int qr,int tx,
+      int outstanding,int balance,int supplierPaid,int supplierOutstanding,int oil,int rent){
+    if(!posSessionOpen()||!day.equals(posSessionDay())){
+      message("Sesi Opening telah berubah. Closing tidak disimpan.");return;
+    }
+    if(branchAccounts.staff()){
+      if(!branchAccounts.staffBranchVerified||live==null||!live.usable()){
+        message("Closing pekerja perlukan branch BUKA dan Cloud Live ONLINE. "+
+          "Tiada Closing direkodkan.");return;
+      }
+      // Cloud validates staff, branch, and the existing opened session first.
+      // Do not close the local POS when Firestore rejects this operation.
+      live.sessionConfirmed(false,day,balance,()->
+        persistPosClosing(day,opening,sales,cash,qr,tx,outstanding,balance,
+          supplierPaid,supplierOutstanding,oil,rent,true));
+      return;
+    }
+    persistPosClosing(day,opening,sales,cash,qr,tx,outstanding,balance,
+      supplierPaid,supplierOutstanding,oil,rent,false);
+  }
+  void persistPosClosing(String day,int opening,int sales,int cash,int qr,int tx,
+      int outstanding,int balance,int supplierPaid,int supplierOutstanding,
+      int oil,int rent,boolean cloudConfirmed){
+    if(!posSessionOpen()||!day.equals(posSessionDay()))return;
+    try{
+      String closedAt=timestamp();
+      String receipt=posClosingReceipt(day,opening,sales,cash,qr,tx,outstanding,
+        balance,supplierPaid,supplierOutstanding,oil,rent);
+      JSONObject c=new JSONObject();
+      c.put("time",closedAt);c.put("businessDay",day);
+      c.put("opening",opening);c.put("sales",sales);c.put("cash",cash);
+      c.put("qr",qr);c.put("transactions",tx);
+      c.put("outstandingCarryForward",outstanding);
+      c.put("supplierPaid",supplierPaid);
+      c.put("supplierOutstanding",supplierOutstanding);
+      c.put("oil",oil);c.put("rent",rent);
+      c.put("closingBalance",balance);c.put("receipt",receipt);
+      JSONArray list=entries("pos_closings");list.put(c);
+      JSONArray closingCash=entries("cash_entries");
+      saveClosingExpense(closingCash,day,"Minyak kereta",Math.max(0,pendingClosingOil));
+      saveClosingExpense(closingCash,day,"Sewa",Math.max(0,pendingClosingRent));
+      if(!posPrefs().edit().putString("cash_entries",closingCash.toString())
+        .putString("pos_closings",list.toString())
+        .putBoolean("pos_session_open",false)
+        .putString("pos_last_closed_day",day).putInt("pos_opening",0).commit())
+        throw new Exception("Simpanan tempatan gagal");
+      // Worker Cloud was already confirmed above. Owner's existing sync stays.
+      if(!cloudConfirmed&&live!=null&&live.enabled())live.session(false,day,balance);
+      pendingClosingOil=-1;pendingClosingRent=-1;
+      draw();showConfirmedClosingReport(day,receipt);
+    }catch(Exception e){
+      message(cloudConfirmed?
+        "CLOSING CLOUD SUDAH DISAHKAN, tetapi simpanan telefon gagal. "+
+          "Jangan cuba Closing sekali lagi; minta Owner semak History sesi Cloud.":
+        "Closing gagal disimpan dalam telefon. Data sedia ada tidak direset.");
+    }
+  }
   void showConfirmedClosingReport(String day,String receipt){
     LinearLayout frame=col();frame.setPadding(dp(12),dp(6),dp(12),dp(8));frame.setBackgroundColor(cream);
     ScrollView scroll=new ScrollView(this);scroll.setVerticalScrollBarEnabled(false);scroll.setFillViewport(true);frame.addView(scroll,new LinearLayout.LayoutParams(-1,-2));
