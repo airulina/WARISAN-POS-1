@@ -218,7 +218,7 @@ final class OwnerCashflow {
     return true;
   }
   void redrawIfVisible(){
-    if(host.activePage==3||host.activePage==16||host.activePage==17||host.activePage==19)
+    if(host.activePage==3||host.activePage==16||host.activePage==17||host.activePage==19||host.activePage==21)
       host.draw();
   }
   Day overall(){
