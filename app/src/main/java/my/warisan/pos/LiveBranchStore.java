@@ -805,27 +805,45 @@ final class LiveBranchStore {
       }).addOnFailureListener(e->host.message("Gagal semak branch: "+e.getMessage()));
   }
   void sessionConfirmed(boolean open,String day,int amount,Done onSuccess){
-    if(!usable()||!accounts.staff()){host.message("Sesi pekerja memerlukan Live ONLINE.");return;}
+    if(!usable()||!accounts.staff()||!accounts.staffBranchVerified){
+      host.message("Opening/Closing pekerja memerlukan Live ONLINE dan branch BUKA.");return;
+    }
     final String owner=accounts.ownerUid(),branchId=accounts.branchId();
     final String uid=accounts.user().getUid();
     DocumentReference doc=branch().collection("liveSessions").document(day);
     db.runTransaction(tx->{
       DocumentSnapshot existing=tx.get(doc);
-      if(existing.exists()&&Boolean.TRUE.equals(existing.getBoolean("open"))&&open)
-        throw new IllegalStateException("Branch telah Opening pada telefon lain. Minta Owner semak.");
+      if(open){
+        if(existing.exists())
+          throw new IllegalStateException("Sesi "+day+
+            " sudah direkod di Cloud. Semak Opening/Closing asal dengan Owner.");
+      }else if(!existing.exists()||
+          !Boolean.TRUE.equals(existing.getBoolean("open"))){
+        throw new IllegalStateException("Sesi ini belum Opening di Cloud "+
+          "atau sudah Closing. Minta Owner semak sesi branch.");
+      }
       Map<String,Object> state=new HashMap<>();
-      state.put("day",day);state.put("branchId",branchId);state.put("ownerUid",owner);
-      state.put("open",open);
+      state.put("day",day);state.put("branchId",branchId);
+      state.put("ownerUid",owner);state.put("open",open);
       state.put(open?"openedBy":"closedBy",uid);
       state.put(open?"openedByEmail":"closedByEmail",accounts.user().getEmail());
       state.put(open?"opening":"closing",amount);
       state.put("updatedAt",FieldValue.serverTimestamp());
       tx.set(doc,state,com.google.firebase.firestore.SetOptions.merge());
       return null;
-    }).addOnSuccessListener(result->onSuccess.apply())
-      .addOnFailureListener(e->host.darkBuilder().setTitle("OPENING CLOUD GAGAL")
-        .setMessage("Opening tidak dibuat kerana Cloud menolak operasi: "+e.getMessage())
-        .setPositiveButton("FAHAM",null).show());
+    }).addOnSuccessListener(result->{
+      if(accounts.staff()&&accounts.staffBranchVerified&&
+        uid.equals(accounts.user().getUid())&&
+        owner.equals(accounts.ownerUid())&&branchId.equals(accounts.branchId()))
+        onSuccess.apply();
+      else host.message("Sesi Cloud disahkan, tetapi akaun/branch telah berubah. "+
+        "Minta Owner semak sebelum cuba lagi.");
+    }).addOnFailureListener(e->host.darkBuilder()
+      .setTitle(open?"OPENING CLOUD GAGAL":"CLOSING CLOUD GAGAL")
+      .setMessage("Tiada perubahan sesi disimpan pada telefon kerana Firebase "+
+        "menolak operasi: "+e.getMessage()+
+        "\n\nMinta Owner semak status branch dan Firestore Rules.")
+      .setPositiveButton("FAHAM",null).show());
   }
   void session(boolean open,String day,int amount){
     if(!accounts.active()||!usable())return;
