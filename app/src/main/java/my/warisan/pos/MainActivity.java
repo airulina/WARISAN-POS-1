@@ -301,7 +301,7 @@ selectedDay=date();selectedMonth=selectedDay.substring(0,7);rangeStart=selectedD
     for(int i=0;i<qty.length;i++)if(qty[i]>0){final int id=i;LinearLayout r=row();r.addView(text(names[i]+" × "+qty[i],14,ink,true),new LinearLayout.LayoutParams(0,dp(39),1));add(r,text(money(qty[i]*prices[i]),13,blue,true),-2,-2);TextView minus=chip("−",0xffc83f46,Color.WHITE);LinearLayout.LayoutParams m=params(32,30);m.leftMargin=dp(8);r.addView(minus,m);minus.setOnClickListener(v->{qty[id]--;draw();});add(basket,r,-1,-2);}
   }
   void addNavigation(LinearLayout screen){LinearLayout nav=row();nav.setBackgroundColor(cream);nav.setPadding(dp(7),dp(7),dp(7),dp(9));String[] labels=branchAccounts.staff()?new String[]{"MENU","ORDER","HARI INI","PRINTER","ACCOUNT"}:(english()?new String[]{"MENU","ORDERS","STOCK","CASH","SETTINGS","BRANCH"}:new String[]{"MENU","ORDER","STOK","DUIT","SETTING","BRANCH"});int[] pages=branchAccounts.staff()?new int[]{0,11,12,14,5}:new int[]{0,11,1,3,4,15};
-    for(int i=0;i<labels.length;i++){final int page=pages[i];boolean selected=(activePage==page)||(page==1&&activePage==13)||(page==3&&(activePage==2||activePage==16||activePage==17||activePage==18))||(page==4&&activePage>=4&&activePage<=10);TextView tab=text(labels[i],branchAccounts.staff()?10:9,selected?Color.rgb(19,24,34):Color.WHITE,true);tab.setGravity(Gravity.CENTER);tab.setBackground(shape(selected?gold:Color.rgb(20,58,101),11));LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(0,dp(49),1);p.setMargins(dp(3),0,dp(3),0);nav.addView(tab,p);tab.setOnClickListener(v->{activePage=page;draw();});}add(screen,nav,-1,-2);}
+    for(int i=0;i<labels.length;i++){final int page=pages[i];boolean selected=(activePage==page)||(page==1&&activePage==13)||(page==3&&(activePage==2||activePage==16||activePage==17||activePage==18))||(page==4&&activePage>=4&&activePage<=10&&activePage!=8)||(page==15&&activePage==8);TextView tab=text(labels[i],branchAccounts.staff()?10:9,selected?Color.rgb(19,24,34):Color.WHITE,true);tab.setGravity(Gravity.CENTER);tab.setBackground(shape(selected?gold:Color.rgb(20,58,101),11));LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(0,dp(49),1);p.setMargins(dp(3),0,dp(3),0);nav.addView(tab,p);tab.setOnClickListener(v->{activePage=page;draw();});}add(screen,nav,-1,-2);}
   void heading(String title,String subtitle){
     LinearLayout brand=row();brand.setGravity(Gravity.CENTER_VERTICAL);ImageView logo=new ImageView(this);logo.setImageResource(R.drawable.warisan_logo);makeCircle(logo);add(brand,logo,44,44);LinearLayout brandText=col();brandText.setPadding(dp(9),0,0,0);add(brandText,text("WARISAN POS",18,blue,true),-1,-2);add(brandText,text("KIOS WARISAN  ·  SISTEM JUALAN",9,muted,true),-1,-2);brand.addView(brandText,new LinearLayout.LayoutParams(0,-2,1));TextView clock=text("",9,gold,true);clock.setGravity(Gravity.RIGHT|Gravity.CENTER_VERTICAL);add(brand,clock,-2,-2);startHeaderClock(clock);add(body,brand,-1,-2);gap(body,15);
     add(body,text(title,23,ink,true),-1,-2);add(body,text(subtitle,12,muted,false),-1,-2);gap(body,16);
@@ -773,8 +773,8 @@ selectedDay=date();selectedMonth=selectedDay.substring(0,7);rangeStart=selectedD
       action("History Closing / Print semula",()->closingHistory());
       action("Test Print",()->previewTestReceipt(true));
     }else if(activePage==8){
-      heading("Maklumat Kedai","Butiran kedai dan syarikat.");
-      action("‹  Kembali ke Setting",()->{activePage=4;draw();});
+      heading("Maklumat Kedai","Butiran kedai / branch Owner.");
+      action("‹  Kembali ke BRANCH",()->{activePage=15;draw();});
       action("Nama kedai",()->editShopInfo("shop_name","Nama kedai","WARISAN FROZEN"));
       action("Nama syarikat",()->editShopInfo("company_name","Nama syarikat",""));
       action("No. lesen / pendaftaran",()->editShopInfo("company_reg","No. lesen / pendaftaran perniagaan",""));
