@@ -184,11 +184,10 @@ try{
   assert.equal(missingOrder.exists(),false);
   await assertFails(getDoc(d(outsider,ord)));
   // Atomic cashier reservation: quantity 2 deducted from inventory.
-  // Mirror Android's exact tx.get(inventory), tx.get(newOrder), tx.update, tx.set flow.
+  // Mirror production Android: read inventory only, then update inventory
+  // and CREATE a fresh pending-order UUID in the same transaction.
   await assertSucceeds(runTransaction(staff,async tx=>{
     const before=await tx.get(d(staff,inv));
-    const missing=await tx.get(d(staff,ord));
-    assert.equal(missing.exists(),false);
     assert.equal(before.data().stock[0],10);
     tx.update(d(staff,inv),{
       stock:[8,10,10,10,0,10,10],lastOrderId:'order1',
@@ -209,8 +208,6 @@ try{
   const kuahOrder=branch+'/liveOrders/kuah-only';
   await assertSucceeds(runTransaction(staff,async tx=>{
     const before=await tx.get(d(staff,inv));
-    const missing=await tx.get(d(staff,kuahOrder));
-    assert.equal(missing.exists(),false);
     tx.update(d(staff,inv),{
       stock:before.data().stock,lastOrderId:'kuah-only',
       lastStockAction:'RESERVE',updatedAt:serverTimestamp()
