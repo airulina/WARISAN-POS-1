@@ -52,6 +52,7 @@ final class BranchAccounts {
         ArrayList<QueryDocumentSnapshot> docs=new ArrayList<>();
         ArrayList<String> labels=new ArrayList<>();
         for(QueryDocumentSnapshot b:branches){
+          if(Boolean.TRUE.equals(b.getBoolean("archived")))continue;
           docs.add(b);
           String name=b.getString("name");if(name==null)name=b.getId();
           String status=operatingLabel(b.getString("operatingStatus"));
@@ -149,6 +150,7 @@ final class BranchAccounts {
         if(!owner()||!uid.equals(ownerUid()))return;
         stockBranchIds.clear();stockBranchNames.clear();
         for(QueryDocumentSnapshot doc:result){
+          if(Boolean.TRUE.equals(doc.getBoolean("archived")))continue;
           stockBranchIds.add(doc.getId());
           String name=doc.getString("name");
           stockBranchNames.add(name==null||name.trim().isEmpty()?"Branch "+doc.getId():name);
@@ -425,6 +427,203 @@ final class BranchAccounts {
         }).addOnFailureListener(e->host.message("Tambah branch gagal: "+e.getMessage()));
       }).setNegativeButton("Batal",null).show();
   }
+  /**
+   * Owner-only branch cleanup. Permanent deletion is limited to completely
+   * empty, non-primary branches; otherwise archive the branch and retain its
+   * sales, receipts, employees and inventory for historical reporting.
+   */
+  void manageBranchRemoval(){
+    if(!owner()||user()==null){host.message("Padam branch hanya Owner.");return;}
+    final String oid=ownerUid();
+    db.collection(ROOT).document(oid).collection("branches")
+      .get(com.google.firebase.firestore.Source.SERVER)
+      .addOnSuccessListener(branches->{
+        if(!owner()||!oid.equals(ownerUid()))return;
+        ArrayList<QueryDocumentSnapshot> candidates=new ArrayList<>();
+        ArrayList<String> labels=new ArrayList<>();
+        for(QueryDocumentSnapshot b:branches){
+          if(isPrimaryBranch(b))continue;
+          candidates.add(b);
+          String name=b.getString("name");
+          if(name==null||name.trim().isEmpty())name=b.getId();
+          labels.add(name+(Boolean.TRUE.equals(b.getBoolean("archived"))
+            ?"  ·  ARKIB":"  ·  AKTIF")+(branchId().equals(b.getId())?"  ·  SEDANG DIPILIH":""));
+        }
+        if(candidates.isEmpty()){
+          host.darkBuilder().setTitle("TIADA BRANCH BOLEH DIPADAM")
+            .setMessage("Branch Utama dilindungi kerana menyimpan rekod utama. "+
+              "Hanya branch tambahan boleh dipadam atau diarkibkan.")
+            .setPositiveButton("OK",null).show();return;
+        }
+        host.darkBuilder().setTitle("PADAM / ARKIB BRANCH")
+          .setItems(labels.toArray(new String[0]),(d,i)->
+            branchRemovalActions(candidates.get(i)))
+          .setNegativeButton("BATAL",null).show();
+      }).addOnFailureListener(e->
+        host.message("Gagal baca branch dari Firebase: "+e.getMessage()));
+  }
+  boolean isPrimaryBranch(com.google.firebase.firestore.DocumentSnapshot branch){
+    String name=branch.getString("name");
+    return LEGACY_BRANCH.equals(branch.getId())||
+      Boolean.TRUE.equals(branch.getBoolean("legacyDeviceData"))||
+      "Branch Utama".equalsIgnoreCase(name==null?"":name.trim());
+  }
+  void branchRemovalActions(QueryDocumentSnapshot b){
+    if(!owner()||user()==null||isPrimaryBranch(b)){
+      host.message("Branch Utama tidak boleh dipadam.");return;
+    }
+    String id=b.getId();
+    String name=b.getString("name");
+    if(name==null||name.trim().isEmpty())name=id;
+    final String finalName=name;
+    boolean archived=Boolean.TRUE.equals(b.getBoolean("archived"));
+    if(branchId().equals(id)){
+      host.darkBuilder().setTitle("TUKAR BRANCH DAHULU")
+        .setMessage("Branch "+name+" sedang aktif pada telefon Owner. "+
+          "Pilih Branch Utama melalui Tukar Branch sebelum memadam.")
+        .setPositiveButton("OK",null).show();return;
+    }
+    if(archived){
+      host.darkBuilder().setTitle("BRANCH DIARKIBKAN · "+name)
+        .setItems(new String[]{"PULIHKAN BRANCH","PADAM KEKAL · JIKA TIADA DATA"},
+          (d,choice)->{
+            if(choice==0)confirmRestoreBranch(id,finalName);
+            else confirmDeleteEmptyBranch(id,finalName);
+          }).setNegativeButton("BATAL",null).show();
+    }else{
+      host.darkBuilder().setTitle("URUS BRANCH · "+name)
+        .setItems(new String[]{"ARKIB · SIMPAN SEMUA REKOD",
+          "PADAM KEKAL · BRANCH KOSONG SAHAJA"},
+          (d,choice)->{
+            if(choice==0)confirmArchiveBranch(id,finalName);
+            else confirmDeleteEmptyBranch(id,finalName);
+          }).setNegativeButton("BATAL",null).show();
+    }
+  }
+  void confirmArchiveBranch(String id,String name){
+    if(!owner()||user()==null||id.equals(branchId())||LEGACY_BRANCH.equals(id))return;
+    host.darkBuilder().setTitle("ARKIB BRANCH · "+name)
+      .setMessage("Branch akan hilang daripada pilihan operasi aktif, "+
+        "pekerja branch ini akan disekat, dan transaksi baharu tidak dibenarkan. "+
+        "SEMUA stok, resit, jualan dan sejarah kekal untuk laporan Owner. "+
+        "Branch boleh dipulihkan semula. Pastikan order belum bayar diselesaikan.")
+      .setPositiveButton("YA, ARKIB",(d,w)->setBranchArchive(id,name,true))
+      .setNegativeButton("BATAL",null).show();
+  }
+  void confirmRestoreBranch(String id,String name){
+    if(!owner()||user()==null||id.equals(branchId())||LEGACY_BRANCH.equals(id))return;
+    host.darkBuilder().setTitle("PULIHKAN BRANCH · "+name)
+      .setMessage("Pulihkan branch kepada status BUKA. Pekerja yang masih "+
+        "berdaftar boleh mengakses semula branch ini. Stok dan jualan lama kekal.")
+      .setPositiveButton("YA, PULIHKAN",(d,w)->setBranchArchive(id,name,false))
+      .setNegativeButton("BATAL",null).show();
+  }
+  void setBranchArchive(String id,String name,boolean archive){
+    if(!owner()||user()==null||id.equals(branchId())||LEGACY_BRANCH.equals(id))return;
+    final String oid=ownerUid();
+    DocumentReference ref=db.collection(ROOT).document(oid)
+      .collection("branches").document(id);
+    ref.get(com.google.firebase.firestore.Source.SERVER)
+      .addOnSuccessListener(current->{
+        if(!owner()||!oid.equals(ownerUid())||!current.exists()||
+          isPrimaryBranch(current)||branchId().equals(id))return;
+        Map<String,Object> changes=new HashMap<>();
+        changes.put("archived",archive);
+        changes.put("operatingStatus",archive?"OFFDAY":"OPEN");
+        changes.put("operatingReason",archive?"BRANCH DIARKIBKAN":"");
+        changes.put("operatingUpdatedBy",user().getUid());
+        changes.put("operatingUpdatedAt",
+          com.google.firebase.firestore.FieldValue.serverTimestamp());
+        ref.update(changes).addOnSuccessListener(done->{
+          stockBranchesLoaded=false;
+          host.message(name+(archive?" telah diarkibkan. Rekod lama dikekalkan.":
+            " dipulihkan dan dibuka semula."));
+          manageBranchRemoval();
+        }).addOnFailureListener(e->host.message("Gagal kemas kini branch: "+e.getMessage()));
+      }).addOnFailureListener(e->host.message("Gagal sahkan branch: "+e.getMessage()));
+  }
+  void confirmDeleteEmptyBranch(String id,String name){
+    if(!owner()||user()==null||id.equals(branchId())||LEGACY_BRANCH.equals(id))return;
+    host.darkBuilder().setTitle("PADAM KEKAL BRANCH KOSONG?")
+      .setMessage("Hanya branch TAMBAHAN yang tiada stok, sejarah jualan, "+
+        "order, sesi, pekerja, resit atau data tempatan boleh dipadam kekal. "+
+        "Jika ada rekod, pemadaman akan ditolak; gunakan ARKIB sahaja. "+
+        "Branch Utama tidak boleh dipadam.")
+      .setPositiveButton("SEMAK & PADAM",(d,w)->deleteOnlyEmptyBranch(id,name))
+      .setNegativeButton("BATAL",null).show();
+  }
+  void deleteOnlyEmptyBranch(String id,String name){
+    if(!owner()||user()==null||id.equals(branchId())||LEGACY_BRANCH.equals(id))return;
+    final String oid=ownerUid();
+    final DocumentReference ref=db.collection(ROOT).document(oid)
+      .collection("branches").document(id);
+    // Never remove a branch whose phone holds any branch-specific preferences.
+    // Even an old unrecognized key may be historical data, so fail safely.
+    if(!host.getSharedPreferences("warisan_branch_"+id,Context.MODE_PRIVATE)
+      .getAll().isEmpty()){
+      host.darkBuilder().setTitle("PADAM DISEKAT")
+        .setMessage("Data tempatan branch ini masih ada pada telefon Owner. "+
+          "Gunakan ARKIB supaya rekod lama tidak hilang.")
+        .setPositiveButton("FAHAM",null).show();return;
+    }
+    ref.get(com.google.firebase.firestore.Source.SERVER).addOnSuccessListener(doc->{
+      if(!owner()||!oid.equals(ownerUid())||!doc.exists()||
+        isPrimaryBranch(doc)||branchId().equals(id))return;
+      // Closed before checking for remaining documents, so employee writes
+      // cannot race this cleanup. If a branch has history it stays archived.
+      Map<String,Object> lockdown=new HashMap<>();
+      lockdown.put("archived",true);lockdown.put("operatingStatus","OFFDAY");
+      lockdown.put("operatingReason","PADAM BRANCH KOSONG");
+      lockdown.put("operatingUpdatedBy",user().getUid());
+      lockdown.put("operatingUpdatedAt",
+        com.google.firebase.firestore.FieldValue.serverTimestamp());
+      ref.update(lockdown).addOnSuccessListener(done->
+        checkEmptyBranchCollections(ref,name,oid,id))
+        .addOnFailureListener(e->host.message("Tak dapat sekat branch untuk pemeriksaan: "+e.getMessage()));
+    }).addOnFailureListener(e->host.message("Gagal periksa branch: "+e.getMessage()));
+  }
+  void checkEmptyBranchCollections(DocumentReference ref,String name,String oid,String id){
+    if(!owner()||!oid.equals(ownerUid())||id.equals(branchId()))return;
+    // All known app subcollections are checked on SERVER, not cache.
+    // Firestore does NOT cascade-delete subcollections automatically.
+    final String[] collections={"members","live","liveOrders","daily",
+      "stockAdjustments","liveSessions","staffLogins","openingChecks",
+      "loginChecks","refundRequests","backups"};
+    ArrayList<com.google.android.gms.tasks.Task<com.google.firebase.firestore.QuerySnapshot>> tasks=
+      new ArrayList<>();
+    for(String collection:collections)
+      tasks.add(ref.collection(collection).limit(1)
+        .get(com.google.firebase.firestore.Source.SERVER));
+    Tasks.whenAllSuccess(tasks).addOnSuccessListener(responses->{
+      if(!owner()||!oid.equals(ownerUid())||id.equals(branchId()))return;
+      for(Object result:responses){
+        com.google.firebase.firestore.QuerySnapshot q=
+          (com.google.firebase.firestore.QuerySnapshot)result;
+        if(!q.isEmpty()){
+          host.darkBuilder().setTitle("BRANCH ADA REKOD · ARKIB SAHAJA")
+            .setMessage(name+" mengandungi data Firestore. Branch kini diarkibkan, "+
+              "bukan dipadam. Jualan, stok, resit dan sejarah pekerja dikekalkan. "+
+              "Boleh dipulihkan melalui PADAM / ARKIB BRANCH.")
+            .setPositiveButton("FAHAM",null).show();
+          stockBranchesLoaded=false;return;
+        }
+      }
+      // This is only the branch metadata document; queries above prove there
+      // are no documents in the app's known collections.
+      ref.delete().addOnSuccessListener(v->{
+        stockBranchesLoaded=false;
+        host.message("Branch kosong "+name+" berjaya dipadam.");
+        manageBranchRemoval();
+      }).addOnFailureListener(e->host.message(
+        "Padam metadata branch gagal. Branch masih diarkibkan: "+e.getMessage()));
+    }).addOnFailureListener(e->{
+      host.darkBuilder().setTitle("SEMAKAN TIDAK LENGKAP")
+        .setMessage("Tidak dapat pastikan semua data kosong. "+
+          "Branch kekal diarkibkan (bukan dipadam) untuk keselamatan. "+e.getMessage())
+        .setPositiveButton("FAHAM",null).show();
+    });
+  }
+
   void inviteStaff(){
     if(host.staffSecurity!=null)host.staffSecurity.createEmployee();
     else host.message("Sila log masuk sebagai Owner.");
@@ -466,9 +665,12 @@ final class BranchAccounts {
       return;
     }
     FirebaseUser u=user();if(u==null){host.message("Login Google dahulu");return;}
-    checkMayBecomeOwner(u,()->chooseOwnerBranchVerified(u));
+    checkMayBecomeOwner(u,()->chooseOwnerBranchVerified(u,true));
   }
   void chooseOwnerBranchVerified(FirebaseUser u){
+    chooseOwnerBranchVerified(u,false);
+  }
+  void chooseOwnerBranchVerified(FirebaseUser u,boolean manualSelection){
     db.collection(ROOT).document(u.getUid()).get()
       .addOnSuccessListener(doc->{
         if(!doc.exists()){
@@ -481,9 +683,19 @@ final class BranchAccounts {
           .addOnSuccessListener(result->{
             ArrayList<String> labels=new ArrayList<>(),ids=new ArrayList<>();
             for(QueryDocumentSnapshot branch:result){
-              labels.add(branch.getString("name"));ids.add(branch.getId());
+              if(Boolean.TRUE.equals(branch.getBoolean("archived")))continue;
+              String label=branch.getString("name");
+              labels.add(label==null||label.trim().isEmpty()?branch.getId():label);
+              ids.add(branch.getId());
             }
-            if(labels.isEmpty()){host.message("Belum ada branch");return;}
+            if(labels.isEmpty()){host.message("Semua branch diarkibkan. Pulihkan branch melalui menu BRANCH.");return;}
+            if(manualSelection){
+              host.darkBuilder().setTitle("TUKAR BRANCH OWNER")
+                .setItems(labels.toArray(new String[0]),(d,which)->
+                  setSession(u.getUid(),ownerId,ids.get(which),labels.get(which),"OWNER"))
+                .setNegativeButton("BATAL",null).show();
+              return;
+            }
             // Prefer legacy Branch Utama: its original local sales/stock
             // preferences must not be silently replaced with another branch.
             int primary=-1;
