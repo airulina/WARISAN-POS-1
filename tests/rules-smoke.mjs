@@ -136,7 +136,7 @@ try{
   await assertFails(getDoc(d(staff,inv)));
   await assertFails(getDoc(d(staff,daily)));
   await assertFails(updateDoc(d(staff,reqPath),{status:'DENIED'}));
-  await assertSucceeds(getDoc(d(owner,profile)));
+  await assertSucceeds(getDoc(profile));
   await assertSucceeds(getDoc(d(owner,daily))); // historical sales remain
   await assertFails(updateDoc(d(staff,'staffProfiles/staff'),{active:true,removed:false}));
   const restore=writeBatch(owner);
