@@ -66,7 +66,11 @@ final class OwnerBranchOrders {
                 o.branch=branchName;o.id=doc.getId();
                 Long no=doc.getLong("receiptNo");
                 o.numbered=no!=null&&no>0;
-                o.number=o.numbered?String.format(Locale.US,"#%04d",no):
+                String receiptDay=doc.getString("day");
+                o.number=o.numbered?
+                  Integer.toHexString(b.getId().hashCode()).toUpperCase(Locale.US)+"-"+
+                  (receiptDay==null?"":receiptDay.replace("-",""))+"-"+
+                  String.format(Locale.US,"%04d",no):
                   doc.getId().substring(0,Math.min(10,doc.getId().length())).toUpperCase(Locale.US);
                 o.day=doc.getString("day");
                 o.status=doc.getString("status");
