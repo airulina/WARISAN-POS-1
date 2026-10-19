@@ -457,6 +457,7 @@ final class StaffSecurity {
       options.add(worker.active()?"Sekat akses sementara":"Aktifkan semula pekerja");
       options.add("BUANG PEKERJA · Tarik balik semua akses");
     }
+    options.add("RESET PERANTI · Benarkan telefon baharu");
     options.add("Hantar pautan reset password ke email");
     options.add("Kembali ke senarai");
     // Do not setMessage() together with setItems(): list actions would disappear.
@@ -469,10 +470,27 @@ final class StaffSecurity {
           confirmBlockWorker(worker);
         }else if(action.startsWith("Aktifkan")){
           setEmployeeState(worker,true,false);
+        }else if(action.startsWith("RESET PERANTI")){
+          confirmWorkerDeviceReset(worker);
         }else if(action.startsWith("Hantar")){
           resetEmployeePassword(worker.email());
         }else manageWorkers();
       }).setNegativeButton("Tutup",null).show();
+  }
+  void confirmWorkerDeviceReset(WorkerRow worker){
+    if(!accounts.owner())return;
+    host.darkBuilder().setTitle("RESET TELEFON PEKERJA?")
+      .setMessage(worker.email()+"\n"+worker.branchName+
+        "\n\nHanya buat jika pekerja memang tukar telefon. Telefon lama akan log keluar bila online. "+
+        "Telefon yang login dahulu selepas reset akan menjadi peranti dibenarkan.")
+      .setPositiveButton("RESET PERANTI",(d,w)->{
+        if(!accounts.owner())return;
+        db.collection("staffProfiles").document(worker.member.getId())
+          .update("deviceId",com.google.firebase.firestore.FieldValue.delete(),
+            "deviceBoundAt",com.google.firebase.firestore.FieldValue.delete())
+          .addOnSuccessListener(v->host.message("Peranti pekerja direset. Login semula pada telefon yang sah."))
+          .addOnFailureListener(e->host.message("Reset peranti gagal: "+e.getMessage()));
+      }).setNegativeButton("BATAL",null).show();
   }
   void confirmBlockWorker(WorkerRow worker){
     host.darkBuilder().setTitle("Sekat sementara?")
