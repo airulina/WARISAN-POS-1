@@ -490,10 +490,13 @@ final class LiveBranchStore {
           tx+=doc.getLong("transactions")==null?0:doc.getLong("transactions");
           byDay.append(doc.getId()).append("   ").append(host.money((int)s)).append("\n");
         }
+        String report="WARISAN POS · LAPORAN LIVE\n"+accounts.branchName()+"\n"+
+          month+"\n\nJualan: "+host.money((int)sale)+
+          "\nTunai: "+host.money((int)cash)+"\nQR: "+host.money((int)qr)+
+          "\nTransaksi: "+tx+"\n\n"+(byDay.length()==0?"Belum ada rekod live":byDay.toString());
         host.darkBuilder().setTitle("LAPORAN LIVE · "+month)
-          .setMessage(accounts.branchName()+"\nJualan: "+host.money((int)sale)+
-            "\nTunai: "+host.money((int)cash)+"\nQR: "+host.money((int)qr)+
-            "\nTransaksi: "+tx+"\n\n"+(byDay.length()==0?"Belum ada rekod live":byDay.toString()))
+          .setMessage(report)
+          .setNeutralButton("CETAK A4 / PDF",(dlg,w)->WarisanPrinting.textA4(host,report,"Warisan Live "+month))
           .setPositiveButton("TUTUP",null).show();
       }).addOnFailureListener(e->host.message("Report Live gagal: "+e.getMessage()));
   }
