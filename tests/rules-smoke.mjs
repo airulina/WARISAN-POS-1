@@ -46,6 +46,28 @@ try{
   await assertSucceeds(getDoc(d(owner,inv)));
   await assertSucceeds(getDoc(d(staff,inv)));
   await assertFails(getDoc(d(outsider,inv)));
+  // Off Day is a server-wide staff ban, not a cosmetic Android login flag.
+  // Owner can still read/modify the branch and see its existing records.
+  await assertSucceeds(updateDoc(d(owner,branch),{
+    operatingStatus:'OFFDAY',operatingReason:'OFF DAY',
+    operatingUpdatedBy:'owner',operatingUpdatedAt:serverTimestamp()
+  }));
+  await assertSucceeds(getDoc(d(staff,branch))); // staff may see why login is blocked
+  await assertFails(getDoc(d(staff,inv)));
+  await assertFails(getDoc(d(staff,branch+'/liveSessions/'+today)));
+  await assertFails(updateDoc(d(staff,branch),{operatingStatus:'OPEN'}));
+  await assertSucceeds(getDoc(d(owner,inv)));
+  await assertSucceeds(updateDoc(d(owner,branch),{
+    operatingStatus:'STOCK_OUT',operatingReason:'STOK HABIS',
+    operatingUpdatedBy:'owner',operatingUpdatedAt:serverTimestamp()
+  }));
+  await assertFails(getDoc(d(staff,inv)));
+  // Re-opening one branch restores permission without resetting its history.
+  await assertSucceeds(updateDoc(d(owner,branch),{
+    operatingStatus:'OPEN',operatingReason:'',
+    operatingUpdatedBy:'owner',operatingUpdatedAt:serverTimestamp()
+  }));
+  await assertSucceeds(getDoc(d(staff,inv)));
   await assertSucceeds(getDoc(d(owner,lastYear)));
   await assertFails(getDoc(d(staff,lastYear)));
   await assertFails(updateDoc(d(staff,inv),{stock:[999,10,10,10,0,10,10]}));
