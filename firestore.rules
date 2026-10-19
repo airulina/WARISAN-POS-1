@@ -51,6 +51,22 @@ service cloud.firestore {
               && inviteMatch(request.resource.data.invitationId,ownerUid,branchId));
           allow update, delete: if owner(ownerUid);
         }
+        match /live/{docId} {
+          allow read: if owner(ownerUid) || member(ownerUid,branchId);
+          allow create, update: if owner(ownerUid);
+          allow delete: if false;
+        }
+        match /daily/{dayId} {
+          allow read: if owner(ownerUid) || member(ownerUid,branchId);
+          allow create, update: if owner(ownerUid) || member(ownerUid,branchId);
+          allow delete: if false;
+        }
+        match /liveOrders/{orderId} {
+          allow read: if owner(ownerUid) || member(ownerUid,branchId);
+          allow create: if owner(ownerUid) || member(ownerUid,branchId);
+          allow update: if owner(ownerUid) || member(ownerUid,branchId);
+          allow delete: if false;
+        }
         // Refund requests: staff may request; ONLY Owner may approve/deny.
         // Staff may claim an approved refund once and finalize its status.
         match /refundRequests/{requestId} {
@@ -101,11 +117,33 @@ service cloud.firestore {
         }
       }
     }
-    // Only Firebase Admin SDK (Cloud Function) may create/change staffProfiles.
+    // Spark-only onboarding: Owner uses a secondary FirebaseAuth account to create
+    // worker credentials, while writing a worker profile under Owner authorization.
     match /staffProfiles/{uid} {
-      allow get: if signedIn() && request.auth.uid == uid;
+      allow get: if signedIn() && (request.auth.uid == uid
+        || resource.data.ownerUid == request.auth.uid);
       allow list: if false;
-      allow write: if false;
+      allow create: if signedIn()
+        && request.auth.uid != uid
+        && request.resource.data.ownerUid == request.auth.uid
+        && request.resource.data.uid == uid
+        && request.resource.data.role == "STAFF"
+        && request.resource.data.active == true
+        && request.resource.data.email is string
+        && request.resource.data.branchId is string
+        && exists(/databases/$(database)/documents/workspaces/$(request.auth.uid)/branches/$(request.resource.data.branchId))
+        && request.resource.data.keys().hasOnly([
+          "uid","email","role","active","ownerUid",
+          "branchId","branchName","createdAt"]);
+      allow update: if signedIn()
+        && request.auth.uid == resource.data.ownerUid
+        && request.resource.data.ownerUid == resource.data.ownerUid
+        && request.resource.data.uid == resource.data.uid
+        && request.resource.data.role == "STAFF"
+        && request.resource.data.branchId == resource.data.branchId
+        && request.resource.data.email == resource.data.email
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["active"]);
+      allow delete: if false;
     }
     // Legacy Gmail invitation creation is disabled for new deployments.
     // Staff accounts must be provisioned by an authenticated Owner through Cloud Functions.
