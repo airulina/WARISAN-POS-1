@@ -1,6 +1,16 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+    function malaysiaDate(daysBack) {
+      let t=request.time + duration.value(8,'h') - duration.value(daysBack,'d');
+      return string(t.year())+"-"+(t.month()<10?"0":"")+string(t.month())+
+        "-"+(t.day()<10?"0":"")+string(t.day());
+    }
+    function staffWorkingDay(dayId) {
+      return dayId == malaysiaDate(0) ||
+        (dayId == malaysiaDate(1)
+          && (request.time+duration.value(8,'h')).hours() < 6);
+    }
     function signedIn() {
       return request.auth != null;
     }
@@ -166,7 +176,8 @@ service cloud.firestore {
           allow delete: if false;
         }
         match /daily/{dayId} {
-          allow read: if owner(ownerUid) || member(ownerUid,branchId);
+          allow get: if owner(ownerUid) || (member(ownerUid,branchId) && staffWorkingDay(dayId));
+          allow list: if owner(ownerUid);
           allow create: if owner(ownerUid) || (
             member(ownerUid,branchId)
             && request.resource.data.lastPaymentId is string
@@ -184,7 +195,10 @@ service cloud.firestore {
           allow delete: if false;
         }
         match /liveOrders/{orderId} {
-          allow read: if owner(ownerUid) || member(ownerUid,branchId);
+          allow get: if owner(ownerUid) ||
+            (member(ownerUid,branchId) && resource.data.actorUid == request.auth.uid);
+          allow list: if owner(ownerUid) ||
+            (member(ownerUid,branchId) && resource.data.actorUid == request.auth.uid);
           allow create: if (owner(ownerUid) || member(ownerUid,branchId))
             && request.resource.data.ownerUid == ownerUid
             && request.resource.data.branchId == branchId
@@ -222,7 +236,8 @@ service cloud.firestore {
           allow delete: if false;
         }
         match /liveSessions/{dayId} {
-          allow get, list: if owner(ownerUid) || member(ownerUid,branchId);
+          allow get: if owner(ownerUid) || (member(ownerUid,branchId) && staffWorkingDay(dayId));
+          allow list: if owner(ownerUid);
           allow create: if owner(ownerUid) ||
             (member(ownerUid,branchId)
               && request.resource.data.ownerUid == ownerUid
