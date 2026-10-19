@@ -424,6 +424,91 @@ final class LiveBranchStore {
     }).addOnSuccessListener(v->{busy=false;onSuccess.apply();})
       .addOnFailureListener(e->{busy=false;host.message("Restock Live gagal: "+e.getMessage());});
   }
+  /**
+   * Atomically move stock for owner-documented ROSAK / EDAR / STOK PULANG.
+   * Never change local stock before Firestore accepts the transaction.
+   * The existing deployed rules allow OWNER_CORRECTION stockAdjustments only,
+   * so the human-readable operation is kept in the audit name.
+   */
+  void adjustStockDelta(int item,int delta,String operation,Done onSuccess){
+    if(!accounts.owner()||!usable()||busy){
+      host.message("Owner perlu online untuk ubah stok Live.");return;
+    }
+    if(item<0||item>=host.names.length||host.unlimited(item)||
+      delta==0||Math.abs((long)delta)>100000){
+      host.message("Kuantiti stok Live tidak sah.");return;
+    }
+    final String branchKey=accounts.ownerUid()+":"+accounts.branchId();
+    final String label=operation+" · "+host.names[item];
+    DocumentReference ref=inventory();
+    DocumentReference audit=branch().collection("stockAdjustments").document();
+    busy=true;
+    db.runTransaction(tx->{
+      DocumentSnapshot snapshot=tx.get(ref);
+      ArrayList<Long> values=readStock(snapshot);
+      if(item>=values.size())throw new IllegalStateException("Menu Cloud tidak sepadan");
+      long previous=values.get(item),next=previous+delta;
+      if(next<0)throw new IllegalStateException("Baki stok tidak cukup untuk "+operation);
+      if(next>1000000)throw new IllegalStateException("Baki maksimum 1,000,000 unit");
+      values.set(item,next);
+      Map<String,Object> record=new HashMap<>();
+      record.put("ownerUid",accounts.ownerUid());
+      record.put("branchId",accounts.branchId());
+      record.put("actorUid",accounts.user().getUid());
+      record.put("item",item);
+      record.put("name",label);
+      record.put("before",previous);
+      record.put("after",next);
+      record.put("difference",(long)delta);
+      record.put("type","OWNER_CORRECTION");
+      record.put("createdAt",FieldValue.serverTimestamp());
+      tx.update(ref,"stock",values,"updatedAt",FieldValue.serverTimestamp());
+      tx.set(audit,record);
+      return null;
+    }).addOnSuccessListener(v->{
+      busy=false;
+      if(!branchKey.equals(accounts.ownerUid()+":"+accounts.branchId())){
+        host.message("Stok Cloud berjaya dikemas kini pada branch asal. "+
+          "Tukar kembali branch itu untuk semak audit sebelum merekod kos tempatan.");
+        return;
+      }
+      if(onSuccess!=null)onSuccess.apply();
+      host.draw();
+    }).addOnFailureListener(e->{
+      busy=false;
+      host.message("Stok Cloud TIDAK diubah: "+e.getMessage());
+    });
+  }
+  void showStockAdjustmentHistory(){
+    if(!accounts.owner()){host.message("Owner sahaja.");return;}
+    if(!usable()){host.message("Sambung internet untuk history stok Live.");return;}
+    final String branchKey=accounts.ownerUid()+":"+accounts.branchId();
+    branch().collection("stockAdjustments")
+      .orderBy("createdAt",Query.Direction.DESCENDING).limit(30)
+      .get(com.google.firebase.firestore.Source.SERVER)
+      .addOnSuccessListener(snapshot->{
+        if(!branchKey.equals(accounts.ownerUid()+":"+accounts.branchId()))return;
+        StringBuilder lines=new StringBuilder();
+        for(DocumentSnapshot event:snapshot.getDocuments()){
+          String action=event.getString("name");
+          if(action==null)action="Stok";
+          Long before=event.getLong("before"),after=event.getLong("after"),
+            delta=event.getLong("difference");
+          com.google.firebase.Timestamp timestamp=event.getTimestamp("createdAt");
+          String date=timestamp==null?"":new SimpleDateFormat("dd/MM/yyyy HH:mm",Locale.US).format(timestamp.toDate());
+          lines.append(date).append(" · ").append(action).append("\n")
+            .append(before==null?0:before).append(" → ")
+            .append(after==null?0:after).append("  (")
+            .append(delta!=null&&delta>0?"+":"").append(delta==null?0:delta)
+            .append(")\n\n");
+        }
+        if(lines.length()==0)lines.append("Belum ada pembetulan stok Live.");
+        host.darkBuilder().setTitle("HISTORY STOK LIVE · "+accounts.branchName())
+          .setMessage(lines.toString())
+          .setPositiveButton("TUTUP",null).show();
+      }).addOnFailureListener(e->host.message("History stok Live gagal dimuat: "+e.getMessage()));
+  }
+
   void editStockBalance(int item,int newBalance){
     if(!accounts.owner()||!usable()||busy){
       host.message("Edit stok Live perlukan Owner dan internet.");return;
