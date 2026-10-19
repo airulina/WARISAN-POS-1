@@ -115,6 +115,16 @@ try{
     openedBy:'staff',openedByEmail:'staff@example.test',
     opening:0,open:true,updatedAt:serverTimestamp()
   }));
+  await assertSucceeds(setDoc(d(staff,branch+'/loginChecks/outside'),{
+    ownerUid:'owner',branchId:'branch1',employeeUid:'staff',
+    email:'staff@example.test',day:today,status:'OUTSIDE_BRANCH',
+    distanceMeters:4100,createdAt:serverTimestamp()
+  }));
+  await assertFails(setDoc(d(staff,branch+'/loginChecks/forge'),{
+    ownerUid:'owner',branchId:'branch1',employeeUid:'owner',
+    email:'owner@example.test',day:today,status:'OUTSIDE_BRANCH',
+    distanceMeters:30,createdAt:serverTimestamp()
+  }));
   await assertSucceeds(setDoc(d(staff,branch+'/openingChecks/nearby'),{
     ownerUid:'owner',branchId:'branch1',employeeUid:'staff',
     day:today,status:'VERIFIED',distanceMeters:52,createdAt:serverTimestamp()
