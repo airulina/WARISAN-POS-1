@@ -34,6 +34,11 @@ public final class WarisanLanguageSmoke {
     assertEqual("EN branch label","PEMBEKAL · BRANCH AKTIF",true,"SUPPLIERS · ACTIVE BRANCH");
     assertEqual("BM sentence case","Pilih menu",false,"Pilih menu");
     assertEqual("EN sentence case","Pilih menu",true,"Select items");
+    assertEqual("BM receipt thanks","TERIMA KASIH!",false,"TERIMA KASIH!");
+    assertEqual("EN receipt thanks","TERIMA KASIH!",true,"THANK YOU!");
+    assertEqual("EN receipt footer","Sila datang lagi.",true,"Please visit us again.");
+    assertEqual("BM customer history","HISTORY CUSTOMER",false,"SEJARAH PELANGGAN");
+    assertEqual("EN closing","RESIT PENUTUPAN POS",true,"POS CLOSING RECEIPT");
     assertEqual("proper name","WARISAN POS",false,"WARISAN POS");
     assertEqual("uri","https://test.example/order/abc",false,"https://test.example/order/abc");
     assertEqual("dynamic RM","RM 1,300.50",true,"RM 1,300.50");
