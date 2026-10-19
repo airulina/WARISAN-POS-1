@@ -123,15 +123,19 @@ try{
     ownerUid:'owner',branchId:'branch1',employeeUid:'owner',
     email:'owner@example.test',deviceTag:'fake',createdAt:serverTimestamp()
   }));
-  // Security Rules alone cannot prove phone GPS, but reject employee
-  // Opening while the branch is explicitly closed by Owner.
-  await assertSucceeds(updateDoc(d(owner,branch),{openingEnabled:false}));
+  // A closed branch cannot OPEN a shift. GPS and the legacy
+  // openingEnabled toggle are no longer part of this contract.
+  await assertSucceeds(updateDoc(d(owner,branch),{
+    operatingStatus:'OFFDAY',operatingReason:'OFF DAY'
+  }));
   await assertFails(setDoc(d(staff,branch+'/liveSessions/'+today),{
     ownerUid:'owner',branchId:'branch1',day:today,
     openedBy:'staff',openedByEmail:'staff@example.test',
     opening:0,open:true,updatedAt:serverTimestamp()
   }));
-  await assertSucceeds(updateDoc(d(owner,branch),{openingEnabled:true}));
+  await assertSucceeds(updateDoc(d(owner,branch),{
+    operatingStatus:'OPEN',operatingReason:''
+  }));
   await assertSucceeds(setDoc(d(staff,branch+'/liveSessions/'+today),{
     ownerUid:'owner',branchId:'branch1',day:today,
     openedBy:'staff',openedByEmail:'staff@example.test',
