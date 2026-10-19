@@ -599,14 +599,14 @@ selectedDay=date();selectedMonth=selectedDay.substring(0,7);rangeStart=selectedD
       message("Ringkasan ini hanya untuk stok Owner Live.");return;
     }
     StringBuilder report=new StringBuilder("BRANCH: "+branchAccounts.branchName()+
-      "\\nSUMBER: FIRESTORE LIVE\\n\\n");
+      "\nSUMBER: FIRESTORE LIVE\n\n");
     for(int i=0;i<names.length;i++){
       if(posPrefs().getBoolean("menu_hidden_"+i,false))continue;
-      if(unlimited(i)){report.append(names[i]).append(": tanpa had unit\\n");continue;}
+      if(unlimited(i)){report.append(names[i]).append(": tanpa had unit\n");continue;}
       report.append(names[i]).append(": ").append(stock(i))
-        .append(i<3?" cucuk":" unit").append("\\n");
+        .append(i<3?" cucuk":" unit").append("\n");
     }
-    report.append("\\nBaki semasa disahkan melalui Cloud. "+
+    report.append("\nBaki semasa disahkan melalui Cloud. "+
       "Untuk sejarah pembetulan, tekan HISTORY PERUBAHAN STOK LIVE.");
     darkBuilder().setTitle("RINGKASAN STOK LIVE").setMessage(report.toString())
       .setPositiveButton("TUTUP",null).show();
