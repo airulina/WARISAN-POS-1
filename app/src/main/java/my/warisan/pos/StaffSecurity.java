@@ -156,49 +156,140 @@ final class StaffSecurity {
         }
       });
   }
-  void manageWorkers(){
-    if(!accounts.owner()){host.message("Hanya Owner boleh urus pekerja.");return;}
-    db.collection("workspaces").document(accounts.ownerUid())
-      .collection("branches").document(accounts.branchId()).collection("members")
-      .get().addOnSuccessListener(result->{
-        ArrayList<QueryDocumentSnapshot> workers=new ArrayList<>();
-        ArrayList<String> labels=new ArrayList<>();
-        for(QueryDocumentSnapshot m:result){
-          if(!"STAFF".equals(m.getString("role")))continue;
-          workers.add(m);
-          labels.add(m.getString("email")+
-            (Boolean.TRUE.equals(m.getBoolean("active"))?" · AKTIF":" · DISABLE"));
-        }
-        if(workers.isEmpty()){host.message("Belum ada pekerja untuk branch ini.");return;}
-        host.darkBuilder().setTitle("Pekerja · "+accounts.branchName())
-          .setItems(labels.toArray(new String[0]),(dialog,index)->{
-            QueryDocumentSnapshot chosen=workers.get(index);
-            boolean active=Boolean.TRUE.equals(chosen.getBoolean("active"));
-            String email=chosen.getString("email");
-            host.darkBuilder().setTitle(email)
-              .setItems(new String[]{active?"Nyahaktifkan pekerja":"Aktifkan semula pekerja",
-                "Hantar link reset password melalui email"},(d,action)->{
-                if(action==0)toggleEmployee(chosen,!active);
-                else resetEmployeePassword(email);
-              }).setNegativeButton("Tutup",null).show();
-          }).setNegativeButton("Tutup",null).show();
-      }).addOnFailureListener(e->host.message("Senarai pekerja gagal: "+e.getMessage()));
+  /** One Owner screen covers all branches; "remove" means permanent access revocation
+   *  with the audit/transaction history retained, NOT deletion of historical sales. */
+  static final class WorkerRow {
+    final QueryDocumentSnapshot member;
+    final String branchName;
+    final String branchId;
+    WorkerRow(QueryDocumentSnapshot doc,String name,String id){
+      member=doc;branchName=name;branchId=id;
+    }
+    boolean removed(){return Boolean.TRUE.equals(member.getBoolean("removed"));}
+    boolean active(){return !removed()&&Boolean.TRUE.equals(member.getBoolean("active"));}
+    String email(){
+      String v=member.getString("email");
+      return v==null?"(Email tidak diketahui)":v;
+    }
   }
-  void toggleEmployee(QueryDocumentSnapshot member,boolean active){
+  void manageWorkers(){
+    if(!accounts.owner()){host.message("Hanya Owner boleh lihat senarai pekerja.");return;}
+    final String ownerUid=accounts.ownerUid();
+    db.collection("workspaces").document(ownerUid).collection("branches")
+      .get().addOnSuccessListener(branches->{
+        ArrayList<com.google.android.gms.tasks.Task<com.google.firebase.firestore.QuerySnapshot>> tasks=new ArrayList<>();
+        ArrayList<String> branchNames=new ArrayList<>(),branchIds=new ArrayList<>();
+        for(QueryDocumentSnapshot b:branches){
+          tasks.add(b.getReference().collection("members").get());
+          branchNames.add(b.getString("name")==null?b.getId():b.getString("name"));
+          branchIds.add(b.getId());
+        }
+        if(tasks.isEmpty()){host.message("Belum ada branch Owner.");return;}
+        com.google.android.gms.tasks.Tasks.whenAllSuccess(tasks).addOnSuccessListener(results->{
+          if(!accounts.owner()||!ownerUid.equals(accounts.ownerUid()))return;
+          ArrayList<WorkerRow> activeRows=new ArrayList<>(),archivedRows=new ArrayList<>();
+          for(int index=0;index<results.size();index++){
+            com.google.firebase.firestore.QuerySnapshot snapshot=(com.google.firebase.firestore.QuerySnapshot)results.get(index);
+            for(QueryDocumentSnapshot member:snapshot){
+              if(!"STAFF".equals(member.getString("role")))continue;
+              WorkerRow row=new WorkerRow(member,branchNames.get(index),branchIds.get(index));
+              if(row.removed())archivedRows.add(row);else activeRows.add(row);
+            }
+          }
+          ArrayList<WorkerRow> all=new ArrayList<>();
+          all.addAll(activeRows);all.addAll(archivedRows);
+          if(all.isEmpty()){
+            host.darkBuilder().setTitle("Senarai Pekerja")
+              .setMessage("Belum ada pekerja berdaftar untuk semua branch. Pergi Account → Daftar Pekerja.")
+              .setPositiveButton("OK",null).show();
+            return;
+          }
+          ArrayList<String> labels=new ArrayList<>();
+          int enabled=0;
+          for(WorkerRow row:all){
+            if(row.active())enabled++;
+            String state=row.removed()?"DIBUANG":(row.active()?"AKTIF":"DISEKAT");
+            labels.add(row.email()+"\n"+row.branchName+"  ·  "+state);
+          }
+          host.darkBuilder().setTitle("SENARAI PEKERJA · "+all.size())
+            .setMessage("Aktif: "+enabled+"  ·  Tidak aktif: "+(all.size()-enabled)+
+              "\nPilih pekerja untuk sekat, buang akses, aktifkan semula atau reset password.")
+            .setItems(labels.toArray(new String[0]),(dialog,index)->workerDetails(all.get(index)))
+            .setNegativeButton("Tutup",null).show();
+        }).addOnFailureListener(e->host.message("Gagal baca pekerja semua branch: "+e.getMessage()));
+      }).addOnFailureListener(e->host.message("Gagal baca branch: "+e.getMessage()));
+  }
+  void workerDetails(WorkerRow worker){
     if(!accounts.owner())return;
-    DocumentReference profile=db.collection("staffProfiles").document(member.getId());
-    com.google.firebase.firestore.WriteBatch tx=db.batch();
-    tx.update(member.getReference(),"active",active);
-    tx.update(profile,"active",active);
-    tx.commit().addOnSuccessListener(v->host.message(active?
-      "Pekerja diaktifkan semula.":"Akses pekerja telah ditutup pada server."))
-      .addOnFailureListener(e->host.message("Ubah akses gagal: "+e.getMessage()));
+    String status=worker.removed()?"DIBUANG":(worker.active()?"AKTIF":"DISEKAT");
+    ArrayList<String> options=new ArrayList<>();
+    if(worker.removed()){
+      options.add("Aktifkan semula akses pekerja");
+    }else{
+      options.add(worker.active()?"Sekat akses sementara":"Aktifkan semula pekerja");
+      options.add("BUANG PEKERJA · Tarik balik semua akses");
+    }
+    options.add("Hantar pautan reset password ke email");
+    options.add("Kembali ke senarai");
+    host.darkBuilder().setTitle(worker.email())
+      .setMessage("Branch: "+worker.branchName+"\nStatus: "+status+
+        "\n\nBuang pekerja tidak memadam jualan, resit atau laporan lama.")
+      .setItems(options.toArray(new String[0]),(dialog,choice)->{
+        String action=options.get(choice);
+        if(action.startsWith("BUANG")){
+          confirmRemoveWorker(worker);
+        }else if(action.startsWith("Sekat")){
+          confirmBlockWorker(worker);
+        }else if(action.startsWith("Aktifkan")){
+          setEmployeeState(worker,true,false);
+        }else if(action.startsWith("Hantar")){
+          resetEmployeePassword(worker.email());
+        }else manageWorkers();
+      }).setNegativeButton("Tutup",null).show();
+  }
+  void confirmBlockWorker(WorkerRow worker){
+    host.darkBuilder().setTitle("Sekat sementara?")
+      .setMessage(worker.email()+"\nBranch: "+worker.branchName+
+        "\n\nPekerja tak boleh mengakses branch atau jualan Live selepas perubahan disahkan server. Rekod lama kekal.")
+      .setPositiveButton("SEKAT AKSES",(dialog,choice)->setEmployeeState(worker,false,false))
+      .setNegativeButton("Batal",null).show();
+  }
+  void confirmRemoveWorker(WorkerRow worker){
+    host.darkBuilder().setTitle("BUANG AKSES PEKERJA?")
+      .setMessage(worker.email()+"\nBranch: "+worker.branchName+
+        "\n\nAkses pekerja akan dinyahaktifkan dan disembunyikan daripada senarai aktif. Akaun Firebase Authentication tidak dipadam kerana memerlukan hak admin server.\n\nJualan, refund, stok dan rekod sejarah kekal.")
+      .setPositiveButton("YA, BUANG AKSES",(dialog,choice)->setEmployeeState(worker,false,true))
+      .setNegativeButton("BATAL",null).show();
+  }
+  void setEmployeeState(WorkerRow worker,boolean enabled,boolean removed){
+    if(!accounts.owner()||accounts.user()==null)return;
+    final String ownerId=accounts.ownerUid();
+    if(worker.member.getReference().getParent().getParent()==null||
+      !worker.branchId.equals(worker.member.getReference().getParent().getParent().getId())){
+      host.message("Branch pekerja tidak sepadan.");return;
+    }
+    DocumentReference profile=db.collection("staffProfiles").document(worker.member.getId());
+    com.google.firebase.firestore.WriteBatch batch=db.batch();
+    Map<String,Object> changes=new HashMap<>();
+    changes.put("active",enabled);changes.put("removed",removed);
+    changes.put("updatedAt",FieldValue.serverTimestamp());
+    if(removed)changes.put("removedAt",FieldValue.serverTimestamp());
+    else changes.put("removedAt",FieldValue.delete());
+    batch.update(worker.member.getReference(),changes);
+    batch.update(profile,changes);
+    batch.commit().addOnSuccessListener(v->{
+      if(!accounts.owner()||!ownerId.equals(accounts.ownerUid()))return;
+      host.message(removed?"Pekerja dibuang daripada akses semua fungsi branch.":
+        enabled?"Akses pekerja diaktifkan semula.":"Pekerja disekat sementara.");
+      manageWorkers();
+    }).addOnFailureListener(e->host.message("Ubah akses gagal: "+e.getMessage()+
+      ". Pastikan Firestore Rules terkini sudah diterbitkan."));
   }
   void resetEmployeePassword(String email){
     if(!accounts.owner()||email==null||email.isEmpty())return;
     accounts.auth.sendPasswordResetEmail(email)
-      .addOnSuccessListener(v->host.message("Link reset password telah dihantar ke "+email))
-      .addOnFailureListener(e->host.message("Reset gagal: "+e.getMessage()));
+      .addOnSuccessListener(v->host.message("Pautan reset password dihantar ke "+email))
+      .addOnFailureListener(e->host.message("Reset password gagal: "+e.getMessage()));
   }
   void requestRefund(int index){
     if(!accounts.staff()||accounts.user()==null){host.message("Akses pekerja diperlukan.");return;}
