@@ -1038,6 +1038,27 @@ final class WarisanLanguage {
     alias("Order", "Pesanan", "Order");
     alias("Orders", "Pesanan", "Orders");
     alias("ORDER TEMPATAN", "PESANAN TEMPATAN", "LOCAL ORDERS");
+    alias("TERIMA KASIH!", "TERIMA KASIH!", "THANK YOU!");
+    alias("Sila datang lagi.", "Sila datang lagi.", "Please visit us again.");
+    alias("BAYAR", "BAYARAN", "PAYMENT");
+    alias("TUNAI DITERIMA", "TUNAI DITERIMA", "CASH RECEIVED");
+    alias("RESIT PENUTUPAN POS", "RESIT PENUTUPAN POS", "POS CLOSING RECEIPT");
+    alias("HISTORY CUSTOMER", "SEJARAH PELANGGAN", "CUSTOMER HISTORY");
+    alias("MOHON REFUND", "MOHON BAYARAN BALIK", "REQUEST REFUND");
+    alias("LIHAT / REFUND", "LIHAT / BAYARAN BALIK", "VIEW / REFUND");
+    alias("REFUNDED", "TELAH DIBAYAR BALIK", "REFUNDED");
+    alias("REFUND PENUH", "BAYARAN BALIK PENUH", "FULL REFUND");
+    alias("RESIT PEMBEKAL", "RESIT PEMBEKAL", "SUPPLIER RECEIPT");
+    alias("Remark / alasan tolakan", "Catatan / alasan tolakan", "Remark / deduction reason");
+    alias("CASH IN", "DUIT MASUK", "CASH IN");
+    alias("CASH OUT", "DUIT KELUAR", "CASH OUT");
+    alias("No. resit", "No. resit", "Receipt No.");
+    alias("Cetak laporan harian", "Cetak laporan harian", "Print daily report");
+    alias("Pemantauan Owner", "Pemantauan pemilik", "Owner monitoring");
+    alias("Bayaran QR rasmi Owner", "Bayaran QR rasmi pemilik", "Official Owner QR payment");
+    alias("Order yang sudah confirm tetapi belum dibayar.", "Pesanan yang telah disahkan tetapi belum dibayar.", "Orders that have been confirmed but not paid.");
+    alias("TUKAR TARIKH", "TUKAR TARIKH", "CHANGE DATE");
+    alias("JUMLAH BAYARAN", "JUMLAH BAYARAN", "PAYMENT TOTAL");
     toEnglish=matcher(EN);
     toMalay=matcher(MS);
   }
