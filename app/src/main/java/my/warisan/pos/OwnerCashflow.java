@@ -442,6 +442,49 @@ final class OwnerCashflow {
         "untung tempatan belum diselaraskan daripada telefon branch ini; "+
         "angka kos tidak ditunjukkan supaya tidak tersalah sebagai RM0.",12,host.muted,false),-1,-2);
     }
+    if(chosen.id.equals(accounts.branchId())){
+      host.gap(host.body,10);
+      host.add(host.body,host.text("ITEM TERJUAL · REKOD TEMPATAN",12,host.gold,true),-1,-2);
+      String localFrom=host.selectedMonth+"-01",localTo=host.selectedMonth+"-31";
+      int[] sold=host.soldNetBetween(localFrom,localTo);
+      boolean anyProduct=false;
+      for(int i=0;i<Math.min(sold.length,host.names.length);i++){
+        if(sold[i]<=0)continue;
+        anyProduct=true;
+        host.add(host.body,host.text(host.names[i]+"  ·  "+sold[i]+
+          (i<3?" cucuk":" unit"),12,host.ink,false),-1,-2);
+        host.gap(host.body,4);
+      }
+      if(!anyProduct)host.add(host.body,host.text("Tiada butiran produk tempatan.",
+        12,host.muted,false),-1,-2);
+      host.gap(host.body,11);
+      host.add(host.body,host.text("PECAHAN KOS / PENGELUARAN TEMPATAN",
+        12,host.gold,true),-1,-2);
+      java.util.TreeMap<String,Long> costs=new java.util.TreeMap<>();
+      JSONArray spent=host.entries("cash_entries");
+      for(int i=0;i<spent.length();i++){
+        JSONObject entry=spent.optJSONObject(i);
+        if(entry==null||host.legacySupplierRestock(entry)||entry.optInt("amount",0)>=0)continue;
+        String d=host.entryDay(entry);
+        if(d.compareTo(localFrom)<0||d.compareTo(localTo)>0)continue;
+        String category=entry.optString("category","Lain-lain");
+        if(category.trim().isEmpty())category="Lain-lain";
+        costs.put(category,costs.getOrDefault(category,0L)-
+          entry.optLong("amount",0));
+      }
+      if(costs.isEmpty()){
+        host.add(host.body,host.text("Tiada rekod kos tunai untuk bulan ini.",
+          12,host.muted,false),-1,-2);
+      }else for(Map.Entry<String,Long> item:costs.entrySet()){
+        host.add(host.body,host.text(item.getKey()+"  ·  "+rm(item.getValue()),
+          12,host.ink,false),-1,-2);
+        host.gap(host.body,4);
+      }
+      host.add(host.body,host.text(
+        "Ini sejarah duit keluar (termasuk pembekal/peribadi). "+
+        "Ia bukan jumlah tambahan untuk ditolak sekali lagi daripada untung POS.",
+        11,host.muted,false),-1,-2);
+    }
     host.gap(host.body,13);
     host.add(host.body,host.text("REKOD JUALAN MENGIKUT TARIKH",13,host.gold,true),-1,-2);
     host.gap(host.body,7);
