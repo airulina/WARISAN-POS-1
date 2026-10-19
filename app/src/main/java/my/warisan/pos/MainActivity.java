@@ -1336,6 +1336,43 @@ selectedDay=date();selectedMonth=selectedDay.substring(0,7);rangeStart=selectedD
   }
   void completePendingPaymentLocal(int index,String method,int tendered){try{JSONArray pending=entries("pending_orders");JSONObject o=pending.optJSONObject(index);if(o==null||o.optBoolean("paid",false))throw new Exception();int due=o.optInt("total"),order=o.optInt("order");JSONArray q=o.optJSONArray("qty");int[] purchased=new int[names.length];for(int i=0;i<purchased.length;i++)purchased[i]=q==null?0:q.optInt(i);JSONObject sale=new JSONObject();sale.put("time",timestamp());String originalDay=entryDay(o);sale.put("businessDay",originalDay);sale.put("orderTime",o.optString("time",""));sale.put("paymentDate",date());sale.put("order",order);sale.put("total",due);sale.put("method",method);sale.put("refunded",false);sale.put("paid",true);sale.put("liveOrderId",o.optString("liveId",""));int cost=0;for(int i=0;i<purchased.length;i++)if(purchased[i]>0&&!unlimited(i))cost+=restockCost(i,purchased[i]);sale.put("costTotal",cost);JSONArray sq=new JSONArray();for(int n:purchased)sq.put(n);sale.put("qty",sq);JSONArray sales=entries("stock_sales");sales.put(sale);o.put("paid",true);o.put("paidTime",timestamp());o.put("method",method);pending.put(index,o);if(!posPrefs().edit().putString("pending_orders",pending.toString()).putString("stock_sales",sales.toString()).putInt("sales_"+originalDay,posPrefs().getInt("sales_"+originalDay,0)+due).commit())throw new IOException();String printed=paymentReceiptFor(purchased,method,due,order,tendered);playPaymentSound();draw();previewReceipt(printed,purchased,method,due,order,tendered);}catch(Exception e){message("Bayaran gagal direkod. Cuba semula.");}}
 
+  void restoreCloudPaymentLocal(int index,String method){
+    try{
+      JSONArray pending=entries("pending_orders");
+      JSONObject order=pending.optJSONObject(index);
+      if(order==null||order.optBoolean("paid",false)||order.optBoolean("cancelled",false))return;
+      String cloudId=order.optString("liveId","");
+      if(cloudId.isEmpty())return;
+      JSONArray sales=entries("stock_sales");
+      boolean already=false;
+      for(int i=0;i<sales.length();i++){
+        JSONObject x=sales.optJSONObject(i);
+        if(x!=null&&cloudId.equals(x.optString("liveOrderId",""))){already=true;break;}
+      }
+      String day=entryDay(order);
+      int cents=order.optInt("total"),orderNo=order.optInt("order");
+      if(!already){
+        JSONArray quantities=order.optJSONArray("qty");
+        JSONObject sale=new JSONObject();sale.put("time",timestamp());
+        sale.put("businessDay",day);sale.put("order",orderNo);sale.put("total",cents);
+        sale.put("method",method==null?"QR":method);
+        sale.put("qty",quantities);sale.put("paid",true);sale.put("refunded",false);
+        sale.put("liveOrderId",cloudId);
+        int cost=0;
+        if(quantities!=null)for(int id=0;id<Math.min(names.length,quantities.length());id++)
+          if(!unlimited(id)&&quantities.optInt(id)>0)cost+=restockCost(id,quantities.optInt(id));
+        sale.put("costTotal",cost);sales.put(sale);
+      }
+      order.put("paid",true);order.put("paidTime",timestamp());order.put("method",method);
+      pending.put(index,order);
+      android.content.SharedPreferences.Editor edit=posPrefs().edit()
+        .putString("pending_orders",pending.toString())
+        .putString("stock_sales",sales.toString());
+      if(!already)edit.putInt("sales_"+day,posPrefs().getInt("sales_"+day,0)+cents);
+      if(!edit.commit())throw new IOException("Storan tak dapat ditulis");
+      draw();message("Bayaran cloud yang tertinggal berjaya dipulihkan.");
+    }catch(Exception e){message("Bayaran cloud ada tetapi rekod lokal belum pulih. Hubungi Owner.");}
+  }
   void pay(){if(sum()==0){Toast.makeText(this,"Tambah menu dahulu",Toast.LENGTH_SHORT).show();return;}for(int i=0;i<qty.length;i++)if(!unlimited(i)&&qty[i]>stock(i)){message("Stok "+names[i]+" tidak cukup. Semak pesanan.");draw();return;}final int due=sum();
     darkBuilder().setTitle("Bayaran "+money(due)).setItems(new String[]{"Tunai","QR / DuitNow"},(dialog,index)->{if(index==0)cashPayment(due);else showPaymentQr(due);}).setNegativeButton("Batal",null).show();}
   int cashCents(EditText input){try{return new java.math.BigDecimal(input.getText().toString().trim()).movePointRight(2).intValueExact();}catch(Exception e){return -1;}}
