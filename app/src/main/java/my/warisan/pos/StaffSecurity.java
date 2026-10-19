@@ -10,6 +10,7 @@ import com.google.firebase.firestore.DocumentReference;
 import com.google.firebase.firestore.FirebaseFirestore;
 import com.google.firebase.firestore.FieldValue;
 import com.google.firebase.firestore.QueryDocumentSnapshot;
+import com.google.firebase.firestore.ListenerRegistration;
 import com.google.firebase.FirebaseApp;
 import com.google.firebase.auth.FirebaseAuth;
 import org.json.JSONArray;
@@ -26,6 +27,7 @@ final class StaffSecurity {
   final BranchAccounts accounts;
   final FirebaseFirestore db;
   final FirebaseAuth staffProvisionAuth;
+  private ListenerRegistration workerAccessListener;
   StaffSecurity(MainActivity a){
     host=a;accounts=a.branchAccounts;db=a.firestoreForStaff();
     FirebaseApp secondary;
@@ -120,6 +122,7 @@ final class StaffSecurity {
               // Online role check; only the Firebase Admin backend can create profiles.
               accounts.setSession(u.getUid(),ownerUid,branchId,
                 name==null?"Branch":name,"STAFF");
+              observeWorker();
               host.message("Login pekerja berjaya.");
             }).addOnFailureListener(e->{accounts.auth.signOut();host.draw();host.message("Pengesahan pekerja gagal: "+e.getMessage());});
         }).addOnFailureListener(e->host.message("Login gagal: "+e.getMessage()));
@@ -133,6 +136,69 @@ final class StaffSecurity {
   String fingerprint(JSONObject sale,int total){
     return sale.optString("time","")+"|"+host.entryDay(sale)+"|"+
       sale.optInt("order",0)+"|"+total;
+  }
+  void observeWorker(){
+    if(workerAccessListener!=null){workerAccessListener.remove();workerAccessListener=null;}
+    if(!accounts.staff()||accounts.user()==null)return;
+    final String uid=accounts.user().getUid();
+    workerAccessListener=db.collection("staffProfiles").document(uid)
+      .addSnapshotListener((profile,error)->{
+        if(!accounts.staff()||accounts.user()==null||!uid.equals(accounts.user().getUid()))return;
+        if(error!=null)return;
+        if(profile!=null&&(!profile.exists()||
+          !Boolean.TRUE.equals(profile.getBoolean("active"))||
+          !"STAFF".equals(profile.getString("role"))||
+          !accounts.ownerUid().equals(profile.getString("ownerUid"))||
+          !accounts.branchId().equals(profile.getString("branchId")))){
+          if(workerAccessListener!=null){workerAccessListener.remove();workerAccessListener=null;}
+          host.live.stop();accounts.auth.signOut();host.draw();
+          host.message("Akses pekerja telah dinyahaktifkan oleh Owner.");
+        }
+      });
+  }
+  void manageWorkers(){
+    if(!accounts.owner()){host.message("Hanya Owner boleh urus pekerja.");return;}
+    db.collection("workspaces").document(accounts.ownerUid())
+      .collection("branches").document(accounts.branchId()).collection("members")
+      .get().addOnSuccessListener(result->{
+        ArrayList<QueryDocumentSnapshot> workers=new ArrayList<>();
+        ArrayList<String> labels=new ArrayList<>();
+        for(QueryDocumentSnapshot m:result){
+          if(!"STAFF".equals(m.getString("role")))continue;
+          workers.add(m);
+          labels.add(m.getString("email")+
+            (Boolean.TRUE.equals(m.getBoolean("active"))?" · AKTIF":" · DISABLE"));
+        }
+        if(workers.isEmpty()){host.message("Belum ada pekerja untuk branch ini.");return;}
+        host.darkBuilder().setTitle("Pekerja · "+accounts.branchName())
+          .setItems(labels.toArray(new String[0]),(dialog,index)->{
+            QueryDocumentSnapshot chosen=workers.get(index);
+            boolean active=Boolean.TRUE.equals(chosen.getBoolean("active"));
+            String email=chosen.getString("email");
+            host.darkBuilder().setTitle(email)
+              .setItems(new String[]{active?"Nyahaktifkan pekerja":"Aktifkan semula pekerja",
+                "Hantar link reset password melalui email"},(d,action)->{
+                if(action==0)toggleEmployee(chosen,!active);
+                else resetEmployeePassword(email);
+              }).setNegativeButton("Tutup",null).show();
+          }).setNegativeButton("Tutup",null).show();
+      }).addOnFailureListener(e->host.message("Senarai pekerja gagal: "+e.getMessage()));
+  }
+  void toggleEmployee(QueryDocumentSnapshot member,boolean active){
+    if(!accounts.owner())return;
+    DocumentReference profile=db.collection("staffProfiles").document(member.getId());
+    com.google.firebase.firestore.WriteBatch tx=db.batch();
+    tx.update(member.getReference(),"active",active);
+    tx.update(profile,"active",active);
+    tx.commit().addOnSuccessListener(v->host.message(active?
+      "Pekerja diaktifkan semula.":"Akses pekerja telah ditutup pada server."))
+      .addOnFailureListener(e->host.message("Ubah akses gagal: "+e.getMessage()));
+  }
+  void resetEmployeePassword(String email){
+    if(!accounts.owner()||email==null||email.isEmpty())return;
+    accounts.auth.sendPasswordResetEmail(email)
+      .addOnSuccessListener(v->host.message("Link reset password telah dihantar ke "+email))
+      .addOnFailureListener(e->host.message("Reset gagal: "+e.getMessage()));
   }
   void requestRefund(int index){
     if(!accounts.staff()||accounts.user()==null){host.message("Akses pekerja diperlukan.");return;}
