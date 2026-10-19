@@ -583,7 +583,7 @@ selectedDay=date();selectedMonth=selectedDay.substring(0,7);rangeStart=selectedD
       add(item,text("BAKI STOK LIVE: "+stock(id)+" "+(id<3?"cucuk":"unit"),
         17,gold,true),-1,-2);gap(item,8);
       LinearLayout actions=row();
-      TextView restock=chip("+ TAMBAH STOK",blue,Color.WHITE);
+      TextView restock=chip("+ RESTOCK",blue,Color.WHITE);
       restock.setGravity(Gravity.CENTER);
       TextView edit=chip("EDIT BAKI",0xffffd54f,0xff6d3b16);
       edit.setGravity(Gravity.CENTER);
