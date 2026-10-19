@@ -700,7 +700,7 @@ final class LiveBranchStore {
   void restockDialog(int id){
     if(!accounts.owner()){host.message("Owner sahaja.");return;}
     EditText input=new EditText(host);host.styleInput(input);
-    input.setHint("Jumlah stok baru");input.setInputType(android.text.InputType.TYPE_CLASS_NUMBER);
+    input.setHint(host.ui("Jumlah stok baru"));input.setInputType(android.text.InputType.TYPE_CLASS_NUMBER);
     host.darkBuilder().setTitle("Restock Live · "+host.names[id])
       .setMessage("Stok akan dikemas kini secara atomik untuk semua telefon. Rekod kos pembelian disimpan di telefon Owner.")
       .setView(input).setPositiveButton("TAMBAH",(d,w)->{
