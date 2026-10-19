@@ -130,6 +130,53 @@ final class BranchPresence {
         .setNegativeButton("BATAL",null).show();
     }).addOnFailureListener(e->host.message("Status branch gagal diperiksa: "+e.getMessage()));
   }
+  /** A one-time location check at sign-in; Owner sees an exception if
+   *  a worker is outside their ASSIGNED branch or refuses GPS permission.
+   *  Sign-in itself remains possible (Opening remains strictly GPS-gated). */
+  void checkStaffLoginLocation(){
+    if(!host.branchAccounts.staff()||host.branchAccounts.user()==null)return;
+    final String worker=host.branchAccounts.user().getUid();
+    final String owner=host.branchAccounts.ownerUid(),branch=host.branchAccounts.branchId();
+    DocumentReference ref=host.firestoreForStaff().collection("workspaces")
+      .document(owner).collection("branches").document(branch);
+    ref.get(Source.SERVER).addOnSuccessListener(doc->{
+      if(!host.branchAccounts.staff()||host.branchAccounts.user()==null||
+        !worker.equals(host.branchAccounts.user().getUid())||
+        !branch.equals(host.branchAccounts.branchId()))return;
+      Double lat=doc.getDouble("latitude"),lon=doc.getDouble("longitude");
+      Long radius=doc.getLong("radiusMeters");
+      if(lat==null||lon==null||radius==null){
+        recordLoginCheck("NOT_CONFIGURED",-1);return;
+      }
+      requestGps(()->location(loc->{
+        if(loc==null){recordLoginCheck("GPS_UNAVAILABLE",-1);return;}
+        if(mocked(loc)){recordLoginCheck("MOCK_LOCATION",-1);return;}
+        float[] meters=new float[1];
+        Location.distanceBetween(lat,lon,loc.getLatitude(),loc.getLongitude(),meters);
+        int distance=Math.max(0,Math.round(meters[0]));
+        String status=distance>Math.max(50,Math.min(1000,radius))?"OUTSIDE_BRANCH":"WITHIN_BRANCH";
+        recordLoginCheck(status,distance);
+        if(!"WITHIN_BRANCH".equals(status))
+          host.message("Log In berjaya, tetapi lokasi telefon di luar branch "+
+            host.branchAccounts.branchName()+". Owner boleh semak percubaan ini.");
+      }));
+    }).addOnFailureListener(e->host.message(
+      "Lokasi Log In tidak dapat disahkan. Opening masih memerlukan GPS."));
+  }
+  void recordLoginCheck(String status,int distance){
+    if(!host.branchAccounts.staff()||host.branchAccounts.user()==null)return;
+    Map<String,Object> event=new HashMap<>();
+    event.put("ownerUid",host.branchAccounts.ownerUid());
+    event.put("branchId",host.branchAccounts.branchId());
+    event.put("employeeUid",host.branchAccounts.user().getUid());
+    event.put("email",host.branchAccounts.user().getEmail());
+    event.put("status",status);event.put("distanceMeters",distance);
+    event.put("day",host.businessDay());
+    event.put("createdAt",FieldValue.serverTimestamp());
+    host.firestoreForStaff().collection("workspaces").document(host.branchAccounts.ownerUid())
+      .collection("branches").document(host.branchAccounts.branchId())
+      .collection("loginChecks").add(event);
+  }
   void verifyOpening(int amount,String day,Runnable allowed){
     if(host.branchAccounts.owner()){allowed.run();return;}
     if(!host.branchAccounts.staff()){host.message("Login diperlukan.");return;}
