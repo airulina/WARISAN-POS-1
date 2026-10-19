@@ -193,18 +193,23 @@ selectedDay=date();selectedMonth=selectedDay.substring(0,7);rangeStart=selectedD
     ScrollView scroll=new ScrollView(this);scroll.setVerticalScrollBarEnabled(false);screen.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
     body=col();body.setPadding(dp(17),dp(15),dp(17),dp(25));scroll.addView(body);
     if(branchAccounts!=null&&branchAccounts.blocked()){
-      heading("WARISAN POS","Log masuk sebagai Owner atau terima jemputan pekerja.");
+      heading("WARISAN POS","Log masuk atau daftar Owner baharu. Pekerja gunakan email dan password.");
       FirebaseUser signed=firebaseAuth.getCurrentUser();
       if(signed==null){
         action("Owner · Log masuk Google",()->startActivityForResult(googleSignInClient.getSignInIntent(),RC_SIGN_IN));
         action("Pekerja · Email + Password",()->staffSecurity.loginEmployee());
       }
       else {
-        action("Pilih branch Owner",()->branchAccounts.chooseBranch());
-        if(branchAccounts.hasLegacyRecords())action("Guna Owner lama / data asal",()->branchAccounts.linkLegacyOwner());
-        else if(!branchAccounts.configured())action("Daftar Owner pertama kali",()->branchAccounts.registerOwner());
-        action("Terima jemputan pekerja",()->branchAccounts.showInvitations());
-        action("Log out Google",()->{firebaseAuth.signOut();googleSignInClient.signOut().addOnCompleteListener(task->draw());});
+        if(!branchAccounts.staff()){
+          action("Owner sedia ada · Pilih Branch",()->branchAccounts.chooseBranch());
+          action("Pengguna Baru · DAFTAR OWNER / SIGN UP",()->branchAccounts.registerOwner());
+          if(branchAccounts.hasLegacyRecords())
+            action("Owner lama · Gunakan data POS asal",()->branchAccounts.linkLegacyOwner());
+        }
+        action("Log keluar",()->{
+          if(live!=null)live.stop();
+          firebaseAuth.signOut();googleSignInClient.signOut().addOnCompleteListener(task->draw());
+        });
       }
       return;
     }
@@ -564,11 +569,16 @@ selectedDay=date();selectedMonth=selectedDay.substring(0,7);rangeStart=selectedD
         action("Pekerja · Email + Password",()->staffSecurity.loginEmployee());
       }else{
         String email=user.getEmail()==null?"Google Account":user.getEmail();
-        action("☁  "+email,()->message("Google account telah disambungkan."));
-        action("Log out Google",()->{firebaseAuth.signOut();googleSignInClient.signOut().addOnCompleteListener(task->draw());});
+        action("☁  "+email+(branchAccounts.staff()?" · PEKERJA":" · OWNER"),
+          ()->message("Akaun sedang aktif."));
+        action(branchAccounts.staff()?"Log keluar Pekerja":"Log keluar Owner",()->{
+          if(live!=null)live.stop();
+          firebaseAuth.signOut();
+          googleSignInClient.signOut().addOnCompleteListener(task->draw());
+        });
       }
       gap(body,7);
-      add(body,text("OWNER / BRANCH / PEKERJA",11,gold,true),-1,-2);gap(body,7);
+      add(body,text(branchAccounts.staff()?"AKSES PEKERJA":"OWNER / BRANCH / PEKERJA",11,gold,true),-1,-2);gap(body,7);
       if(branchAccounts.owner()){
         action("👥  LIHAT SEMUA PEKERJA · Aktif / Berhenti",()->staffSecurity.manageWorkers());
         gap(body,8);
