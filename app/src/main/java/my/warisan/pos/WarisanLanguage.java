@@ -24,7 +24,6 @@ final class WarisanLanguage {
   private static final Locale MALAYSIA = new Locale("ms", "MY");
   private static final Map<String,String> EN = new HashMap<>();
   private static final Map<String,String> MS = new HashMap<>();
-  private static Pattern toEnglish, toMalay;
 
   private WarisanLanguage(){}
 
@@ -40,63 +39,107 @@ final class WarisanLanguage {
     MS.put(original.toLowerCase(Locale.ROOT), malay);
   }
 
-  private static Pattern matcher(Map<String,String> values){
-    List<String> keys = new ArrayList<>(values.keySet());
-    Collections.sort(keys, new Comparator<String>(){
-      @Override public int compare(String a,String b){
-        return Integer.compare(b.length(),a.length());
-      }
-    });
-    StringBuilder regex=new StringBuilder();
-    for(String key:keys){
-      if(regex.length()>0)regex.append('|');
-      regex.append(Pattern.quote(key));
-    }
-    return Pattern.compile("(?<![\\p{L}\\p{N}_])(?:"
-      +regex+")(?![\\p{L}\\p{N}_])",
-      Pattern.CASE_INSENSITIVE|Pattern.UNICODE_CASE);
-  }
+  /**
+   * Whole-label translations only. Never replace isolated words inside a
+   * sentence: doing so generated broken output such as
+   * "Masuk branch previously before change stock".
+   *
+   * Dynamic titles use explicitly-approved prefix/suffix templates.
+   * Unknown text is preserved rather than converted into gibberish.
+   */
+  private static final Map<String,String[]> PREFIX=new java.util.LinkedHashMap<>();
+  private static final Map<String,String[]> SUFFIX=new java.util.LinkedHashMap<>();
 
-  static String translate(String value, boolean english){
-    if(value==null||value.isEmpty())return value;
-    // Leave technical keys, URI/URLs and email addresses intact; they are
-    // account data, not UI copy.
-    if(value.startsWith("https://")||value.startsWith("http://")||
-       value.startsWith("content://"))return value;
-    Pattern pattern=english?toEnglish:toMalay;
-    Map<String,String> dictionary=english?EN:MS;
-    Matcher matcher=pattern.matcher(value);
-    StringBuffer result=new StringBuffer();
-    while(matcher.find()){
-      String source=matcher.group();
-      String destination=dictionary.get(source.toLowerCase(Locale.ROOT));
-      if(destination==null)destination=source;
-      // ALL-CAPS UI headings stay upper case. Sentence case stays readable.
-      if(hasLetters(source)&&source.equals(source.toUpperCase(MALAYSIA))){
-        destination=destination.toUpperCase(english?Locale.ENGLISH:MALAYSIA);
-      }else if(!source.isEmpty()&&Character.isUpperCase(source.charAt(0))&&
-          !destination.isEmpty()){
-        destination=Character.toUpperCase(destination.charAt(0))
-          +destination.substring(1);
-      }else if(!source.isEmpty()&&Character.isLowerCase(source.charAt(0))&&
-          !destination.isEmpty()&&Character.isUpperCase(destination.charAt(0))&&
-          !destination.equals(destination.toUpperCase(MALAYSIA))){
-        // The dictionary stores title case, but ordinary sentences should
-        // not become "Pilih Menu" or "baki Stock" after localization.
-        destination=Character.toLowerCase(destination.charAt(0))
-          +destination.substring(1);
-      }
-      matcher.appendReplacement(result,Matcher.quoteReplacement(destination));
-    }
-    matcher.appendTail(result);
-    return result.toString();
+  private static void exact(String source,String malay,String english){
+    EN.put(source.toLowerCase(Locale.ROOT),english);
+    MS.put(source.toLowerCase(Locale.ROOT),malay);
   }
-
-  private static boolean hasLetters(String s){
-    for(int i=0;i<s.length();i++)if(Character.isLetter(s.charAt(i)))return true;
+  private static void prefix(String source,String malay,String english){
+    PREFIX.put(source.toLowerCase(Locale.ROOT),
+      new String[]{source,malay,english});
+  }
+  private static void suffix(String source,String malay,String english){
+    SUFFIX.put(source.toLowerCase(Locale.ROOT),
+      new String[]{source,malay,english});
+  }
+  private static String preserveCapitalization(String source,String translated,boolean english){
+    if(source.length()==0||translated.length()==0)return translated;
+    if(source.equals(source.toUpperCase(MALAYSIA))&&containsLetter(source)){
+      return translated.toUpperCase(english?Locale.ENGLISH:MALAYSIA);
+    }
+    // Proper nouns are not automatically case-normalized.
+    return translated;
+  }
+  private static boolean containsLetter(String text){
+    for(int i=0;i<text.length();i++)
+      if(Character.isLetter(text.charAt(i)))return true;
     return false;
   }
-
+  private static String exactLookup(String input,boolean english){
+    String output=(english?EN:MS).get(input.toLowerCase(Locale.ROOT));
+    if(output==null)return null;
+    return preserveCapitalization(input,output,english);
+  }
+  static String translate(String value,boolean english){
+    if(value==null||value.length()==0)return value;
+    if(value.startsWith("http://")||value.startsWith("https://")
+       ||value.startsWith("content://")||value.startsWith("file://"))
+      return value;
+    // Keep line breaks and indentation, especially for 32-column
+    // thermal receipts; each printed line is translated separately.
+    if(value.indexOf('\n')>=0){
+      String[] lines=value.split("\\n",-1);
+      StringBuilder out=new StringBuilder();
+      for(int i=0;i<lines.length;i++){
+        if(i>0)out.append('\n');
+        out.append(translateLine(lines[i],english));
+      }
+      return out.toString();
+    }
+    return translateLine(value,english);
+  }
+  private static String translateLine(String line,boolean english){
+    int left=0,right=line.length();
+    while(left<right&&Character.isWhitespace(line.charAt(left)))left++;
+    while(right>left&&Character.isWhitespace(line.charAt(right-1)))right--;
+    if(left>=right)return line;
+    String lead=line.substring(0,left),tail=line.substring(right);
+    String core=line.substring(left,right);
+    // NEVER translate an exact URL, email address, or a monetary amount.
+    if(core.matches("(?i)(https?://|content://).*")||
+       core.matches("(?i)[^\\\\s@]+@[^\\\\s@]+\\\\.[^\\\\s@]+")||
+       core.matches("(?i)(RM\\\\s*)?[0-9,]+(\\\\.[0-9]{1,2})?"))
+      return line;
+    String exact=exactLookup(core,english);
+    if(exact!=null)return lead+exact+tail;
+    // Dynamic labels: "JUMLAH BRANCH: 2", "Branch: Warisan Jalan Kebun".
+    for(String[] item:PREFIX.values()){
+      if(core.length()>item[0].length()&&
+         core.regionMatches(true,0,item[0],0,item[0].length())){
+        String rest=core.substring(item[0].length());
+        String known=exactLookup(rest,english);
+        return lead+(english?item[2]:item[1])+(known==null?rest:known)+tail;
+      }
+    }
+    for(String[] item:SUFFIX.values()){
+      if(core.length()>item[0].length()&&
+         core.regionMatches(true,core.length()-item[0].length(),
+           item[0],0,item[0].length())){
+        String head=core.substring(0,core.length()-item[0].length());
+        String known=exactLookup(head,english);
+        return lead+(known==null?head:known)+(english?item[2]:item[1])+tail;
+      }
+    }
+    // Two independent complete labels separated by a middle dot, e.g.
+    // "Branch Utama · Branch aktif". Never break ordinary prose into words.
+    int split=core.indexOf(" · ");
+    if(split>0&&split==core.lastIndexOf(" · ")){
+      String a=core.substring(0,split),b=core.substring(split+3);
+      String x=exactLookup(a,english),y=exactLookup(b,english);
+      if(x!=null&&y!=null)return lead+x+" · "+y+tail;
+    }
+    return line; // The safer fallback: unknown content stays unmodified.
+  }
   static {
     pair("Bahasa Melayu (Malaysia)", "Malay (Malaysia)");
     pair("Bahasa Inggeris", "English");
@@ -1059,7 +1102,6 @@ final class WarisanLanguage {
     alias("Order yang sudah confirm tetapi belum dibayar.", "Pesanan yang telah disahkan tetapi belum dibayar.", "Orders that have been confirmed but not paid.");
     alias("TUKAR TARIKH", "TUKAR TARIKH", "CHANGE DATE");
     alias("JUMLAH BAYARAN", "JUMLAH BAYARAN", "PAYMENT TOTAL");
-    toEnglish=matcher(EN);
-    toMalay=matcher(MS);
+    // Full labels and deliberately-approved templates are initialized above.
   }
 }
