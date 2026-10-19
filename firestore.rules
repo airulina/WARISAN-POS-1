@@ -240,8 +240,15 @@ service cloud.firestore {
           allow delete: if false;
         }
         match /liveOrders/{orderId} {
+          // The Android reserve() transaction first tx.get()s a NEW UUID
+          // (nonexistent order) to keep retries idempotent. resource is null
+          // for that lookup; dereferencing resource.data previously denied
+          // every worker's new Live order before the transaction could write.
+          // Only assigned, OPEN-branch members may check an absent document.
+          // Existing orders remain readable only by their originating staff.
           allow get: if owner(ownerUid) ||
-            (member(ownerUid,branchId) && resource.data.actorUid == request.auth.uid);
+            (member(ownerUid,branchId) &&
+              (resource == null || resource.data.actorUid == request.auth.uid));
           allow list: if owner(ownerUid) ||
             (member(ownerUid,branchId) && resource.data.actorUid == request.auth.uid);
           allow create: if (owner(ownerUid) || member(ownerUid,branchId))
