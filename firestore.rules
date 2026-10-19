@@ -14,8 +14,22 @@ service cloud.firestore {
     function signedIn() {
       return request.auth != null;
     }
+    function staffRoleStillReserved() {
+      // A blocked employee still belongs to Staff. Only removed=true releases
+      // the identity for a new Owner registration.
+      return signedIn() && (
+        (exists(/databases/$(database)/documents/staffProfiles/$(request.auth.uid))
+          && get(/databases/$(database)/documents/staffProfiles/$(request.auth.uid))
+            .data.get("removed",false) != true)
+        || (request.auth.token.email is string
+          && exists(/databases/$(database)/documents/staffEmails/$(request.auth.token.email))
+          && get(/databases/$(database)/documents/staffEmails/$(request.auth.token.email))
+            .data.get("removed",false) != true)
+      );
+    }
     function owner(ownerUid) {
-      return signedIn() && request.auth.uid == ownerUid;
+      return signedIn() && request.auth.uid == ownerUid
+        && !staffRoleStillReserved();
     }
     function verifiedEmail() {
       return signedIn() && request.auth.token.email_verified == true;
@@ -311,6 +325,37 @@ service cloud.firestore {
     }
     // Spark-only onboarding: Owner uses a secondary FirebaseAuth account to create
     // worker credentials, while writing a worker profile under Owner authorization.
+    // Cross-provider reservation of worker EMAIL: a Google sign-in using
+    // the same worker email cannot register another Owner workspace.
+    match /staffEmails/{email} {
+      allow get: if signedIn() &&
+        (request.auth.token.email == email ||
+          (resource != null && resource.data.ownerUid == request.auth.uid));
+      allow list: if false;
+      allow create: if signedIn() && owner(request.auth.uid)
+        && request.resource.data.email == email
+        && request.resource.data.ownerUid == request.auth.uid
+        && request.resource.data.role == "STAFF"
+        && request.resource.data.workerUid is string
+        && request.resource.data.branchId is string
+        && request.resource.data.removed is bool
+        && getAfter(/databases/$(database)/documents/staffProfiles/$(request.resource.data.workerUid)).data.ownerUid == request.auth.uid
+        && getAfter(/databases/$(database)/documents/staffProfiles/$(request.resource.data.workerUid)).data.email == email
+        && getAfter(/databases/$(database)/documents/staffProfiles/$(request.resource.data.workerUid)).data.branchId == request.resource.data.branchId
+        && getAfter(/databases/$(database)/documents/staffProfiles/$(request.resource.data.workerUid)).data.get("removed",false) == request.resource.data.removed
+        && request.resource.data.keys().hasOnly([
+          "email","ownerUid","workerUid","branchId","role","removed","updatedAt"]);
+      allow update: if owner(resource.data.ownerUid)
+        && request.resource.data.email == resource.data.email
+        && request.resource.data.ownerUid == resource.data.ownerUid
+        && request.resource.data.workerUid == resource.data.workerUid
+        && request.resource.data.branchId == resource.data.branchId
+        && request.resource.data.role == "STAFF"
+        && request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(["removed","updatedAt"])
+        && getAfter(/databases/$(database)/documents/staffProfiles/$(resource.data.workerUid)).data.get("removed",false) == request.resource.data.removed;
+      allow delete: if false;
+    }
     match /staffProfiles/{uid} {
       allow get: if signedIn() && (request.auth.uid == uid
         || resource.data.ownerUid == request.auth.uid);
@@ -340,8 +385,8 @@ service cloud.firestore {
           || request.resource.data.active == false);
       allow delete: if false;
     }
-    // Legacy Gmail invitation creation is disabled for new deployments.
-    // Staff accounts must be provisioned by an authenticated Owner through Cloud Functions.
+    // Legacy Google invitation writes are disabled; email/password staff
+    // accounts are provisioned on the free Spark plan by the Owner app.
     match /staffInvites/{inviteId} {
       allow get, list: if signedIn() &&
         (resource.data.ownerUid == request.auth.uid ||
