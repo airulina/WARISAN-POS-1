@@ -217,7 +217,8 @@ final class BranchAccounts {
           }
           WriteBatch batch=db.batch();batch.set(workspace,root);batch.set(first,loc);
           batch.commit().addOnSuccessListener(done->{
-            migrateLegacyIfFirstBranch(first.getId());
+            // New Owner sign-up starts with a clean branch; old business
+            // records remain untouched in legacy storage, not copied to strangers.
             setSession(ownerId,ownerId,first.getId(),name,"OWNER");
             host.message("Owner dan branch pertama berjaya didaftarkan.");
           }).addOnFailureListener(e->host.message("Daftar Owner gagal: "+e.getMessage()));
