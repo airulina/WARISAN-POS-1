@@ -78,6 +78,13 @@ final class WarisanLanguage {
           !destination.isEmpty()){
         destination=Character.toUpperCase(destination.charAt(0))
           +destination.substring(1);
+      }else if(!source.isEmpty()&&Character.isLowerCase(source.charAt(0))&&
+          !destination.isEmpty()&&Character.isUpperCase(destination.charAt(0))&&
+          !destination.equals(destination.toUpperCase(MALAYSIA))){
+        // The dictionary stores title case, but ordinary sentences should
+        // not become "Pilih Menu" or "baki Stock" after localization.
+        destination=Character.toLowerCase(destination.charAt(0))
+          +destination.substring(1);
       }
       matcher.appendReplacement(result,Matcher.quoteReplacement(destination));
     }
@@ -504,29 +511,29 @@ final class WarisanLanguage {
     alias("WARISAN POS", "WARISAN POS", "WARISAN POS");
     alias("KIOS WARISAN", "KIOS WARISAN", "WARISAN KIOSK");
     alias("Urus cawangan, status operasi dan pekerja.", "Urus cawangan, status operasi dan pekerja.", "Manage branches, operating status and employees.");
-    alias("Keseluruhan jualan. Tekan TOTAL SALE untuk pilih branch.", "Keseluruhan jualan. Tekan TOTAL SALE untuk pilih branch.", "Overall sales. Tap TOTAL SALES to select a branch.");
-    alias("Sesi Opening/Closing untuk branch Owner yang sedang aktif. Tidak mengubah rekod branch lain.", "Sesi Opening/Closing untuk branch Owner yang sedang aktif. Tidak mengubah rekod branch lain.", "Opening and closing sessions for the Owner's current branch. Other branches are unaffected.");
-    alias("Tekan + untuk tambah pesanan", "Tekan + untuk tambah pesanan", "Tap + to add items");
-    alias("Akses hanya dibuka apabila branch berstatus BUKA.", "Akses hanya dibuka apabila branch berstatus BUKA.", "Access is only available when the branch is open.");
-    alias("Owner sahaja · Pilih branch untuk edit atau tambah stok.", "Owner sahaja · Pilih branch untuk edit atau tambah stok.", "Owner only · Select a branch to edit or add stock.");
-    alias("Semua perubahan stok dibuat oleh Owner.", "Semua perubahan stok dibuat oleh Owner.", "All inventory changes must be made by the Owner.");
-    alias("Pekerja tidak boleh restock, edit baki, rekod rosak atau bayar pembekal.", "Pekerja tidak boleh restock, edit baki, rekod rosak atau bayar pembekal.", "Employees cannot restock, change balances, record damage or pay suppliers.");
-    alias("Jualan Live dari telefon pekerja dan kos branch lain belum semuanya termasuk.", "Jualan Live dari telefon pekerja dan kos branch lain belum semuanya termasuk.", "Live sales from employee devices and costs for other branches are not yet fully included.");
-    alias("Jangan samakan dengan untung semua branch.", "Jangan samakan dengan untung semua branch.", "Do not treat this as net profit across all branches.");
-    alias("Tiada order tempatan belum bayar.", "Tiada order tempatan belum bayar.", "There are no unpaid local orders.");
-    alias("Order tempatan dan order Cloud branch lain, lengkap dengan nombor resit serta asal branch.", "Order tempatan dan order Cloud branch lain, lengkap dengan nombor resit serta asal branch.", "Local orders and Cloud orders from other branches, including receipt numbers and originating branches.");
-    alias("Pesanan yang sudah disahkan tetapi belum dibayar.", "Pesanan yang sudah disahkan tetapi belum dibayar.", "Confirmed orders awaiting payment.");
-    alias("Sesi pekerja · Opening / Closing dan jualan hari ini.", "Sesi pekerja · Opening / Closing dan jualan hari ini.", "Employee session · Opening / Closing and today's sales.");
-    alias("Sesi Owner · Opening / Closing dan jualan Branch aktif.", "Sesi Owner · Opening / Closing dan jualan Branch aktif.", "Owner session · Opening / Closing and current branch sales.");
-    alias("Semak bayaran diterima sebelum sahkan.", "Semak bayaran diterima sebelum sahkan.", "Verify payment is received before confirming.");
-    alias("Branch dengan jualan, stok atau pekerja hanya boleh diarkibkan.", "Branch dengan jualan, stok atau pekerja hanya boleh diarkibkan.", "Branches with sales, stock or employees may only be archived.");
-    alias("Rekod lama kekal dalam laporan semua branch.", "Rekod lama kekal dalam laporan semua branch.", "Historic records remain in all-branch reports.");
-    alias("Tiada transaksi untuk tempoh ini.", "Tiada transaksi untuk tempoh ini.", "No transactions for this period.");
+    alias("Keseluruhan jualan. Tekan TOTAL SALE untuk pilih branch.", "Keseluruhan jualan. Tekan JUMLAH JUALAN untuk memilih cawangan.", "Overall sales. Tap TOTAL SALES to select a branch.");
+    alias("Sesi Opening/Closing untuk branch Owner yang sedang aktif. Tidak mengubah rekod branch lain.", "Sesi buka dan tutup bagi cawangan pemilik yang sedang aktif. Rekod cawangan lain tidak berubah.", "Opening and closing sessions for the Owner's current branch. Other branches are unaffected.");
+    alias("Tekan + untuk tambah pesanan", "Tekan + untuk menambah pesanan", "Tap + to add items");
+    alias("Akses hanya dibuka apabila branch berstatus BUKA.", "Akses hanya dibenarkan apabila cawangan berstatus BUKA.", "Access is only available when the branch is open.");
+    alias("Owner sahaja · Pilih branch untuk edit atau tambah stok.", "Pemilik sahaja · Pilih cawangan untuk mengubah atau menambah stok.", "Owner only · Select a branch to edit or add stock.");
+    alias("Semua perubahan stok dibuat oleh Owner.", "Semua perubahan stok dibuat oleh pemilik.", "All inventory changes must be made by the Owner.");
+    alias("Pekerja tidak boleh restock, edit baki, rekod rosak atau bayar pembekal.", "Pekerja tidak boleh menambah stok, mengubah baki, merekodkan stok rosak atau membayar pembekal.", "Employees cannot restock, change balances, record damage or pay suppliers.");
+    alias("Jualan Live dari telefon pekerja dan kos branch lain belum semuanya termasuk.", "Jualan masa nyata daripada telefon pekerja dan kos cawangan lain belum semuanya termasuk.", "Live sales from employee devices and costs for other branches are not yet fully included.");
+    alias("Jangan samakan dengan untung semua branch.", "Jangan samakan dengan keuntungan keseluruhan cawangan.", "Do not treat this as net profit across all branches.");
+    alias("Tiada order tempatan belum bayar.", "Tiada pesanan tempatan yang belum dibayar.", "There are no unpaid local orders.");
+    alias("Order tempatan dan order Cloud branch lain, lengkap dengan nombor resit serta asal branch.", "Pesanan tempatan dan pesanan awan daripada cawangan lain, lengkap dengan nombor resit serta cawangan asal.", "Local orders and Cloud orders from other branches, including receipt numbers and originating branches.");
+    alias("Pesanan yang sudah disahkan tetapi belum dibayar.", "Pesanan yang telah disahkan tetapi belum dibayar.", "Confirmed orders awaiting payment.");
+    alias("Sesi pekerja · Opening / Closing dan jualan hari ini.", "Sesi pekerja · Buka / Tutup sesi dan jualan hari ini.", "Employee session · Opening / Closing and today's sales.");
+    alias("Sesi Owner · Opening / Closing dan jualan Branch aktif.", "Sesi pemilik · Buka / Tutup sesi dan jualan cawangan aktif.", "Owner session · Opening / Closing and current branch sales.");
+    alias("Semak bayaran diterima sebelum sahkan.", "Pastikan bayaran telah diterima sebelum mengesahkannya.", "Verify payment is received before confirming.");
+    alias("Branch dengan jualan, stok atau pekerja hanya boleh diarkibkan.", "Cawangan yang mempunyai jualan, stok atau pekerja hanya boleh diarkibkan.", "Branches with sales, stock or employees may only be archived.");
+    alias("Rekod lama kekal dalam laporan semua branch.", "Rekod lama kekal dalam laporan semua cawangan.", "Historic records remain in all-branch reports.");
+    alias("Tiada transaksi untuk tempoh ini.", "Tiada transaksi bagi tempoh ini.", "No transactions for this period.");
     alias("Tiada rekod stok.", "Tiada rekod stok.", "No stock records.");
     alias("Jualan, stok dan resit lama tidak dipadam.", "Jualan, stok dan resit lama tidak dipadam.", "Historic sales, stock and receipts are not deleted.");
-    alias("Sila sambung internet dan cuba semula.", "Sila sambung internet dan cuba semula.", "Connect to the internet and try again.");
+    alias("Sila sambung internet dan cuba semula.", "Sila sambungkan internet dan cuba lagi.", "Connect to the internet and try again.");
     alias("Buka halaman tetapan.", "Buka halaman tetapan.", "Open the settings page.");
-    alias("Pengesahan bayaran dibuat secara manual.", "Pengesahan bayaran dibuat secara manual.", "Payments must be confirmed manually.");
+    alias("Pengesahan bayaran dibuat secara manual.", "Bayaran perlu disahkan secara manual.", "Payments must be confirmed manually.");
     alias("Pengesahan manual diperlukan.", "Pengesahan manual diperlukan.", "Manual confirmation required.");
 
     // Common sentence vocabulary for legacy screens and error dialogs.
@@ -902,6 +909,30 @@ final class WarisanLanguage {
     alias("More", "Lagi", "More");
     alias("Less", "Kurang", "Less");
     alias("General", "Umum", "General");
+    alias("Branch aktif", "Cawangan aktif", "Active branch");
+    alias("Branch pekerja", "Cawangan pekerja", "Employee branch");
+    alias("Cawangan pekerja", "Cawangan pekerja", "Employee branch");
+    alias("Sesi Owner", "Sesi pemilik", "Owner session");
+    alias("Order tempatan", "Pesanan tempatan", "Local orders");
+    alias("Order Live", "Pesanan masa nyata", "Live order");
+    alias("Pilih bahasa aplikasi", "Pilih bahasa aplikasi", "Select application language");
+    alias("Pilih menu", "Pilih menu", "Select items");
+    alias("Tukar Branch", "Tukar cawangan", "Switch branch");
+    alias("Urus Branch", "Urus cawangan", "Manage branches");
+    alias("Jumlah RM", "Jumlah RM", "Total RM");
+    alias("Ini dikira daripada rekod tempatan", "Ini dikira daripada rekod tempatan", "This is calculated from local records");
+    alias("Jualan POS tempatan: ", "Jualan POS tempatan: ", "Local POS sales: ");
+    alias("Untung ini dikira daripada rekod tempatan Branch Utama sahaja.", "Keuntungan ini dikira daripada rekod tempatan Cawangan Utama sahaja.", "This profit is calculated from Main Branch local records only.");
+    alias("Masukkan baki 0 hingga 1,000,000.", "Masukkan baki antara 0 hingga 1,000,000.", "Enter a stock balance from 0 to 1,000,000.");
+    alias("History Edar, bayaran dan rosak terdahulu disimpan pada", "Sejarah pengedaran, bayaran dan kerosakan terdahulu disimpan pada", "Previous distribution, payment and damage records are stored in");
+    alias("Rekod lama sebelum Live dipaparkan bersama transaksi Cloud tanpa mengira resit Live dua kali.", "Rekod lama sebelum sistem masa nyata dipaparkan bersama transaksi awan tanpa mengira resit yang sama dua kali.", "Historic pre-live records are shown with cloud transactions without counting the same live receipt twice.");
+    alias("OWNER · Baki stok sebenar daripada Firebase bagi branch ini.", "PEMILIK · Baki stok sebenar daripada Firebase bagi cawangan ini.", "OWNER · Actual Firebase stock balance for this branch.");
+    alias("Status semua branch", "Status semua cawangan", "Status of all branches");
+    alias("PEMBEKAL · BRANCH AKTIF", "PEMBEKAL · CAWANGAN AKTIF", "SUPPLIERS · ACTIVE BRANCH");
+    alias("No. Resit", "No. Resit", "Receipt No.");
+    alias("No. telefon", "No. telefon", "Phone No.");
+    alias("Tiada data", "Tiada data", "No data");
+    alias("Belum ada", "Belum ada", "Not available yet");
     toEnglish=matcher(EN);
     toMalay=matcher(MS);
   }
