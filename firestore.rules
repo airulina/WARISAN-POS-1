@@ -72,8 +72,9 @@ service cloud.firestore {
     // Off Day and Stock Habis are enforced on the server, not only Android UI.
     // Old branches without an explicit operatingStatus remain OPEN until Owner changes them.
     function branchAcceptsStaff(ownerUid, branchId) {
-      return get(/databases/$(database)/documents/workspaces/$(ownerUid)/branches/$(branchId))
-        .data.get("operatingStatus","OPEN") == "OPEN";
+      let branch = get(/databases/$(database)/documents/workspaces/$(ownerUid)/branches/$(branchId)).data;
+      return branch.get("operatingStatus","OPEN") == "OPEN"
+        && branch.get("archived",false) == false;
     }
     function member(ownerUid, branchId) {
       return assignedMember(ownerUid,branchId) && branchAcceptsStaff(ownerUid,branchId);
@@ -236,7 +237,17 @@ service cloud.firestore {
         allow read: if owner(ownerUid) || assignedMember(ownerUid, branchId);
         allow create: if owner(ownerUid)
           && request.resource.data.ownerUid == ownerUid;
-        allow update, delete: if owner(ownerUid);
+        allow update: if owner(ownerUid);
+        // Never permanently remove the legacy POS branch or the original
+        // Branch Utama. Only Owner may delete an already archived extra
+        // branch with no Live inventory. The Android app additionally checks
+        // all known transaction/worker subcollections on the server.
+        allow delete: if owner(ownerUid)
+          && branchId != "utama_legacy"
+          && resource.data.get("legacyDeviceData",false) != true
+          && resource.data.get("name","") != "Branch Utama"
+          && resource.data.get("archived",false) == true
+          && !exists(/databases/$(database)/documents/workspaces/$(ownerUid)/branches/$(branchId)/live/current);
 
         match /members/{userUid} {
           allow get, list: if owner(ownerUid) || (signedIn() && request.auth.uid == userUid);
