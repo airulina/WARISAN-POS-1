@@ -34,7 +34,7 @@ final class SharedPaymentQr {
   private boolean uploadBusy=false;
   SharedPaymentQr(MainActivity activity){
     host=activity;
-    db=activity.firestore;
+    db=FirebaseFirestore.getInstance();
   }
   private DocumentReference reference(){
     return db.collection("workspaces").document(host.branchAccounts.ownerUid())
