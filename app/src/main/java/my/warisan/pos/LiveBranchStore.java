@@ -323,6 +323,9 @@ final class LiveBranchStore {
     return out;
   }
   void reserve(int[] qty,int due,String day,String receiptId,Done onSuccess){
+    reserve(qty,due,day,receiptId,0,onSuccess);
+  }
+  void reserve(int[] qty,int due,String day,String receiptId,int receiptNo,Done onSuccess){
     if(!usable()||busy){host.message("Live belum siap / tiada internet. Jangan buat order offline.");return;}
     busy=true;
     DocumentReference ref=orders(receiptId),inv=inventory();
@@ -347,6 +350,9 @@ final class LiveBranchStore {
       orderData.put("actorUid",accounts.user().getUid());orderData.put("deviceOrderId",receiptId);
       orderData.put("deviceId",deviceId);
       orderData.put("day",day);orderData.put("total",due);
+      // Human-readable receipt number from the originating branch. The
+      // document UUID remains the idempotent payment/cancellation key.
+      if(receiptNo>0)orderData.put("receiptNo",receiptNo);
       orderData.put("qty",quantities);orderData.put("status","PENDING");
       orderData.put("createdAt",FieldValue.serverTimestamp());
       tx.update(inv,"stock",remaining,"lastOrderId",receiptId,"lastStockAction","RESERVE",
