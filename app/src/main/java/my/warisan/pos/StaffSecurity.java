@@ -46,40 +46,61 @@ final class StaffSecurity {
   }
   void createEmployee(){
     if(!accounts.owner()){host.message("Hanya Owner boleh daftar pekerja.");return;}
+    final String ownerUid=accounts.ownerUid();
+    db.collection("workspaces").document(ownerUid).collection("branches").get()
+      .addOnSuccessListener(result->{
+        if(!accounts.owner()||!ownerUid.equals(accounts.ownerUid()))return;
+        ArrayList<String> names=new ArrayList<>(),ids=new ArrayList<>();
+        int chosen=0;
+        for(QueryDocumentSnapshot branch:result){
+          ids.add(branch.getId());
+          names.add(branch.getString("name")==null?branch.getId():branch.getString("name"));
+          if(branch.getId().equals(accounts.branchId()))chosen=ids.size()-1;
+        }
+        if(ids.isEmpty()){host.message("Daftar branch dahulu sebelum daftar pekerja.");return;}
+        showCreateEmployeeForm(ids,names,chosen);
+      }).addOnFailureListener(e->host.message("Senarai branch tidak dapat diambil: "+e.getMessage()));
+  }
+  void showCreateEmployeeForm(ArrayList<String> ids,ArrayList<String> branchNames,int selected){
+    if(!accounts.owner())return;
     LinearLayout layout=host.col();layout.setPadding(host.dp(18),0,host.dp(18),0);
-    EditText email=input("Email pekerja",false),password=input("Password sementara pekerja (min 10 aksara)",true);
+    EditText email=input("Email pekerja",false);
+    EditText password=input("Password sementara pekerja (min 10 aksara)",true);
     EditText confirm=input("Sahkan password pekerja",true);
-    host.add(layout,email,-1,-2);host.add(layout,password,-1,-2);host.add(layout,confirm,-1,-2);
-    host.darkBuilder().setTitle("Owner · Daftar Pekerja")
-      .setMessage("Akaun pekerja mempunyai email dan password sendiri. Owner tidak perlu beri kata laluan Google atau Owner. Kata laluan tidak disimpan dalam database POS.")
+    android.widget.Spinner branches=new android.widget.Spinner(host);
+    android.widget.ArrayAdapter<String> adapter=new android.widget.ArrayAdapter<>(host,
+      android.R.layout.simple_spinner_dropdown_item,branchNames);
+    branches.setAdapter(adapter);branches.setSelection(selected);
+    host.add(layout,host.text("EMAIL",12,host.gold,true),-1,-2);
+    host.add(layout,email,-1,-2);
+    host.add(layout,host.text("PASSWORD",12,host.gold,true),-1,-2);
+    host.add(layout,password,-1,-2);host.add(layout,confirm,-1,-2);
+    host.add(layout,host.text("BRANCH TETAP · hanya Owner boleh ubah",12,host.gold,true),-1,-2);
+    host.add(layout,branches,-1,-2);
+    host.darkBuilder().setTitle("DAFTAR PEKERJA")
       .setView(layout).setPositiveButton("DAFTAR",(d,w)->{
         String mail=email.getText().toString().trim().toLowerCase(Locale.ROOT);
         String p=password.getText().toString();
-        if(!android.util.Patterns.EMAIL_ADDRESS.matcher(mail).matches()){host.message("Email pekerja tidak sah.");return;}
-        if(p.length()<10||!p.equals(confirm.getText().toString())){host.message("Password minimum 10 aksara dan mesti sepadan.");return;}
-        // Secondary FirebaseAuth means the Owner stays signed in.
-        // Email/Password + Firestore work on the no-cost Spark plan.
-        if(!accounts.owner()){host.message("Sesi Owner sudah tamat.");return;}
-        final String oid=accounts.ownerUid(),bid=accounts.branchId(),name=accounts.branchName();
-        // Before creating a Firebase Auth account, validate the exact Owner branch
-        // against the server. Otherwise failed Firestore setup can leave orphan users.
-        db.collection("workspaces").document(oid).collection("branches").document(bid)
+        if(!android.util.Patterns.EMAIL_ADDRESS.matcher(mail).matches()){
+          host.message("Email pekerja tidak sah.");return;
+        }
+        if(p.length()<10||!p.equals(confirm.getText().toString())){
+          host.message("Password minimum 10 aksara dan mesti sepadan.");return;
+        }
+        if(!accounts.owner())return;
+        int i=branches.getSelectedItemPosition();
+        if(i<0||i>=ids.size()){host.message("Pilih branch yang sah.");return;}
+        String ownerUid=accounts.ownerUid(),branchId=ids.get(i),branchName=branchNames.get(i);
+        db.collection("workspaces").document(ownerUid)
+          .collection("branches").document(branchId)
           .get(com.google.firebase.firestore.Source.SERVER)
           .addOnSuccessListener(branch->{
-            if(!accounts.owner()||!oid.equals(accounts.ownerUid())||
-               !bid.equals(accounts.branchId())){
-              showRegistrationProblem("Sesi Owner sudah berubah. Login Owner semula dan pilih branch.",null);
-              return;
-            }
-            if(!branch.exists()){
-              showRegistrationProblem("Branch Owner belum wujud dalam Firestore. Pilih semula Branch Utama melalui Account.",null);
-              return;
-            }
-            provisionWorker(mail,p,oid,bid,name);
-          }).addOnFailureListener(error->
-            showRegistrationProblem(friendlyRegistrationError("FIRESTORE",error),error));
-
-      }).setNegativeButton("Batal",null).show();
+            if(!accounts.owner()||!ownerUid.equals(accounts.ownerUid()))return;
+            if(!branch.exists()){host.message("Branch tidak wujud. Cuba semula.");return;}
+            provisionWorker(mail,p,ownerUid,branchId,branchName);
+          }).addOnFailureListener(e->showRegistrationProblem(
+            friendlyRegistrationError("FIRESTORE",e),e));
+      }).setNegativeButton("BATAL",null).show();
   }
   void showRegistrationProblem(String text,Exception ignored){
     // A dialog is deliberately used instead of a truncated Android Toast.
