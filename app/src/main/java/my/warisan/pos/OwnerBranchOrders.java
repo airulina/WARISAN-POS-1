@@ -26,6 +26,7 @@ final class OwnerBranchOrders {
   private final ArrayList<RemoteOrder> orders=new ArrayList<>();
   static final class RemoteOrder {
     String branch,id,number,day,status,time;
+    boolean numbered;
     long total;
     List<?> qty;
     long createdAt;
@@ -63,8 +64,10 @@ final class OwnerBranchOrders {
               for(DocumentSnapshot doc:snapshot.getDocuments()){
                 RemoteOrder o=new RemoteOrder();
                 o.branch=branchName;o.id=doc.getId();
-                String no=doc.getString("deviceOrderId");
-                o.number=(no==null||no.trim().isEmpty())?doc.getId():no;
+                Long no=doc.getLong("receiptNo");
+                o.numbered=no!=null&&no>0;
+                o.number=o.numbered?String.format(Locale.US,"#%04d",no):
+                  doc.getId().substring(0,Math.min(10,doc.getId().length())).toUpperCase(Locale.US);
                 o.day=doc.getString("day");
                 o.status=doc.getString("status");
                 Long total=doc.getLong("total");o.total=total==null?0:total;
@@ -123,7 +126,8 @@ final class OwnerBranchOrders {
         new LinearLayout.LayoutParams(0,-2,1));
       host.add(top,host.text(OwnerCashflow.rm(order.total),15,host.gold,true),-2,-2);
       host.add(card,top,-1,-2);host.gap(card,5);
-      host.add(card,host.text("NO. RESIT · "+order.number,12,host.blue,true),-1,-2);
+      host.add(card,host.text((order.numbered?"NO. RESIT":"RUJUKAN CLOUD")+
+        " · "+order.number,12,host.blue,true),-1,-2);
       host.gap(card,3);
       String date=order.time.isEmpty()?(order.day==null?"":order.day):order.time;
       host.add(card,host.text("Dari: "+order.branch+"   ·   "+date+
