@@ -68,6 +68,7 @@ private static final int RC_SIGN_IN = 9001;
   BranchAccounts branchAccounts;
   OwnerPassword ownerPassword;
   StaffSecurity staffSecurity;
+  LiveBranchStore live;
   FirebaseFirestore firestoreForStaff(){return firestore;}
   android.content.SharedPreferences posPrefs(){
     return branchAccounts==null?getPreferences(0):branchAccounts.posPrefs();
@@ -112,7 +113,11 @@ private static final int RC_SIGN_IN = 9001;
     summary[0]=(int)Math.max(0,Math.min(Integer.MAX_VALUE,opening));summary[3]=Math.max(0,summary[0]+summary[1]-summary[2]-summary[5]-summary[4]);return summary;
   }
   int[] stockToday(int id){return stockForDay(id,businessDay());}
-  int stock(int id){return unlimited(id)?Integer.MAX_VALUE:stockToday(id)[3];}
+  int stock(int id){
+    if(unlimited(id))return Integer.MAX_VALUE;
+    if(live!=null&&live.enabled())return live.stock(id);
+    return stockToday(id)[3];
+  }
   void stockLimit(int id,int amount){if(unlimited(id)){qty[id]+=amount;draw();return;}int available=stock(id)-qty[id];if(available<=0){message(names[id]+" habis. Masukkan stok dahulu.");return;}qty[id]+=Math.min(amount,available);draw();}
   void loadMenuPhoto(ImageView view,String location)throws Exception{Uri uri=Uri.parse(location);BitmapFactory.Options size=new BitmapFactory.Options();size.inJustDecodeBounds=true;
     try(InputStream source=getContentResolver().openInputStream(uri)){BitmapFactory.decodeStream(source,null,size);}
@@ -157,7 +162,7 @@ private static final int RC_SIGN_IN = 9001;
       }else p.edit().putBoolean("fix_supplier_receipt_detail_20260926",true).commit();
     }catch(Exception ignored){}
   }
-  @Override public void onCreate(Bundle b){super.onCreate(b);firebaseAuth = FirebaseAuth.getInstance();firestore = FirebaseFirestore.getInstance();branchAccounts=new BranchAccounts(this,firebaseAuth,firestore);ownerPassword=new OwnerPassword(this);staffSecurity=new StaffSecurity(this);
+  @Override public void onCreate(Bundle b){super.onCreate(b);firebaseAuth = FirebaseAuth.getInstance();firestore = FirebaseFirestore.getInstance();branchAccounts=new BranchAccounts(this,firebaseAuth,firestore);ownerPassword=new OwnerPassword(this);staffSecurity=new StaffSecurity(this);live=new LiveBranchStore(this);
 GoogleSignInOptions gso = new GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
         .requestIdToken(getString(R.string.default_web_client_id))
         .requestEmail()
@@ -165,6 +170,7 @@ GoogleSignInOptions gso = new GoogleSignInOptions.Builder(GoogleSignInOptions.DE
 googleSignInClient = GoogleSignIn.getClient(this, gso);snapshotBeforeUpdate317();snapshotBeforeUpdate();loadMenu();clearCurrentNasiDamageOnce();applyCorrection20260926();applySupplierReceiptDetailFix20260926();applyBusinessDayRepair20260929();repairDistributionBusinessDay20260929();repairPaidDistributionSales20260930();selectedDay=date();selectedMonth=selectedDay.substring(0,7);rangeStart=selectedDay;selectedStockDay=selectedDay;selectedCashDay=selectedDay;if(b!=null){int[] saved=b.getIntArray("cart");if(saved!=null)System.arraycopy(saved,0,qty,0,Math.min(saved.length,qty.length));activePage=b.getInt("page",0);selectedDay=b.getString("selectedDay",selectedDay);selectedMonth=selectedDay.substring(0,7);rangeStart=b.getString("rangeStart",rangeStart);selectedStockDay=b.getString("selectedStockDay",selectedStockDay);selectedCashDay=b.getString("selectedCashDay",selectedCashDay);cashDailyMode=b.getBoolean("cashDailyMode",cashDailyMode);}draw();}
   @Override protected void onSaveInstanceState(Bundle b){b.putIntArray("cart",qty);b.putInt("page",activePage);b.putString("selectedDay",selectedDay);b.putString("rangeStart",rangeStart);b.putString("selectedStockDay",selectedStockDay);b.putString("selectedCashDay",selectedCashDay);b.putBoolean("cashDailyMode",cashDailyMode);super.onSaveInstanceState(b);}
   void draw(){
+    if(live!=null&&branchAccounts!=null&&branchAccounts.active())live.attachDay();
     cachedStock=null;
     LinearLayout screen=col();screen.setBackgroundColor(cream);
     getWindow().setStatusBarColor(cream);
@@ -460,12 +466,12 @@ googleSignInClient = GoogleSignIn.getClient(this, gso);snapshotBeforeUpdate317()
       String day=businessDay();
       heading("Laporan Hari Ini","Paparan pekerja untuk branch "+branchAccounts.branchName());
       LinearLayout overview=row();
-      metric(overview,"JUALAN HARI INI",money(saleTotalBetween(day,day)),blue,null);
-      metric(overview,"TRANSAKSI HARI INI",String.valueOf(transactionCountBetween(day,day)),gold,null);
+      metric(overview,"JUALAN HARI INI",money(live.enabled()?(int)live.sales():saleTotalBetween(day,day)),blue,null);
+      metric(overview,"TRANSAKSI HARI INI",String.valueOf(live.enabled()?live.transactions():transactionCountBetween(day,day)),gold,null);
       add(body,overview,-1,-2);gap(body,8);
       LinearLayout pay=row();
-      metric(pay,"TUNAI",money(sessionCash(day)),0xff46c979,null);
-      metric(pay,"QR",money(sessionQr(day)),blue,null);
+      metric(pay,"TUNAI",money(live.enabled()?(int)live.cash():sessionCash(day)),0xff46c979,null);
+      metric(pay,"QR",money(live.enabled()?(int)live.qr():sessionQr(day)),blue,null);
       add(body,pay,-1,-2);gap(body,12);
       add(body,text("OPENING / CLOSING",13,gold,true),-1,-2);gap(body,7);
       drawPosSession();
@@ -528,7 +534,10 @@ googleSignInClient = GoogleSignIn.getClient(this, gso);snapshotBeforeUpdate317()
       heading(english()?"Settings":"Setting",english()?"WarisanPOS 3.39 · Complete POS & report audit.":"WarisanPOS 3.39 · Audit penuh POS & report.");
       action("🌐  "+(english()?"Language · English":"Bahasa · Bahasa Melayu"),()->chooseLanguage());
       action("👤  Account",()->{activePage=5;draw();});
-      if(!branchAccounts.staff())action("🔐  Password Owner",()->ownerPassword.change());
+      if(!branchAccounts.staff()){
+        action("🔐  Password Owner",()->ownerPassword.change());
+        action("☁  LIVE BRANCH / Sync",()->live.showDashboard());
+      }
       action("🧾  Bill / Resit",()->{activePage=7;draw();});
        action("💳  Payment / DuitNow",()->{activePage=10;draw();});
       action("🍽  Pengurusan Menu",()->{activePage=6;draw();});
@@ -552,6 +561,14 @@ googleSignInClient = GoogleSignIn.getClient(this, gso);snapshotBeforeUpdate317()
       gap(body,7);
       add(body,text("OWNER / BRANCH / PEKERJA",11,gold,true),-1,-2);gap(body,7);
       if(user!=null)branchAccounts.showActions();
+      if(branchAccounts.active()){
+        if(branchAccounts.owner()){
+          action("☁  Live branch / Semak jualan sekarang",()->live.showDashboard());
+          action("↻  Terbit menu terbaru ke Live",()->live.publishMenu());
+        } else if(branchAccounts.staff()) {
+          add(body,text(live.enabled()?"Live: "+(live.usable()?"ONLINE":"menunggu server"):"Owner belum aktifkan Live",12,gold,true),-1,-2);
+        }
+      }
       if(!branchAccounts.staff()){
         gap(body,7);add(body,text("BACKUP / PULIHKAN",11,muted,true),-1,-2);gap(body,7);
         if(user!=null){action("☁  Backup / Sync ke Google",()->syncToCloud());action("↻  Pulihkan dari Google",()->restoreFromCloud());}
@@ -883,8 +900,43 @@ googleSignInClient = GoogleSignIn.getClient(this, gso);snapshotBeforeUpdate317()
   void testPaymentConnection(){String provider=posPrefs().getString("payment_provider","Static DuitNow");if("Static DuitNow".equals(provider)){message("Static DuitNow tidak memerlukan API connection.");return;}if(!"Billplz".equals(provider)){String base=posPrefs().getString("payment_base_url","").trim(),key=posPrefs().getString("payment_api_key","").trim();if(base.isEmpty()||key.isEmpty()){message("Isi API Base URL dan API/Public Key dahulu.");return;}message("Konfigurasi "+provider+" tersedia.");return;}String secret=posPrefs().getString("payment_secret","").trim();if(secret.isEmpty()){message("Isi Billplz Secret Key dahulu.");return;}message("Menguji sambungan Billplz…");new Thread(()->{try{httpBillplz("GET",billplzBase()+"/collections?status=active",null);runOnUiThread(()->message("Billplz berjaya disambungkan."));}catch(Exception e){runOnUiThread(()->message("Billplz gagal disambungkan. Semak Secret Key, Base URL dan internet."));}}).start();}
   void deletePaymentConfig(){darkBuilder().setTitle("Padam konfigurasi merchant?").setMessage("Konfigurasi payment akan dipadam dari telefon ini.").setPositiveButton("PADAM",(d,w)->{posPrefs().edit().remove("payment_provider").remove("payment_merchant_id").remove("payment_api_key").remove("payment_secret").remove("payment_base_url").remove("payment_collection_id").remove("payment_callback_url").remove("payment_redirect_url").remove("payment_customer_email").apply();draw();message("Konfigurasi merchant dipadam.");}).setNegativeButton("Batal",null).show();}
   void stockTile(LinearLayout row,String title,String value){LinearLayout box=col();box.setGravity(Gravity.CENTER);box.setPadding(dp(5),dp(6),dp(5),dp(6));int back="BAKI".equals(title)?0xff9fc9f5:("TERJUAL".equals(title)?0xff4caf70:0xffffd54f);box.setBackground(shape(back,9));int tileLabel=0xff5d4930;int tileValue=0xff15263a;TextView label=text(title,9,tileLabel,true);label.setGravity(Gravity.CENTER);TextView figure=text(value,17,"BAKI".equals(title)?blue:tileValue,true);figure.setGravity(Gravity.CENTER);add(box,label,-1,-2);add(box,figure,-1,-2);LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(0,dp(57),1);p.setMargins(dp(2),0,dp(2),0);row.addView(box,p);}
+  void applyLiveStockRestock(int id,int amount){
+    if(!branchAccounts.owner()||amount<=0||id<0||id>=names.length)return;
+    try{
+      int cost=restockCost(id,amount);
+      JSONObject record=new JSONObject();
+      record.put("time",timestamp());record.put("businessDay",businessDay());
+      record.put("item",id);record.put("qty",amount);
+      record.put("type","restock");record.put("cost",cost);record.put("note","Restock Live");
+      JSONArray stocks=entries("stock_entries");stocks.put(record);
+      android.content.SharedPreferences.Editor e=posPrefs().edit().putString("stock_entries",stocks.toString());
+      if(supplierItem(id)){
+        int group=sateItem(id)?-1:id;
+        e.putInt(supplierDueKey(group),supplierDue(group)+cost);
+        JSONArray detail=supplierItems(group);
+        addSupplierItem(detail,id,amount,cost);
+        e.putString(supplierItemsKey(group),detail.toString());
+      }else{
+        JSONObject expense=new JSONObject();expense.put("time",timestamp());
+        expense.put("businessDay",businessDay());expense.put("month",businessDay().substring(0,7));
+        expense.put("amount",-cost);expense.put("category","Restock · "+names[id]);
+        expense.put("note","Restock Live "+amount+" unit");
+        JSONArray cash=entries("cash_entries");cash.put(expense);
+        e.putString("cash_entries",cash.toString());
+      }
+      if(!e.commit())throw new Exception("Storan telefon gagal");
+      draw();message(amount+" "+names[id]+" dimasukkan ke stok Live.");
+    }catch(Exception error){
+      message("Stok Cloud SUDAH ditambah, tetapi rekod kos telefon gagal. Semak dan baiki dalam Account.");
+    }
+  }
   void stockEntryItem(int id){stockEntryItem(id,false);}
-  void stockEntryItem(int id,boolean opening){if(unlimited(id)){message("Kuah kacang diurus mengikut liter, tanpa had stok unit.");return;}if(opening&&hasOpeningStock(id)){editOpeningStock(id);return;}
+  void stockEntryItem(int id,boolean opening){
+    if(live!=null&&live.enabled()){
+      if(opening){message("Stok awal telah dipindahkan ke Live. Guna + Restock Live.");return;}
+      live.restockDialog(id);return;
+    }
+    if(unlimited(id)){message("Kuah kacang diurus mengikut liter, tanpa had stok unit.");return;}if(opening&&hasOpeningStock(id)){editOpeningStock(id);return;}
     if(!opening&&costUnit(id)<=0){darkBuilder().setTitle("Harga mentah belum ditetapkan").setMessage("Tetapkan harga mentah "+names[id]+" sebelum restock supaya duit keluar dikira dengan betul.").setPositiveButton("Edit harga",(d,w)->editMenuPrice(id)).setNegativeButton("Batal",null).show();return;}
     EditText input=new EditText(this);input.setInputType(android.text.InputType.TYPE_CLASS_NUMBER);input.setHint("Bilangan unit / cucuk");styleInput(input);int before=stock(id);
     darkBuilder().setTitle((opening?"Stok awal · ":"Restock · ")+names[id]).setMessage("Baki sebelum tambah: "+before+(opening?"\nStok awal tidak dikira sebagai belian baru.":"\nKos: "+money(costUnit(id))+" / "+costPack(id)+" unit. "+(supplierItem(id)?"Restock ini akan masuk ke Bayaran Pembekal sehingga ditanda Telah Dibayar.":"Restock akan dicatat sebagai duit keluar.")))
