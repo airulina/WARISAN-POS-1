@@ -13,6 +13,7 @@ const env=await initializeTestEnvironment({
 const owner=env.authenticatedContext('owner',{email:'owner@example.test',email_verified:true}).firestore();
 const staff=env.authenticatedContext('staff',{email:'staff@example.test',email_verified:true}).firestore();
 const outsider=env.authenticatedContext('outsider',{email:'other@example.test',email_verified:true}).firestore();
+const anotherOwner=env.authenticatedContext('other-owner',{email:'other-owner@example.test',email_verified:true}).firestore();
 const staff2=env.authenticatedContext('staff2',{email:'staff2@example.test',email_verified:true}).firestore();
 const staffGoogle=env.authenticatedContext('staff-google',{email:'staff@example.test',email_verified:true}).firestore();
 const staffOtherBranch=env.authenticatedContext('staff-branch-two',{email:'branch-two@example.test',email_verified:true}).firestore();
@@ -31,6 +32,14 @@ try{
   await env.withSecurityRulesDisabled(async c=>{
     const db=c.firestore();
     await setDoc(d(db,workspace),{ownerUid:'owner',name:'Warisan'});
+    await setDoc(d(db,'workspaces/other-owner'),{
+      ownerUid:'other-owner',name:'Other Business'
+    });
+    await setDoc(d(db,'staffEmails/foreign-worker@example.test'),{
+      email:'foreign-worker@example.test',role:'STAFF',
+      ownerUid:'other-owner',workerUid:'foreign-staff',
+      branchId:'other-branch',removed:false,updatedAt:new Date()
+    });
     await setDoc(d(db,branch),{ownerUid:'owner',name:'Utama'});
     await setDoc(d(db,branchTwo),{ownerUid:'owner',name:'Warisan Jalan Kebun'});
     await setDoc(d(db,branch+'/members/staff'),{
@@ -62,6 +71,21 @@ try{
   await assertSucceeds(getDoc(d(owner,inv)));
   await assertSucceeds(getDoc(d(staff,inv)));
   await assertFails(getDoc(d(outsider,inv)));
+
+  // Legacy staff accounts may predate staffEmails, so an Owner checking
+  // the nonexistent email index must receive an empty snapshot, not
+  // PERMISSION_DENIED. Existing emails from another Owner remain private.
+  const missingStaffIndex='staffEmails/legacy-worker@example.test';
+  const missingSnap=await assertSucceeds(getDoc(d(owner,missingStaffIndex)));
+  assert.equal(missingSnap.exists(),false);
+  await assertFails(getDoc(d(outsider,missingStaffIndex)));
+  await assertSucceeds(getDoc(d(owner,'staffEmails/staff@example.test')));
+  await assertFails(getDoc(d(owner,'staffEmails/foreign-worker@example.test')));
+  await assertSucceeds(getDoc(d(anotherOwner,'staffEmails/foreign-worker@example.test')));
+  await assertFails(getDoc(d(anotherOwner,'staffEmails/staff@example.test')));
+  // Nonexistent index is also visible to a different valid Owner as
+  // nonexistent, never as a foreign worker document.
+  assert.equal((await assertSucceeds(getDoc(d(anotherOwner,missingStaffIndex)))).exists(),false);
 
   // A single Owner-uploaded static payment QR is visible across all assigned
   // branches, but only the Owner can replace/delete it.
