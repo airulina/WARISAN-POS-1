@@ -220,6 +220,8 @@ selectedDay=date();selectedMonth=selectedDay.substring(0,7);rangeStart=selectedD
     body=col();body.setPadding(dp(17),dp(15),dp(17),dp(25));scroll.addView(body);
     if(branchAccounts!=null&&branchAccounts.blocked()){
       heading("WARISAN POS","Log In · Email / Password atau Google");
+      action(english()?"🌐 Language: English":"🌐 Bahasa: Bahasa Melayu (Malaysia)",
+        ()->chooseLanguage());
       FirebaseUser signed=firebaseAuth.getCurrentUser();
       if(signed==null){
         add(body,text("EMAIL",12,gold,true),-1,-2);
@@ -931,6 +933,10 @@ selectedDay=date();selectedMonth=selectedDay.substring(0,7);rangeStart=selectedD
         "Akaun pekerja, branch aktif dan tetapan printer telefon.":"Akaun Owner, backup cloud dan salinan pada telefon.");
       action(branchAccounts.staff()?"‹  Kembali ke HARI INI":"‹  Kembali ke Setting",()->{activePage=branchAccounts.staff()?12:4;draw();});
       add(body,text("ACCOUNT",11,muted,true),-1,-2);gap(body,7);
+      if(branchAccounts.staff()){
+        action(english()?"🌐 Language: English":"🌐 Bahasa: Bahasa Melayu (Malaysia)",
+          ()->chooseLanguage());
+      }
       if(!branchAccounts.staff())action(ownerPassword.isSet()?"🔐  Tukar Password Owner":"🔐  Tetapkan Password Owner",()->ownerPassword.change());
       if(branchAccounts.staff()&&branchAccounts.active())
         add(body,text("Branch: "+branchAccounts.summary(),13,gold,true),-1,-2);
