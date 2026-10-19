@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import assert from 'node:assert/strict';
 import { initializeTestEnvironment, assertSucceeds, assertFails } from '@firebase/rules-unit-testing';
-import { doc, setDoc, updateDoc, getDoc, runTransaction, serverTimestamp, writeBatch, deleteField } from 'firebase/firestore';
+import { doc, setDoc, updateDoc, getDoc, runTransaction, serverTimestamp, writeBatch, deleteField, deleteDoc } from 'firebase/firestore';
 
 const projectId='demo-warisan-pos-live';
 const today=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Kuala_Lumpur',
@@ -447,5 +447,102 @@ try{
     });
   }));
   assert.equal((await getDoc(d(owner,inv))).data().stock.length,8);
-  console.log('PASS: Owner/staff access, atomic sale/refund, legacy stock slots, staff permissions, preserve history.');
+
+  // Owner fixes a staff account accidentally enrolled into Branch Utama.
+  // A profile-only or email-only branch change MUST fail.
+  const indexRef=d(owner,'staffEmails/staff@example.test');
+  const destinationMember=d(owner,branchTwo+'/members/staff');
+  const auditRef=d(owner,workspace+'/staffTransfers/transfer-one');
+  await assertFails(updateDoc(profile,{
+    branchId:'jalan-kebun',branchName:'Warisan Jalan Kebun',
+    updatedAt:serverTimestamp()
+  }));
+  await assertFails(updateDoc(indexRef,{
+    branchId:'jalan-kebun',updatedAt:serverTimestamp()
+  }));
+  const originalSale=(await getDoc(d(owner,branch+'/liveOrders/order1'))).data();
+  const originalStock=[...(await getDoc(d(owner,inv))).data().stock];
+  await assertSucceeds(runTransaction(owner,async tx=>{
+    const profileBefore=await tx.get(profile);
+    const oldMember=await tx.get(membership);
+    const destBefore=await tx.get(destinationMember);
+    const targetBefore=await tx.get(d(owner,branchTwo));
+    const emailBefore=await tx.get(indexRef);
+    assert.equal(profileBefore.data().branchId,'branch1');
+    assert.equal(oldMember.data().active,true);
+    assert.equal(destBefore.exists(),false);
+    assert.equal(targetBefore.data().ownerUid,'owner');
+    assert.equal(emailBefore.data().branchId,'branch1');
+    tx.delete(membership); // ONLY the member record, NOT sales/orders/stock
+    tx.set(destinationMember,{
+      ...oldMember.data(),ownerUid:'owner',branchId:'jalan-kebun',
+      branchName:'Warisan Jalan Kebun',updatedAt:serverTimestamp()
+    });
+    tx.update(profile,{
+      branchId:'jalan-kebun',branchName:'Warisan Jalan Kebun',
+      updatedAt:serverTimestamp()
+    });
+    tx.update(indexRef,{branchId:'jalan-kebun',updatedAt:serverTimestamp()});
+    tx.set(auditRef,{
+      ownerUid:'owner',actorUid:'owner',workerUid:'staff',
+      fromBranch:'branch1',toBranch:'jalan-kebun',
+      createdAt:serverTimestamp()
+    });
+  }));
+  assert.equal((await getDoc(profile)).data().branchId,'jalan-kebun');
+  assert.equal((await getDoc(indexRef)).data().branchId,'jalan-kebun');
+  assert.equal((await getDoc(destinationMember)).data().active,true);
+  assert.equal((await getDoc(membership)).exists(),false);
+  await assertFails(getDoc(d(staff,inv))); // Old shop cannot be accessed.
+  await assertSucceeds(getDoc(d(staff,branchTwo))); // New branch access.
+  await assertFails(getDoc(d(staff,branch+'/liveOrders/order1')));
+  assert.equal((await getDoc(d(owner,branch+'/liveOrders/order1'))).data().total,originalSale.total);
+  assert.deepEqual((await getDoc(d(owner,inv))).data().stock,originalStock);
+  await assertFails(updateDoc(d(staff,'staffProfiles/staff'),{branchId:'branch1'}));
+  await assertFails(updateDoc(d(staff,'staffEmails/staff@example.test'),{branchId:'branch1'}));
+  await assertFails(deleteDoc(destinationMember));
+  // A legacy worker may lack staffEmails completely. The same move must
+  // atomically CREATE the missing index without creating a new Auth account.
+  await env.withSecurityRulesDisabled(async c=>{
+    let db=c.firestore();
+    await setDoc(d(db,branch+'/members/legacy-user'),{
+      uid:'legacy-user',email:'legacy@example.test',
+      ownerUid:'owner',branchId:'branch1',branchName:'Utama',
+      role:'STAFF',active:true,removed:false,createdAt:new Date()
+    });
+    await setDoc(d(db,'staffProfiles/legacy-user'),{
+      uid:'legacy-user',email:'legacy@example.test',
+      ownerUid:'owner',branchId:'branch1',branchName:'Utama',
+      role:'STAFF',active:true,removed:false,createdAt:new Date()
+    });
+  });
+  const legacyMember=d(owner,branch+'/members/legacy-user');
+  const legacyNew=d(owner,branchTwo+'/members/legacy-user');
+  const legacyProfile=d(owner,'staffProfiles/legacy-user');
+  const legacyEmail=d(owner,'staffEmails/legacy@example.test');
+  await assertSucceeds(runTransaction(owner,async tx=>{
+    const old=await tx.get(legacyMember);
+    const newDoc=await tx.get(legacyNew);
+    const p=await tx.get(legacyProfile);
+    const index=await tx.get(legacyEmail);
+    assert.equal(old.exists(),true);assert.equal(newDoc.exists(),false);
+    assert.equal(p.data().branchId,'branch1');assert.equal(index.exists(),false);
+    tx.delete(legacyMember);
+    tx.set(legacyNew,{...old.data(),
+      branchId:'jalan-kebun',branchName:'Warisan Jalan Kebun',
+      updatedAt:serverTimestamp()});
+    tx.update(legacyProfile,{branchId:'jalan-kebun',branchName:'Warisan Jalan Kebun',updatedAt:serverTimestamp()});
+    tx.set(legacyEmail,{email:'legacy@example.test',ownerUid:'owner',
+      workerUid:'legacy-user',branchId:'jalan-kebun',
+      role:'STAFF',removed:false,updatedAt:serverTimestamp()});
+    tx.set(d(owner,workspace+'/staffTransfers/legacy-one'),{
+      ownerUid:'owner',actorUid:'owner',workerUid:'legacy-user',
+      fromBranch:'branch1',toBranch:'jalan-kebun',
+      createdAt:serverTimestamp()
+    });
+  }));
+  assert.equal((await getDoc(legacyEmail)).data().branchId,'jalan-kebun');
+  assert.equal((await getDoc(legacyNew)).data().active,true);
+  assert.equal((await getDoc(legacyMember)).exists(),false);
+  console.log('PASS: Sale/refund safety, legacy inventory, atomic worker reassignment (including missing email index), history preserved.');
 }finally{await env.cleanup();}
