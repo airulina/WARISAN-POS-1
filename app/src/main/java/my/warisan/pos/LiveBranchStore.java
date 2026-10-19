@@ -332,8 +332,12 @@ final class LiveBranchStore {
     ArrayList<Long> quantities=new ArrayList<>();
     for(int n:qty)quantities.add((long)n);
     db.runTransaction(tx->{
-      DocumentSnapshot stockDoc=tx.get(inv),order=tx.get(ref);
-      if(order.exists())return null; // idempotent retry: preserve existing reservation
+      // Read ONLY the inventory; querying a nonexistent order UUID first
+      // triggers Firestore read security rules before the atomic write.
+      // A random receiptId makes this a create-only operation. Firestore
+      // liveOrders rules refuse updates to an existing PENDING receipt,
+      // so duplicate retries cannot silently deduct stock twice.
+      DocumentSnapshot stockDoc=tx.get(inv);
       if(!stockDoc.exists())throw new IllegalStateException("Stok Live belum diaktifkan");
       ArrayList<Long> remaining=readStock(stockDoc);
       if(remaining.size()<quantities.size())throw new IllegalStateException("Menu Live tidak sepadan");
@@ -359,7 +363,18 @@ final class LiveBranchStore {
         "updatedAt",FieldValue.serverTimestamp());
       tx.set(ref,orderData);return null;
     }).addOnSuccessListener(v->{busy=false;onSuccess.apply();})
-      .addOnFailureListener(e->{busy=false;host.message("Order Live gagal: "+e.getMessage());});
+      .addOnFailureListener(e->{
+        busy=false;
+        android.util.Log.e("WARISAN_LIVE_ORDER",
+          "Tempahan Cloud gagal, branch="+accounts.branchId()+" (stok+resit atomik)",e);
+        String reason=e.getMessage()==null?"Tiada butiran ralat":e.getMessage();
+        if(reason.contains("PERMISSION_DENIED")||reason.contains("PERMISSION DENIED")){
+          host.message("ORDER LIVE DISEKAT FIRESTORE. Semak Rules diterbitkan untuk projek warisan-pos. "+
+            "Stok/resit tidak boleh dianggap tersimpan. Ralat: "+reason);
+        }else{
+          host.message("ORDER LIVE GAGAL (stok + resit): "+reason);
+        }
+      });
   }
   void cancel(String id,Done onSuccess){
     if(!usable()||busy){host.message("Live offline. Order belum dibatalkan.");return;}
