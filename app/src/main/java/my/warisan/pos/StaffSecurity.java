@@ -40,7 +40,7 @@ final class StaffSecurity {
   }
   EditText input(String hint,boolean secret){
     EditText f=new EditText(host);
-    f.setHint(hint);f.setSingleLine(true);
+    f.setHint(host.ui(hint));f.setSingleLine(true);
     f.setInputType(secret?InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_VARIATION_PASSWORD:
       InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS);
     host.styleInput(f);return f;
