@@ -411,6 +411,64 @@ final class LiveBranchStore {
     }).addOnSuccessListener(v->{busy=false;onSuccess.apply();})
       .addOnFailureListener(e->{busy=false;host.message("Restock Live gagal: "+e.getMessage());});
   }
+  void editStockBalance(int item,int newBalance){
+    if(!accounts.owner()||!usable()||busy){
+      host.message("Edit stok Live perlukan Owner dan internet.");return;
+    }
+    if(item<0||item>=host.names.length||host.unlimited(item)||newBalance<0||newBalance>1000000){
+      host.message("Jumlah stok tidak sah.");return;
+    }
+    busy=true;
+    final String name=host.names[item];
+    DocumentReference ref=inventory();
+    DocumentReference audit=branch().collection("stockAdjustments").document();
+    db.runTransaction(tx->{
+      DocumentSnapshot doc=tx.get(ref);ArrayList<Long> values=readStock(doc);
+      if(item>=values.size())throw new IllegalStateException("Menu branch belum diselaraskan");
+      long oldBalance=values.get(item);
+      values.set(item,(long)newBalance);
+      Map<String,Object> record=new HashMap<>();
+      record.put("ownerUid",accounts.ownerUid());record.put("branchId",accounts.branchId());
+      record.put("actorUid",accounts.user().getUid());
+      record.put("item",item);record.put("name",name);
+      record.put("before",oldBalance);record.put("after",(long)newBalance);
+      record.put("difference",(long)newBalance-oldBalance);
+      record.put("type","OWNER_CORRECTION");
+      record.put("createdAt",FieldValue.serverTimestamp());
+      tx.update(ref,"stock",values,"updatedAt",FieldValue.serverTimestamp());
+      tx.set(audit,record);
+      return null;
+    }).addOnSuccessListener(v->{
+      busy=false;host.draw();
+      host.message("Baki "+name+" telah dikemas kini kepada "+newBalance+" di cloud.");
+    }).addOnFailureListener(e->{
+      busy=false;host.message("Edit stok tidak disimpan: "+e.getMessage());
+    });
+  }
+  void editStockDialog(int id){
+    if(!accounts.owner()){host.message("Owner sahaja boleh edit baki stok.");return;}
+    if(!usable()){host.message("Sambung internet untuk edit stok Live.");return;}
+    int before=stock(id);
+    EditText input=new EditText(host);host.styleInput(input);
+    input.setInputType(android.text.InputType.TYPE_CLASS_NUMBER);
+    input.setSingleLine(true);input.setText(String.valueOf(before));
+    host.darkBuilder().setTitle("EDIT BAKI STOK · "+host.names[id])
+      .setMessage("Branch: "+accounts.branchName()+"\nBaki cloud sekarang: "+before+
+        "\n\nMasukkan jumlah baki sebenar. Perubahan ini pembetulan stok, BUKAN jualan atau pembelian. Rekod audit disimpan di Firebase.")
+      .setView(input).setPositiveButton("SIMPAN",(d,w)->{
+        try{
+          int newBalance=Integer.parseInt(input.getText().toString().trim());
+          if(newBalance<0||newBalance>1000000)throw new NumberFormatException();
+          if(newBalance==before){host.message("Tiada perubahan stok.");return;}
+          host.darkBuilder().setTitle("Sahkan pembetulan stok")
+            .setMessage(accounts.branchName()+"\n"+host.names[id]+
+              "\nDaripada "+before+" → "+newBalance+
+              "\n\nPastikan branch dan bilangan betul.")
+            .setPositiveButton("SAHKAN",(d2,w2)->editStockBalance(id,newBalance))
+            .setNegativeButton("BATAL",null).show();
+        }catch(NumberFormatException e){host.message("Masukkan baki 0 hingga 1,000,000.");}
+      }).setNegativeButton("BATAL",null).show();
+  }
   void restockDialog(int id){
     if(!accounts.owner()){host.message("Owner sahaja.");return;}
     EditText input=new EditText(host);host.styleInput(input);
