@@ -55,7 +55,7 @@ private static final int RC_SIGN_IN = 9001;
   int restockCost(int id,int units){long total=((long)units*costUnit(id)+costPack(id)/2)/costPack(id);if(total>Integer.MAX_VALUE)throw new ArithmeticException("Kos terlalu besar");return (int)total;}
   final int blue=Color.rgb(69,126,202), ink=Color.rgb(238,244,252), gold=Color.rgb(218,166,48), cream=Color.rgb(7,20,34), surface=Color.rgb(18,40,64), muted=Color.rgb(166,183,204);
   LinearLayout body,basket; TextView total,today,items; Button payButton;
-  static final int REQUEST_BLUETOOTH=42, EXPORT_CSV=43, EXPORT_PDF=44, PICK_IMAGE=45, EXPORT_BACKUP=46, IMPORT_BACKUP=47, PICK_TNG_QR=49;
+  static final int REQUEST_BLUETOOTH=42, EXPORT_CSV=43, EXPORT_PDF=44, PICK_IMAGE=45, EXPORT_BACKUP=46, IMPORT_BACKUP=47, PICK_TNG_QR=49, PICK_SHOP_LOGO=50;
   int exportYear;
   int activePage=0, imageItem=-1;
   String selectedMonth,selectedDay,rangeStart,selectedStockDay,selectedCashDay;
@@ -255,7 +255,7 @@ selectedDay=date();selectedMonth=selectedDay.substring(0,7);rangeStart=selectedD
     if(branchAccounts!=null&&branchAccounts.staff()
       &&activePage!=0&&activePage!=11&&activePage!=5&&activePage!=12&&activePage!=14)activePage=0;
     if(activePage!=0){drawPage();addNavigation(screen);return;}
-    LinearLayout header=row();ImageView logo=new ImageView(this);logo.setImageResource(R.drawable.warisan_logo);makeCircle(logo);add(header,logo,49,49);
+    LinearLayout header=row();ImageView logo=new ImageView(this);setStoreLogo(logo);makeCircle(logo);add(header,logo,49,49);
     LinearLayout heading=col();heading.setPadding(dp(10),0,0,0);add(heading,text("WARISAN POS",21,blue,true),-1,-2);LinearLayout sub=row();sub.addView(text("KIOS WARISAN  ·  SISTEM JUALAN",10,muted,true),new LinearLayout.LayoutParams(0,-2,1));TextView liveClock=text("",10,gold,true);liveClock.setGravity(Gravity.RIGHT|Gravity.CENTER_VERTICAL);add(sub,liveClock,-2,-2);add(heading,sub,-1,-2);startHeaderClock(liveClock);header.addView(heading,new LinearLayout.LayoutParams(0,-2,1));
     add(body,header,-1,-2);gap(body,18);
     LinearLayout title=row();title.addView(text("Pilih menu",20,ink,true),new LinearLayout.LayoutParams(0,-2,1));TextView historyButton=chip("HISTORY",0xff203f61,gold);add(title,historyButton,-2,-2);historyButton.setOnClickListener(v->{
@@ -303,7 +303,7 @@ selectedDay=date();selectedMonth=selectedDay.substring(0,7);rangeStart=selectedD
   void addNavigation(LinearLayout screen){LinearLayout nav=row();nav.setBackgroundColor(cream);nav.setPadding(dp(7),dp(7),dp(7),dp(9));String[] labels=branchAccounts.staff()?new String[]{"MENU","ORDER","HARI INI","PRINTER","ACCOUNT"}:(english()?new String[]{"MENU","ORDERS","STOCK","CASH","BRANCH","SETTINGS"}:new String[]{"MENU","ORDER","STOK","DUIT","BRANCH","SETTING"});int[] pages=branchAccounts.staff()?new int[]{0,11,12,14,5}:new int[]{0,11,1,3,15,4};
     for(int i=0;i<labels.length;i++){final int page=pages[i];boolean selected=(activePage==page)||(page==1&&activePage==13)||(page==3&&(activePage==2||activePage==16||activePage==17||activePage==18||activePage==19))||(page==4&&activePage>=4&&activePage<=10);TextView tab=text(labels[i],branchAccounts.staff()?10:9,selected?Color.rgb(19,24,34):Color.WHITE,true);tab.setGravity(Gravity.CENTER);tab.setBackground(shape(selected?gold:Color.rgb(20,58,101),11));LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(0,dp(49),1);p.setMargins(dp(3),0,dp(3),0);nav.addView(tab,p);tab.setOnClickListener(v->{activePage=page;draw();});}add(screen,nav,-1,-2);}
   void heading(String title,String subtitle){
-    LinearLayout brand=row();brand.setGravity(Gravity.CENTER_VERTICAL);ImageView logo=new ImageView(this);logo.setImageResource(R.drawable.warisan_logo);makeCircle(logo);add(brand,logo,44,44);LinearLayout brandText=col();brandText.setPadding(dp(9),0,0,0);add(brandText,text("WARISAN POS",18,blue,true),-1,-2);add(brandText,text("KIOS WARISAN  ·  SISTEM JUALAN",9,muted,true),-1,-2);brand.addView(brandText,new LinearLayout.LayoutParams(0,-2,1));TextView clock=text("",9,gold,true);clock.setGravity(Gravity.RIGHT|Gravity.CENTER_VERTICAL);add(brand,clock,-2,-2);startHeaderClock(clock);add(body,brand,-1,-2);gap(body,15);
+    LinearLayout brand=row();brand.setGravity(Gravity.CENTER_VERTICAL);ImageView logo=new ImageView(this);setStoreLogo(logo);makeCircle(logo);add(brand,logo,44,44);LinearLayout brandText=col();brandText.setPadding(dp(9),0,0,0);add(brandText,text("WARISAN POS",18,blue,true),-1,-2);add(brandText,text("KIOS WARISAN  ·  SISTEM JUALAN",9,muted,true),-1,-2);brand.addView(brandText,new LinearLayout.LayoutParams(0,-2,1));TextView clock=text("",9,gold,true);clock.setGravity(Gravity.RIGHT|Gravity.CENTER_VERTICAL);add(brand,clock,-2,-2);startHeaderClock(clock);add(body,brand,-1,-2);gap(body,15);
     add(body,text(title,23,ink,true),-1,-2);add(body,text(subtitle,12,muted,false),-1,-2);gap(body,16);
   }
   void action(String label,Runnable callback){TextView button=text(ui(label)+"   ›",15,blue,true);button.setPadding(dp(16),dp(14),dp(14),dp(14));button.setBackground(shape(surface,12));add(body,button,-1,-2);gap(body,9);button.setOnClickListener(v->callback.run());}
@@ -371,7 +371,7 @@ selectedDay=date();selectedMonth=selectedDay.substring(0,7);rangeStart=selectedD
     ScrollView scroll=new ScrollView(this);scroll.setVerticalScrollBarEnabled(false);scroll.setFillViewport(true);previewFrame.addView(scroll,new LinearLayout.LayoutParams(-1,-2));
     int receiptText=0xff26384c,receiptMuted=0xff66788a;
     LinearLayout sheet=col();sheet.setPadding(dp(20),dp(14),dp(20),dp(16));sheet.setBackground(shape(Color.WHITE,10));scroll.addView(sheet);
-    ImageView logo=new ImageView(this);logo.setImageResource(R.drawable.warisan_logo);makeCircle(logo);LinearLayout logoRow=row();logoRow.setGravity(Gravity.CENTER);add(logoRow,logo,74,74);add(sheet,logoRow,-1,-2);gap(sheet,5);
+    ImageView logo=new ImageView(this);setStoreLogo(logo);makeCircle(logo);LinearLayout logoRow=row();logoRow.setGravity(Gravity.CENTER);add(logoRow,logo,74,74);add(sheet,logoRow,-1,-2);gap(sheet,5);
     TextView brand=text(posPrefs().getString("shop_name","WARISAN FROZEN"),17,blue,true);brand.setGravity(Gravity.CENTER);add(sheet,brand,-1,-2);
     String phone=posPrefs().getString("receipt_phone","");TextView contact=text(phone.isEmpty()?"No. telefon belum diisi":"Tel: "+phone,11,receiptMuted,false);contact.setGravity(Gravity.CENTER);add(sheet,contact,-1,-2);
     String email=posPrefs().getString("receipt_email","");if(!email.isEmpty()){TextView mail=text(email,11,receiptMuted,false);mail.setGravity(Gravity.CENTER);add(sheet,mail,-1,-2);}
@@ -1163,6 +1163,48 @@ selectedDay=date();selectedMonth=selectedDay.substring(0,7);rangeStart=selectedD
     try(InputStream source=getContentResolver().openInputStream(uri)){Bitmap bitmap=BitmapFactory.decodeStream(source,null,options);if(bitmap==null)throw new IOException("QR tidak dapat dibuka");view.setImageBitmap(bitmap);}
     view.setAdjustViewBounds(true);view.setScaleType(ImageView.ScaleType.FIT_CENTER);view.setFilterTouchesWhenObscured(true);
   }
+  /** Owner-selected shop logo. Old embedded logo stays as fallback. */
+  Bitmap shopLogoBitmap(){
+    String selected=posPrefs().getString("shop_logo_uri","");
+    if(!selected.isEmpty()){
+      Uri uri=Uri.parse(selected);
+      try{
+        BitmapFactory.Options bounds=new BitmapFactory.Options();
+        bounds.inJustDecodeBounds=true;
+        try(InputStream stream=getContentResolver().openInputStream(uri)){
+          BitmapFactory.decodeStream(stream,null,bounds);
+        }
+        if(bounds.outWidth>0&&bounds.outHeight>0){
+          BitmapFactory.Options opts=new BitmapFactory.Options();
+          opts.inSampleSize=1;
+          while(bounds.outWidth/opts.inSampleSize>512||
+              bounds.outHeight/opts.inSampleSize>512)opts.inSampleSize*=2;
+          try(InputStream stream=getContentResolver().openInputStream(uri)){
+            Bitmap b=BitmapFactory.decodeStream(stream,null,opts);
+            if(b!=null)return b;
+          }
+        }
+      }catch(Exception ignored){
+        // Keep working when photo is moved or external storage unavailable.
+      }
+    }
+    return BitmapFactory.decodeResource(getResources(),R.drawable.warisan_logo);
+  }
+  void setStoreLogo(ImageView target){
+    Bitmap bitmap=shopLogoBitmap();
+    if(bitmap!=null)target.setImageBitmap(bitmap);
+    else target.setImageResource(R.drawable.warisan_logo);
+  }
+  void pickShopLogo(){
+    if(!branchAccounts.owner()){message("Hanya Owner boleh tukar logo kedai.");return;}
+    Intent intent=new Intent(Intent.ACTION_OPEN_DOCUMENT);
+    intent.addCategory(Intent.CATEGORY_OPENABLE);
+    intent.setType("image/*");
+    intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION|
+      Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION);
+    try{startActivityForResult(intent,PICK_SHOP_LOGO);}
+    catch(Exception e){message("Tidak dapat membuka galeri untuk logo.");}
+  }
   void pickTngQr(){Intent intent=new Intent(Intent.ACTION_OPEN_DOCUMENT);intent.setType("image/*");intent.addCategory(Intent.CATEGORY_OPENABLE);intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION|Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION);try{startActivityForResult(intent,PICK_TNG_QR);}catch(Exception e){message("Galeri tidak dapat dibuka");}}
   void previewTngQr(){String saved=posPrefs().getString("tng_qr_uri","");if(saved.isEmpty()){message("QR Touch ’n Go belum dimasukkan.");return;}try{LinearLayout box=col();box.setPadding(dp(16),dp(14),dp(16),dp(12));box.setBackground(shape(surface,18));add(box,text("QR TOUCH ’N GO",19,ink,true),-1,-2);gap(box,10);ImageView image=new ImageView(this);loadQrFullResolution(image,saved);add(box,image,-1,430);AlertDialog dialog=darkBuilder().setView(box).setPositiveButton("OK",null).create();dialog.setOnShowListener(v->{styleDarkDialogNow(dialog);});dialog.show();}catch(Exception e){message("QR tidak dapat dibuka. Upload semula.");}}
   void editPaymentProvider(){String[] options={"Static DuitNow","Billplz","HitPay","Maybank QRPayBiz","Custom API"};String current=posPrefs().getString("payment_provider","Static DuitNow");int checked=0;for(int i=0;i<options.length;i++)if(options[i].equals(current))checked=i;final int initial=checked;darkBuilder().setTitle("Pilih payment provider").setSingleChoiceItems(options,checked,null).setPositiveButton("Simpan",(d,w)->{AlertDialog a=(AlertDialog)d;int pos=a.getListView().getCheckedItemPosition();if(pos<0)pos=initial;android.content.SharedPreferences.Editor e=posPrefs().edit().putString("payment_provider",options[pos]);if("Billplz".equals(options[pos])&&posPrefs().getString("payment_base_url","").trim().isEmpty())e.putString("payment_base_url","https://www.billplz.com/api/v3");e.apply();draw();}).setNegativeButton("Batal",null).show();}
@@ -1448,6 +1490,17 @@ selectedDay=date();selectedMonth=selectedDay.substring(0,7);rangeStart=selectedD
   }                                                                              
     if(result!=RESULT_OK||data==null||data.getData()==null)return;Uri uri=data.getData();
     if(request==IMPORT_BACKUP){readBackup(uri);return;}
+    if(request==PICK_SHOP_LOGO){
+      try{
+        if(!branchAccounts.owner()){message("Hanya Owner boleh tukar logo.");return;}
+        getContentResolver().takePersistableUriPermission(
+          uri,Intent.FLAG_GRANT_READ_URI_PERMISSION);
+        posPrefs().edit().putString("shop_logo_uri",uri.toString()).apply();
+        draw();
+        message("Logo kedai dikemas kini pada telefon ini. Logo untuk telefon lain perlu diselaraskan berasingan.");
+      }catch(Exception e){message("Logo gagal disimpan. Pilih gambar yang lain.");}
+      return;
+    }
     if(request==PICK_IMAGE){try{getContentResolver().takePersistableUriPermission(uri,Intent.FLAG_GRANT_READ_URI_PERMISSION);if(imageItem<0||imageItem>=names.length)return;posPrefs().edit().putString("menu_image_"+imageItem,uri.toString()).apply();draw();message("Gambar menu disimpan");}catch(Exception e){message("Tidak dapat menyimpan gambar ini");}return;}
     if(request==PICK_TNG_QR){try{getContentResolver().takePersistableUriPermission(uri,Intent.FLAG_GRANT_READ_URI_PERMISSION);posPrefs().edit().putString("tng_qr_uri",uri.toString()).apply();draw();message("QR Touch ’n Go disimpan");}catch(Exception e){message("Tidak dapat menyimpan QR Touch ’n Go");}return;}
     try(OutputStream out=getContentResolver().openOutputStream(uri)){
@@ -1746,7 +1799,7 @@ selectedDay=date();selectedMonth=selectedDay.substring(0,7);rangeStart=selectedD
     ScrollView scroll=new ScrollView(this);scroll.setVerticalScrollBarEnabled(false);scroll.setFillViewport(true);previewFrame.addView(scroll,new LinearLayout.LayoutParams(-1,-2));
     int receiptText=0xff26384c,receiptMuted=0xff66788a;
     LinearLayout sheet=col();sheet.setPadding(dp(20),dp(14),dp(20),dp(16));sheet.setBackground(shape(Color.WHITE,10));scroll.addView(sheet);
-    ImageView logo=new ImageView(this);logo.setImageResource(R.drawable.warisan_logo);makeCircle(logo);
+    ImageView logo=new ImageView(this);setStoreLogo(logo);makeCircle(logo);
     LinearLayout logoRow=row();logoRow.setGravity(Gravity.CENTER);add(logoRow,logo,74,74);add(sheet,logoRow,-1,-2);gap(sheet,5);
     TextView brand=text(posPrefs().getString("shop_name","WARISAN FROZEN"),17,blue,true);brand.setGravity(Gravity.CENTER);add(sheet,brand,-1,-2);
     String phone=posPrefs().getString("receipt_phone","");
@@ -1844,10 +1897,11 @@ selectedDay=date();selectedMonth=selectedDay.substring(0,7);rangeStart=selectedD
   void message(String s){Toast.makeText(this,ui(s),Toast.LENGTH_LONG).show();}
   void playPaymentSound(){try{MediaPlayer player=MediaPlayer.create(this,R.raw.payment_chime);if(player==null)return;player.setVolume(.85f,.85f);player.setOnCompletionListener(MediaPlayer::release);player.setOnErrorListener((mp,what,extra)->{mp.release();return true;});player.start();}catch(Exception ignored){}}
   void printLogo(OutputStream out)throws Exception{
-    Bitmap source=BitmapFactory.decodeResource(getResources(),R.drawable.warisan_logo);
+    Bitmap source=shopLogoBitmap();
     if(source==null)return;
     int side=Math.min(source.getHeight(),source.getWidth());
-    Bitmap square=Bitmap.createBitmap(source,(source.getWidth()-side)/2,0,side,side);
+    Bitmap square=Bitmap.createBitmap(source,
+      (source.getWidth()-side)/2,(source.getHeight()-side)/2,side,side);
     Bitmap image=Bitmap.createScaledBitmap(square,192,192,true);
     out.write(new byte[]{27,97,1}); // pusatkan logo
     out.write(new byte[]{29,118,48,0,24,0,(byte)192,0}); // ESC/POS 192 x 192
