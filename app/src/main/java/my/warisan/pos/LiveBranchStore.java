@@ -197,11 +197,14 @@ final class LiveBranchStore {
   void recoverPendingOrders(){
     if(!accounts.active())return;
     String session=activeKey,who=accounts.user().getUid();
-    branch().collection("liveOrders").whereEqualTo("status","PENDING").get()
-      .addOnSuccessListener(results->{
+    com.google.firebase.firestore.Query pendingQuery=accounts.staff()?
+      branch().collection("liveOrders").whereEqualTo("actorUid",who):
+      branch().collection("liveOrders").whereEqualTo("status","PENDING");
+    pendingQuery.get().addOnSuccessListener(results->{
         if(!session.equals(activeKey))return;
         JSONArray local=host.entries("pending_orders");boolean changed=false;
         for(QueryDocumentSnapshot doc:results){
+          if(!"PENDING".equals(doc.getString("status")))continue;
           if(accounts.staff()&&!who.equals(doc.getString("actorUid")))continue;
           boolean exists=false;
           for(int i=0;i<local.length();i++){
