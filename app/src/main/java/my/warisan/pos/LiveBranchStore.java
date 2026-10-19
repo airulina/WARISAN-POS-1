@@ -90,7 +90,7 @@ final class LiveBranchStore {
         if(!snapshot.getMetadata().isFromCache())inventoryChecked=true;
         if(!snapshot.exists()){
           enabled=false;serverConfirmed=false;
-          if(host.activePage==13&&inventoryChecked)host.draw();
+          if((host.activePage==13||host.activePage==20)&&inventoryChecked)host.draw();
           return;
         }
         enabled=true;
@@ -122,7 +122,7 @@ final class LiveBranchStore {
             host.loadMenu();
           }
         }
-        if(host.activePage==0||host.activePage==1||host.activePage==12||host.activePage==13)host.draw();
+        if(host.activePage==0||host.activePage==1||host.activePage==12||host.activePage==13||host.activePage==20)host.draw();
       });
       recoverPendingOrders();
       reconcileLocalPending();
