@@ -42,10 +42,10 @@ service cloud.firestore {
         && get(/databases/$(database)/documents/staffInvites/$(inviteId)).data.active == true;
     }
     function assignedMember(ownerUid, branchId) {
+      let staff = get(/databases/$(database)/documents/workspaces/$(ownerUid)/branches/$(branchId)/members/$(request.auth.uid)).data;
       return signedIn()
-        && exists(/databases/$(database)/documents/workspaces/$(ownerUid)/branches/$(branchId)/members/$(request.auth.uid))
-        && get(/databases/$(database)/documents/workspaces/$(ownerUid)/branches/$(branchId)/members/$(request.auth.uid)).data.active == true
-        && get(/databases/$(database)/documents/workspaces/$(ownerUid)/branches/$(branchId)/members/$(request.auth.uid)).data.get("removed",false) == false;
+        && staff.active == true
+        && staff.get("removed",false) == false;
     }
     // Off Day and Stock Habis are enforced on the server, not only Android UI.
     // Old branches without an explicit operatingStatus remain OPEN until Owner changes them.
