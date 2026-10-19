@@ -1,4 +1,4 @@
-# WARISAN POS-1 v3.19 — Firebase Spark Live (tanpa Cloud Functions)
+# WARISAN POS-1 v3.20 — Firebase Spark Live (tanpa Cloud Functions)
 
 ## Status & keselamatan
 - **Android build lulus**, dan Firestore Emulator menguji hak Owner/pekerja serta transaksi stok, bayaran dan refund dengan berjaya.
@@ -40,6 +40,19 @@ Guna Firebase project **`warisan-pos`** yang sudah ditetapkan dalam `app/google-
 4. Pekerja semak email untuk **pengesahan alamat email**, kemudian install APK **yang sama** pada telefonnya dan pilih **Pekerja · Email + Password**.
 5. Owner boleh guna **Urus / sekat pekerja / reset password** untuk mengaktifkan/menyahaktifkan akaun atau menghantar pautan reset password ke email pekerja.
 6. Jika pekerja disekat, Firestore Rules menolak akses mereka dan aplikasi log keluar apabila profil menerima perubahan.
+
+
+## 3A. Owner lihat semua pekerja dan buang akses
+1. Dalam app: **Setting → Senarai Pekerja / Buang Akses** atau **Account → LIHAT SEMUA PEKERJA**.
+2. Skrin menunjukkan semua pekerja yang sudah mempunyai **rekod keahlian Firestore**, diasingkan mengikut branch dan status **AKTIF / DISEKAT / DIBUANG**.
+3. Tekan email pekerja. Pilih:
+   - **Sekat akses sementara** — pekerja tidak boleh jalankan operasi Live; Owner boleh aktifkan semula.
+   - **BUANG PEKERJA** — sahkan penarikan balik akses. Profil pekerja diarkibkan, bukan dipadam dari Firebase Authentication. Jualan dan rekod refund kekal sebagai audit.
+   - **Aktifkan semula** — Owner boleh pulihkan akses jika pekerja masuk bekerja semula.
+   - **Reset password** — hantar pautan perubahan password ke email pekerja.
+4. **Peraturan Firestore terkini dalam \`firestore.rules\` mesti diterbitkan** ke Firebase Console sebelum fungsi sekat/buang boleh berjaya. Ia bukan aktif hanya kerana APK di-update.
+5. Akaun Firebase Authentication milik pekerja tidak boleh dipadam dari aplikasi Owner Spark tanpa kuasa Firebase Admin. Untuk benar-benar memadam rekod Auth, pemilik projek boleh gunakan Firebase Console → Authentication → Users; **pilihan itu berasingan daripada sekatan akses POS**, dan jangan padam rekod transaksi.
+6. Pekerja yang belum disimpan sebagai keahlian branch mungkin ada dalam Firebase Authentication tetapi **tidak muncul** dalam senarai app. Semak Firebase Authentication Users bagi akaun yang tersangkut ketika proses pendaftaran; jangan gunakan akaun itu untuk operasi sehingga profil keahlian dipadankan dengan selamat.
 
 ## 4. Paparan & pembayaran
 - **OWNER**: Menu, Order, Stok, Duit, semua report asal, Setting, Account, tambah branch/pekerja, refund, Opening/Closing. Account ada **Live dashboard branch**, **Pantau semua branch Live**, **Report Live bulanan dan Cetak A4/PDF**.
