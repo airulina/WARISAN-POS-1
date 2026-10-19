@@ -534,6 +534,11 @@ final class LiveBranchStore {
     ownerSessionListeners.clear();
     openingSummary.clear();staffLoginSummary.clear();ownerSummaryKey="";
   }
+  void refreshOwnerOpeningStatuses(){
+    if(!accounts.owner())return;
+    clearOwnerOpeningListeners();
+    loadOwnerOpeningStatuses();
+  }
   void loadOwnerOpeningStatuses(){
     if(!accounts.owner())return;
     final String today=host.businessDay();
@@ -549,7 +554,10 @@ final class LiveBranchStore {
         for(QueryDocumentSnapshot b:branches){
           final String branchId=b.getId();
           final String branchName=b.getString("name")==null?branchId:b.getString("name");
-          openingSummary.put(branchId,branchName+" · Belum Opening");
+          final String operation=BranchAccounts.operatingLabel(b.getString("operatingStatus"));
+          final boolean closed=!"BUKA".equals(operation);
+          openingSummary.put(branchId,branchName+" · "+
+            (closed?operation+" · PEKERJA DISEKAT":"⚪ BELUM OPENING"));
           ListenerRegistration listener=b.getReference().collection("liveSessions")
             .document(today).addSnapshotListener((doc,err)->{
               if(!key.equals(ownerSummaryKey)||err!=null||doc==null)return;
@@ -559,7 +567,7 @@ final class LiveBranchStore {
               String stamp="";
               if(doc.exists()&&doc.getTimestamp("updatedAt")!=null)
                 stamp=new SimpleDateFormat("HH:mm",Locale.US).format(doc.getTimestamp("updatedAt").toDate());
-              String line=branchName+" · "+status+
+              String line=branchName+" · "+(closed?operation+" · PEKERJA DISEKAT · ":"")+status+
                 (worker==null||worker.isEmpty()?"":" · "+worker)+
                 (stamp.isEmpty()?"":" · "+stamp);
               String before=openingSummary.put(branchId,line);
