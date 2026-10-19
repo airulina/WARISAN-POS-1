@@ -300,7 +300,33 @@ final class OwnerCashflow {
     host.metric(tx,"TRANSAKSI SEMUA BRANCH",ready()?String.valueOf(total.transactions):"—",
       host.blue,()->{host.activePage=16;host.draw();});
     host.add(host.body,tx,-1,-2);host.gap(host.body,9);
-    host.gap(host.body,8);
+    // This Owner device knows its own product cost and operating expenses.
+    // Never subtract those costs from combined Cloud sales, which also
+    // contain branches whose expenditure has not been synchronized.
+    host.add(host.body,host.text("UNTUNG BERSIH · "+accounts.branchName().toUpperCase(Locale.ROOT),
+      13,host.gold,true),-1,-2);
+    host.gap(host.body,6);
+    String monthStart=host.selectedMonth+"-01",monthEnd=host.selectedMonth+"-31";
+    int localSales=host.saleTotalBetween(monthStart,monthEnd);
+    int localCost=host.productCostBetween(monthStart,monthEnd);
+    int localOperations=host.operatingExpenseTotal(host.selectedMonth,false);
+    int localProfit=host.businessProfit(host.selectedMonth,false);
+    LinearLayout localSummary=host.row();
+    host.metric(localSummary,"UNTUNG BERSIH POS TEMPATAN",rm(localProfit),
+      localProfit>=0?host.gold:0xffff6b6b,()->{
+        selectedBranchId=accounts.branchId();host.activePage=19;host.draw();
+      });
+    host.add(host.body,localSummary,-1,-2);host.gap(host.body,8);
+    LinearLayout localBreakdown=host.row();
+    host.metric(localBreakdown,"KOS PRODUK",rm(localCost),host.ink,null);
+    host.metric(localBreakdown,"BELANJA OPERASI",rm(localOperations),host.ink,null);
+    host.add(host.body,localBreakdown,-1,-2);host.gap(host.body,6);
+    host.add(host.body,host.text("Jualan POS tempatan: "+rm(localSales)+
+      ". Untung ini dikira daripada rekod tempatan "+accounts.branchName()+
+      " sahaja. Jualan Live dari telefon pekerja dan kos branch lain belum "+
+      "semuanya termasuk. Jangan samakan dengan untung semua branch.",
+      11,host.muted,false),-1,-2);
+    host.gap(host.body,11);
     host.action("📊  LAPORAN KESELURUHAN · SEMUA BRANCH",()->{
       host.activePage=21;host.draw();
     });
@@ -447,6 +473,22 @@ final class OwnerCashflow {
     LinearLayout count=host.row();
     host.metric(count,"BILANGAN TRANSAKSI",String.valueOf(total.transactions),host.ink,null);
     host.add(host.body,count,-1,-2);host.gap(host.body,10);
+    if(chosen.id.equals(accounts.branchId())){
+      int branchLocalProfit=host.businessProfit(host.selectedMonth,false);
+      LinearLayout profitBox=host.row();
+      host.metric(profitBox,"UNTUNG BERSIH POS TEMPATAN",rm(branchLocalProfit),
+        branchLocalProfit>=0?host.gold:0xffff6b6b,null);
+      host.add(host.body,profitBox,-1,-2);host.gap(host.body,6);
+      host.add(host.body,host.text("Kos dan keuntungan dari rekod pada telefon branch aktif sahaja. "+
+        "Jualan Cloud yang belum direkodkan tempatan tidak dikira dalam untung ini.",
+        11,host.muted,false),-1,-2);
+      host.gap(host.body,8);
+    }else{
+      host.add(host.body,host.text("Untung branch ini belum tersedia kerana "+
+        "kos perniagaan belum diselaraskan daripada telefon branch tersebut.",
+        11,host.muted,false),-1,-2);
+      host.gap(host.body,8);
+    }
     host.add(host.body,host.text("Tekan TOTAL SALE di atas untuk melihat semua laporan jualan, "+
       "QR, kos dan sejarah tempatan branch ini.",12,host.muted,false),-1,-2);
     host.gap(host.body,8);
