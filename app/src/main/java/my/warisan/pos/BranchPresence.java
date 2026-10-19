@@ -108,6 +108,28 @@ final class BranchPresence {
           .addOnFailureListener(e->host.message("Lokasi gagal disimpan: "+e.getMessage()));
       }))).setNegativeButton("BATAL",null).show();
   }
+  void ownerSetBranchOpenState(){
+    if(!host.branchAccounts.owner()){host.message("Hanya Owner boleh buka/tutup branch.");return;}
+    final String owner=host.branchAccounts.ownerUid(),branch=host.branchAccounts.branchId();
+    DocumentReference ref=host.firestoreForStaff().collection("workspaces")
+      .document(owner).collection("branches").document(branch);
+    ref.get(Source.SERVER).addOnSuccessListener(doc->{
+      boolean enabled=!Boolean.FALSE.equals(doc.getBoolean("openingEnabled"));
+      String title=enabled?"TUTUP BRANCH UNTUK OPENING?":"BENARKAN OPENING BRANCH?";
+      host.darkBuilder().setTitle(title)
+        .setMessage(host.branchAccounts.branchName()+"\n\n"+
+          (enabled?"Semua Opening baharu pekerja di branch ini akan disekat. "+
+            "Rekod jualan lama dan stok tidak dipadam.":
+            "Pekerja boleh buat Opening selepas pengesahan lokasi dan peranti."))
+        .setPositiveButton(enabled?"TUTUP BRANCH":"AKTIFKAN",(d,w)->
+          ref.update("openingEnabled",!enabled,
+            "branchStatusUpdatedAt",FieldValue.serverTimestamp())
+          .addOnSuccessListener(ok->host.message("Status branch dikemas kini: "+
+            (!enabled?"BENAR OPENING":"OPENING DITUTUP")))
+          .addOnFailureListener(e->host.message("Gagal ubah status branch: "+e.getMessage())))
+        .setNegativeButton("BATAL",null).show();
+    }).addOnFailureListener(e->host.message("Status branch gagal diperiksa: "+e.getMessage()));
+  }
   void verifyOpening(int amount,String day,Runnable allowed){
     if(host.branchAccounts.owner()){allowed.run();return;}
     if(!host.branchAccounts.staff()){host.message("Login diperlukan.");return;}
@@ -118,6 +140,13 @@ final class BranchPresence {
     branchRef.get(Source.SERVER).addOnSuccessListener(doc->{
       if(!host.branchAccounts.staff()||!worker.equals(host.branchAccounts.user().getUid())
         ||!branch.equals(host.branchAccounts.branchId()))return;
+      if(Boolean.FALSE.equals(doc.getBoolean("openingEnabled"))){
+        recordOpeningCheck("BRANCH_CLOSED",-1,day);
+        host.darkBuilder().setTitle("BRANCH DITUTUP OLEH OWNER")
+          .setMessage("Branch "+host.branchAccounts.branchName()+
+            " tidak menerima Opening sekarang. Hubungi Owner.")
+          .setPositiveButton("FAHAM",null).show();return;
+      }
       Double lat=doc.getDouble("latitude"),lon=doc.getDouble("longitude");
       Long configuredRadius=doc.getLong("radiusMeters");
       if(lat==null||lon==null||configuredRadius==null){
