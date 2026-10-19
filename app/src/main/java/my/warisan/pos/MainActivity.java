@@ -69,6 +69,7 @@ private static final int RC_SIGN_IN = 9001;
   OwnerPassword ownerPassword;
   StaffSecurity staffSecurity;
   LiveBranchStore live;
+  OwnerCashflow ownerCashflow;
   BranchPresence presence;
   FirebaseFirestore firestoreForStaff(){return firestore;}
   android.content.SharedPreferences posPrefs(){
@@ -163,7 +164,7 @@ private static final int RC_SIGN_IN = 9001;
       }else p.edit().putBoolean("fix_supplier_receipt_detail_20260926",true).commit();
     }catch(Exception ignored){}
   }
-  @Override public void onCreate(Bundle b){super.onCreate(b);firebaseAuth = FirebaseAuth.getInstance();firestore = FirebaseFirestore.getInstance();branchAccounts=new BranchAccounts(this,firebaseAuth,firestore);ownerPassword=new OwnerPassword(this);staffSecurity=new StaffSecurity(this);live=new LiveBranchStore(this);presence=new BranchPresence(this);
+  @Override public void onCreate(Bundle b){super.onCreate(b);firebaseAuth = FirebaseAuth.getInstance();firestore = FirebaseFirestore.getInstance();branchAccounts=new BranchAccounts(this,firebaseAuth,firestore);ownerPassword=new OwnerPassword(this);staffSecurity=new StaffSecurity(this);live=new LiveBranchStore(this);ownerCashflow=new OwnerCashflow(this);presence=new BranchPresence(this);
 GoogleSignInOptions gso = new GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
         .requestIdToken(getString(R.string.default_web_client_id))
         .requestEmail()
@@ -299,8 +300,8 @@ selectedDay=date();selectedMonth=selectedDay.substring(0,7);rangeStart=selectedD
     if(count()==0){TextView empty=text("Belum ada pesanan. Pilih menu di atas.",13,muted,false);empty.setPadding(0,dp(13),0,dp(13));add(basket,empty,-1,-2);return;}
     for(int i=0;i<qty.length;i++)if(qty[i]>0){final int id=i;LinearLayout r=row();r.addView(text(names[i]+" × "+qty[i],14,ink,true),new LinearLayout.LayoutParams(0,dp(39),1));add(r,text(money(qty[i]*prices[i]),13,blue,true),-2,-2);TextView minus=chip("−",0xffc83f46,Color.WHITE);LinearLayout.LayoutParams m=params(32,30);m.leftMargin=dp(8);r.addView(minus,m);minus.setOnClickListener(v->{qty[id]--;draw();});add(basket,r,-1,-2);}
   }
-  void addNavigation(LinearLayout screen){LinearLayout nav=row();nav.setBackgroundColor(cream);nav.setPadding(dp(7),dp(7),dp(7),dp(9));String[] labels=branchAccounts.staff()?new String[]{"MENU","ORDER","HARI INI","PRINTER","ACCOUNT"}:(english()?new String[]{"MENU","ORDERS","STOCK","CASH","SETTINGS"}:new String[]{"MENU","ORDER","STOK","DUIT","SETTING"});int[] pages=branchAccounts.staff()?new int[]{0,11,12,14,5}:new int[]{0,11,1,3,4};
-    for(int i=0;i<labels.length;i++){final int page=pages[i];boolean selected=(activePage==page)||(page==1&&activePage==13)||(page==3&&activePage==2)||(page==4&&activePage>=4&&activePage<=10);TextView tab=text(labels[i],10,selected?Color.rgb(19,24,34):Color.WHITE,true);tab.setGravity(Gravity.CENTER);tab.setBackground(shape(selected?gold:Color.rgb(20,58,101),11));LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(0,dp(49),1);p.setMargins(dp(3),0,dp(3),0);nav.addView(tab,p);tab.setOnClickListener(v->{activePage=page;draw();});}add(screen,nav,-1,-2);}
+  void addNavigation(LinearLayout screen){LinearLayout nav=row();nav.setBackgroundColor(cream);nav.setPadding(dp(7),dp(7),dp(7),dp(9));String[] labels=branchAccounts.staff()?new String[]{"MENU","ORDER","HARI INI","PRINTER","ACCOUNT"}:(english()?new String[]{"MENU","ORDERS","STOCK","CASH","SETTINGS","BRANCH"}:new String[]{"MENU","ORDER","STOK","DUIT","SETTING","BRANCH"});int[] pages=branchAccounts.staff()?new int[]{0,11,12,14,5}:new int[]{0,11,1,3,4,15};
+    for(int i=0;i<labels.length;i++){final int page=pages[i];boolean selected=(activePage==page)||(page==1&&activePage==13)||(page==3&&(activePage==2||activePage==16||activePage==17||activePage==18))||(page==4&&activePage>=4&&activePage<=10);TextView tab=text(labels[i],branchAccounts.staff()?10:9,selected?Color.rgb(19,24,34):Color.WHITE,true);tab.setGravity(Gravity.CENTER);tab.setBackground(shape(selected?gold:Color.rgb(20,58,101),11));LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(0,dp(49),1);p.setMargins(dp(3),0,dp(3),0);nav.addView(tab,p);tab.setOnClickListener(v->{activePage=page;draw();});}add(screen,nav,-1,-2);}
   void heading(String title,String subtitle){
     LinearLayout brand=row();brand.setGravity(Gravity.CENTER_VERTICAL);ImageView logo=new ImageView(this);logo.setImageResource(R.drawable.warisan_logo);makeCircle(logo);add(brand,logo,44,44);LinearLayout brandText=col();brandText.setPadding(dp(9),0,0,0);add(brandText,text("WARISAN POS",18,blue,true),-1,-2);add(brandText,text("KIOS WARISAN  ·  SISTEM JUALAN",9,muted,true),-1,-2);brand.addView(brandText,new LinearLayout.LayoutParams(0,-2,1));TextView clock=text("",9,gold,true);clock.setGravity(Gravity.RIGHT|Gravity.CENTER_VERTICAL);add(brand,clock,-2,-2);startHeaderClock(clock);add(body,brand,-1,-2);gap(body,15);
     add(body,text(title,23,ink,true),-1,-2);add(body,text(subtitle,12,muted,false),-1,-2);gap(body,16);
@@ -562,7 +563,48 @@ selectedDay=date();selectedMonth=selectedDay.substring(0,7);rangeStart=selectedD
       add(item,actions,-1,-2);add(body,item,-1,-2);gap(body,8);
     }
   }
-  void drawPage(){if(activePage==14){
+  void drawBranchHub(){
+    if(!branchAccounts.owner()){
+      heading("Akses Ditolak","Pengurusan branch dan pekerja untuk Owner sahaja.");
+      return;
+    }
+    heading("BRANCH · OWNER","Semua urusan branch, pekerja, Off Day dan Live dikumpulkan di sini.");
+    add(body,text("BRANCH AKTIF: "+branchAccounts.branchName(),15,gold,true),-1,-2);
+    gap(body,11);
+    add(body,text("PENGURUSAN BRANCH",12,muted,true),-1,-2);gap(body,7);
+    action("🏪  SENARAI BRANCH · BUKA / OFF DAY / STOK HABIS",
+      ()->branchAccounts.manageBranchOperatingStatus());
+    action("+  TAMBAH BRANCH",()->branchAccounts.createBranch());
+    action("↔  TUKAR BRANCH AKTIF",()->branchAccounts.chooseBranch());
+    action("📦  MASUK STOK IKUT BRANCH",()->{activePage=1;draw();});
+    gap(body,12);
+    add(body,text("PENGURUSAN PEKERJA",12,muted,true),-1,-2);gap(body,7);
+    action("+  DAFTAR PEKERJA · EMAIL / PASSWORD / BRANCH",
+      ()->staffSecurity.createEmployee());
+    action("👥  SENARAI PEKERJA · SEKAT / BUANG / RESET PASSWORD",
+      ()->staffSecurity.manageWorkers());
+    action("↩  PERMOHONAN REFUND UNTUK KELULUSAN",
+      ()->staffSecurity.ownerReview());
+    gap(body,12);
+    add(body,text("LIVE & STATUS JUALAN",12,muted,true),-1,-2);gap(body,7);
+    action("☁  LIVE BRANCH · SEMAK / AKTIFKAN",()->live.showDashboard());
+    action("🏪  STATUS OPENING SEMUA BRANCH",()->live.showOpeningBranches());
+    live.drawOpeningSummary();
+    action("↻  TERBIT MENU KE BRANCH LIVE",()->live.publishMenu());
+    action("📄  LAPORAN LIVE BULANAN (BRANCH AKTIF)",
+      ()->live.showMonth(selectedMonth));
+    action("📊  JUALAN SEMUA BRANCH",()->{activePage=3;draw();});
+  }
+  void drawPage(){
+    if(activePage==15){
+      drawBranchHub();
+    }else if(activePage==16){
+      ownerCashflow.drawBranchList();
+    }else if(activePage==17){
+      ownerCashflow.drawBranchDetail();
+    }else if(activePage==3&&branchAccounts.owner()){
+      ownerCashflow.drawOverview();
+    }else if(activePage==14){
       drawStaffPrinterSettings();
     }else if(activePage==12){
       String day=businessDay();
@@ -625,13 +667,11 @@ selectedDay=date();selectedMonth=selectedDay.substring(0,7);rangeStart=selectedD
       addSalesBreakdown(rs,re);addPaymentBreakdown(rs,re);addRecentTransactions(rs,re);
       action("PREVIEW / SHARE / PRINT REPORT",()->previewSalesReportPrintShare());
       action("History customer / Refund",()->{if(salesReportMode==0)saleHistory(selectedDay);else if(salesReportMode==1)saleHistory(selectedMonth);else new AlertDialog.Builder(this).setTitle("History Tarikh Dipilih").setMessage("History transaksi untuk "+rs+" hingga "+re+" dipaparkan pada bahagian Transaksi Terkini di atas.").setPositiveButton("OK",null).show();});action("Export laporan Excel / PDF",()->exportMenu());
-    }else if(activePage==3){heading("Duit / POS","Fokus jualan harian dan sesi POS. Operasi bermula sekitar 4 petang; sesi kekal pada tarikh Opening sehingga Closing dibuat.");
-      if(branchAccounts.owner()){
-        action("🏪  URUS STATUS BRANCH · BUKA / OFF DAY / STOK HABIS",
-          ()->branchAccounts.manageBranchOperatingStatus());
-        action("🏪  CASHFLOW LIVE · Status Opening Semua Branch",()->live.showOpeningBranches());
-        live.drawOpeningSummary();
-      }
+    }else if(activePage==18){
+      heading("Duit / POS · "+branchAccounts.branchName(),
+        "Rekod terperinci pada telefon Owner bagi branch aktif sahaja.");
+      action("‹  KEMBALI KE JUALAN BRANCH",()->{activePage=17;draw();});
+      // Original detailed Warisan POS cashflow lives here; Owner overview is page 3.
       LinearLayout mode=row();TextView daily=chip("HARIAN",cashDailyMode?gold:0xff294563,cashDailyMode?0xff17202c:Color.WHITE),monthlyBtn=chip("BULANAN",!cashDailyMode?gold:0xff294563,!cashDailyMode?0xff17202c:Color.WHITE);daily.setGravity(Gravity.CENTER);monthlyBtn.setGravity(Gravity.CENTER);mode.addView(daily,new LinearLayout.LayoutParams(0,dp(42),1));LinearLayout.LayoutParams mlp=new LinearLayout.LayoutParams(0,dp(42),1);mlp.leftMargin=dp(7);mode.addView(monthlyBtn,mlp);add(body,mode,-1,-2);gap(body,9);daily.setOnClickListener(v->{cashDailyMode=true;draw();});monthlyBtn.setOnClickListener(v->{cashDailyMode=false;draw();});
       if(cashDailyMode)action("Tarikh: "+selectedCashDay+"   ▼",()->chooseCashDay());else action("Bulan: "+monthLabel(selectedMonth)+"   ▼",()->chooseMonth());
       String period=cashDailyMode?selectedCashDay:selectedMonth;String from=cashDailyMode?period:period+"-01",to=cashDailyMode?period:period+"-31";int sale=saleTotalBetween(from,to);int profit=businessProfit(period,cashDailyMode);int supplierPaid=supplierPaidTotal(period,cashDailyMode),supplierOutstanding=supplierDue(),fuel=cashCategoryTotal(period,cashDailyMode,"Minyak kereta"),rent=cashCategoryTotal(period,cashDailyMode,"Sewa");
@@ -658,11 +698,8 @@ selectedDay=date();selectedMonth=selectedDay.substring(0,7);rangeStart=selectedD
       heading(english()?"Settings":"Setting",english()?"WarisanPOS 3.39 · Complete POS & report audit.":"WarisanPOS 3.39 · Audit penuh POS & report.");
       action("🌐  "+(english()?"Language · English":"Bahasa · Bahasa Melayu"),()->chooseLanguage());
       action("👤  Account",()->{activePage=5;draw();});
-      if(branchAccounts.owner())
-        action("👥  Senarai Pekerja / Buang Akses",()->staffSecurity.manageWorkers());
       if(!branchAccounts.staff()){
         action("🔐  Password Owner",()->ownerPassword.change());
-        action("☁  LIVE BRANCH / Sync",()->live.showDashboard());
       }
       action("🧾  Bill / Resit",()->{activePage=7;draw();});
        action("💳  Payment / DuitNow",()->{activePage=10;draw();});
@@ -694,23 +731,12 @@ selectedDay=date();selectedMonth=selectedDay.substring(0,7);rangeStart=selectedD
         });
       }
       gap(body,7);
-      add(body,text(branchAccounts.staff()?"AKSES PEKERJA":"OWNER / BRANCH / PEKERJA",11,gold,true),-1,-2);gap(body,7);
+      add(body,text(branchAccounts.staff()?"AKSES PEKERJA":"AKAUN OWNER",11,gold,true),-1,-2);gap(body,7);
+      if(branchAccounts.staff()&&user!=null)branchAccounts.showActions();
       if(branchAccounts.owner()){
-        action("🏪  URUS OFF DAY / STOK HABIS SEMUA BRANCH",
-          ()->branchAccounts.manageBranchOperatingStatus());
-        action("👥  LIHAT SEMUA PEKERJA · Aktif / Berhenti",()->staffSecurity.manageWorkers());
-        gap(body,8);
-      }
-      if(user!=null)branchAccounts.showActions();
-      if(branchAccounts.active()){
-        if(branchAccounts.owner()){
-          action("☁  Live branch / Semak jualan sekarang",()->live.showDashboard());
-          action("🏪  Pantau semua branch Live",()->live.showAllBranches());
-          action("📄  Laporan Live bulanan",()->live.showMonth(selectedMonth));
-          action("↻  Terbit menu terbaru ke Live",()->live.publishMenu());
-        } else if(branchAccounts.staff()) {
-          add(body,text(live.enabled()?"Live: "+(live.usable()?"ONLINE":"menunggu server"):"Owner belum aktifkan Live",12,gold,true),-1,-2);
-        }
+        action("🏪  URUS BRANCH / PEKERJA (TAB BRANCH)",()->{activePage=15;draw();});
+      }else if(branchAccounts.staff()){
+        add(body,text(live.enabled()?"Live: "+(live.usable()?"ONLINE":"menunggu server"):"Owner belum aktifkan Live",12,gold,true),-1,-2);
       }
       if(!branchAccounts.staff()){
         gap(body,7);add(body,text("BACKUP / PULIHKAN",11,muted,true),-1,-2);gap(body,7);
