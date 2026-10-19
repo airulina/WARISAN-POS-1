@@ -697,6 +697,7 @@ selectedDay=date();selectedMonth=selectedDay.substring(0,7);rangeStart=selectedD
     ownerTile(staff,"Urus Pekerja","Aktif · Sekat · Buang",
       ()->staffSecurity.manageWorkers());
     add(body,staff,-1,-2);gap(body,7);
+    action("BAIKI AKSES PEKERJA · EMAIL / BRANCH",()->staffSecurity.repairStaffMembership());
     ownerSection("PERMOHONAN & LIVE");
     LinearLayout last=row();
     ownerTile(last,"Kelulusan Refund","Semak permohonan",
