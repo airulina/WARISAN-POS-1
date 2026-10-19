@@ -604,9 +604,13 @@ final class LiveBranchStore {
         ArrayList<com.google.android.gms.tasks.Task<com.google.firebase.firestore.QuerySnapshot>> checks=new ArrayList<>();
         ArrayList<String> names=new ArrayList<>();
         for(QueryDocumentSnapshot branch:branches){
+          String name=branch.getString("name")==null?branch.getId():branch.getString("name");
           checks.add(branch.getReference().collection("openingChecks")
             .whereEqualTo("day",today).get());
-          names.add(branch.getString("name")==null?branch.getId():branch.getString("name"));
+          names.add(name+" · Opening");
+          checks.add(branch.getReference().collection("loginChecks")
+            .whereEqualTo("day",today).get());
+          names.add(name+" · Log In");
         }
         if(checks.isEmpty()){host.message("Tiada branch.");return;}
         com.google.android.gms.tasks.Tasks.whenAllSuccess(checks).addOnSuccessListener(res->{
@@ -616,11 +620,12 @@ final class LiveBranchStore {
             com.google.firebase.firestore.QuerySnapshot events=(com.google.firebase.firestore.QuerySnapshot)res.get(i);
             for(QueryDocumentSnapshot doc:events){
               String state=doc.getString("status");
-              if("VERIFIED".equals(state))continue;
+              if("VERIFIED".equals(state)||"WITHIN_BRANCH".equals(state))continue;
               blocked++;
               report.append(names.get(i)).append("\n")
                 .append(state==null?"Tidak diketahui":state)
-                .append(" · ").append(doc.getString("employeeUid"))
+                .append(" · ").append(doc.getString("email")==null?
+                  doc.getString("employeeUid"):doc.getString("email"))
                 .append("\n");
               Long meters=doc.getLong("distanceMeters");
               if(meters!=null&&meters>=0)report.append("Jarak ±").append(meters).append(" m\n");
