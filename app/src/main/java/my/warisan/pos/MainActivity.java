@@ -241,7 +241,7 @@ selectedDay=date();selectedMonth=selectedDay.substring(0,7);rangeStart=selectedD
     TextView icon=chip(icons[id],0xff203f61,gold);icon.setTextSize(20);icon.setGravity(Gravity.CENTER);add(card,icon,52,52);
     LinearLayout info=col();info.setPadding(dp(11),0,dp(8),0);TextView name=text(names[id],15,ink,true);name.setMaxLines(2);add(info,name,-1,-2);gap(info,3);add(info,text(money(prices[id]),14,gold,true),-1,-2);
     int available=unlimited(id)?Integer.MAX_VALUE:stock(id);
-    String shownStock=unlimited(id)?"Stok: Tanpa had":"Baki stok: "+available+(available==0?" · HABIS":"")+" "+(id<3?"cucuk":"unit");
+    String shownStock=unlimited(id)?"Stok: Tanpa had":(live!=null&&live.enabled()&&!live.usable()?"Baki terakhir (offline): ":"Baki stok: ")+available+(available==0?" · HABIS":"")+" "+(id<3?"cucuk":"unit");
     TextView stockLabel=text(shownStock,11,available==0?0xffff4d4d:blue,true);add(info,stockLabel,-1,-2);card.addView(info,new LinearLayout.LayoutParams(0,-2,1));
     LinearLayout controls=row();controls.setGravity(Gravity.CENTER_VERTICAL);TextView minus=chip("−",0xffc83f46,Color.WHITE),number=text(""+qty[id],16,ink,true),plus=chip("+",blue,Color.WHITE);minus.setGravity(Gravity.CENTER);number.setGravity(Gravity.CENTER);plus.setGravity(Gravity.CENTER);
     add(controls,minus,45,42);add(controls,number,44,42);add(controls,plus,45,42);add(card,controls,-2,-2);
@@ -262,7 +262,7 @@ selectedDay=date();selectedMonth=selectedDay.substring(0,7);rangeStart=selectedD
     for(int i=0;i<qty.length;i++)if(qty[i]>0){final int id=i;LinearLayout r=row();r.addView(text(names[i]+" × "+qty[i],14,ink,true),new LinearLayout.LayoutParams(0,dp(39),1));add(r,text(money(qty[i]*prices[i]),13,blue,true),-2,-2);TextView minus=chip("−",0xffc83f46,Color.WHITE);LinearLayout.LayoutParams m=params(32,30);m.leftMargin=dp(8);r.addView(minus,m);minus.setOnClickListener(v->{qty[id]--;draw();});add(basket,r,-1,-2);}
   }
   void addNavigation(LinearLayout screen){LinearLayout nav=row();nav.setBackgroundColor(cream);nav.setPadding(dp(7),dp(7),dp(7),dp(9));String[] labels=branchAccounts.staff()?new String[]{"MENU","ORDER","HARI INI","PRINTER","ACCOUNT"}:(english()?new String[]{"MENU","ORDERS","STOCK","CASH","SETTINGS"}:new String[]{"MENU","ORDER","STOK","DUIT","SETTING"});int[] pages=branchAccounts.staff()?new int[]{0,11,12,14,5}:new int[]{0,11,1,3,4};
-    for(int i=0;i<labels.length;i++){final int page=pages[i];boolean selected=(activePage==page)||(page==1&&activePage==13)||(page==3&&activePage==2)||(page==4&&activePage>=4&&activePage!=11);TextView tab=text(labels[i],10,selected?Color.rgb(19,24,34):Color.WHITE,true);tab.setGravity(Gravity.CENTER);tab.setBackground(shape(selected?gold:Color.rgb(20,58,101),11));LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(0,dp(49),1);p.setMargins(dp(3),0,dp(3),0);nav.addView(tab,p);tab.setOnClickListener(v->{activePage=page;draw();});}add(screen,nav,-1,-2);}
+    for(int i=0;i<labels.length;i++){final int page=pages[i];boolean selected=(activePage==page)||(page==1&&activePage==13)||(page==3&&activePage==2)||(page==4&&activePage>=4&&activePage<=10);TextView tab=text(labels[i],10,selected?Color.rgb(19,24,34):Color.WHITE,true);tab.setGravity(Gravity.CENTER);tab.setBackground(shape(selected?gold:Color.rgb(20,58,101),11));LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(0,dp(49),1);p.setMargins(dp(3),0,dp(3),0);nav.addView(tab,p);tab.setOnClickListener(v->{activePage=page;draw();});}add(screen,nav,-1,-2);}
   void heading(String title,String subtitle){
     LinearLayout brand=row();brand.setGravity(Gravity.CENTER_VERTICAL);ImageView logo=new ImageView(this);logo.setImageResource(R.drawable.warisan_logo);makeCircle(logo);add(brand,logo,44,44);LinearLayout brandText=col();brandText.setPadding(dp(9),0,0,0);add(brandText,text("WARISAN POS",18,blue,true),-1,-2);add(brandText,text("KIOS WARISAN  ·  SISTEM JUALAN",9,muted,true),-1,-2);brand.addView(brandText,new LinearLayout.LayoutParams(0,-2,1));TextView clock=text("",9,gold,true);clock.setGravity(Gravity.RIGHT|Gravity.CENTER_VERTICAL);add(brand,clock,-2,-2);startHeaderClock(clock);add(body,brand,-1,-2);gap(body,15);
     add(body,text(title,23,ink,true),-1,-2);add(body,text(subtitle,12,muted,false),-1,-2);gap(body,16);
@@ -552,6 +552,10 @@ selectedDay=date();selectedMonth=selectedDay.substring(0,7);rangeStart=selectedD
         heading("Akses ditolak","Stok branch hanya untuk Owner.");
       }else if(live.enabled()){
         drawLiveBranchStock();
+      }else if(!live.inventoryChecked()){
+        heading("Stok · "+branchAccounts.branchName(),"Memeriksa status stok Live.");
+        action("‹  Kembali ke semua Branch",()->{activePage=1;draw();});
+        add(body,text("Sedang mengesahkan status branch di Firebase. Tunggu sambungan server. Stok belum boleh diubah untuk elak data bercanggah.",13,gold,true),-1,-2);
       }else{
       heading("Stok · "+branchAccounts.branchName(),"OWNER · Stok tempatan branch. Aktifkan Live untuk sync telefon pekerja.");
       action("‹  Kembali ke semua Branch",()->{activePage=1;draw();});
