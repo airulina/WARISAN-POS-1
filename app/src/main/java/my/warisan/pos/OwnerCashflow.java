@@ -14,6 +14,10 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.TreeMap;
+import java.util.HashSet;
+import java.util.Set;
+import com.google.android.gms.tasks.Task;
+import com.google.android.gms.tasks.Tasks;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
@@ -37,36 +41,53 @@ final class OwnerCashflow {
   private final ArrayList<BranchRow> rows = new ArrayList<>();
 
   static final class Day {
-    long sales, cash, qr, transactions;
-    boolean cloud;
+    long sales, cash, qr, transactions, unknown;
+    boolean cloud,hasLocalSupplement;
     Day(){}
     Day(long s,long c,long q,long t,boolean isCloud){
       sales=s;cash=c;qr=q;transactions=t;cloud=isCloud;
+      unknown=Math.max(0,s-c-q);
+    }
+    void add(Day other){
+      sales+=other.sales;cash+=other.cash;qr+=other.qr;
+      transactions+=other.transactions;unknown+=other.unknown;
     }
   }
   static final class BranchRow {
     final String id,name,status;
     final TreeMap<String,Day> remote = new TreeMap<>();
     TreeMap<String,Day> local = new TreeMap<>();
+    TreeMap<String,Day> legacyOnly = new TreeMap<>();
     boolean seen=false,cache=false;
     BranchRow(String id,String name,String status){
       this.id=id;this.name=name;this.status=status;
     }
     TreeMap<String,Day> combined(){
+      // The old version replaced a whole local day with the cloud day.
+      // When some pre-LIVE QR receipts shared that date, their QR revenue
+      // disappeared. Keep only the pre-LIVE receipts without a liveOrderId
+      // alongside cloud totals; cloud-synced orders remain counted ONCE.
       TreeMap<String,Day> merged=new TreeMap<>(local);
-      merged.putAll(remote); // ONE source per day; server is authoritative when present
+      for(Map.Entry<String,Day> entry:remote.entrySet()){
+        Day src=entry.getValue();
+        Day day=new Day(src.sales,src.cash,src.qr,src.transactions,true);
+        Day legacy=legacyOnly.get(entry.getKey());
+        if(legacy!=null){
+          day.add(legacy);
+          day.hasLocalSupplement=true;
+        }
+        merged.put(entry.getKey(),day);
+      }
       return merged;
     }
     Day totals(){
       Day total=new Day();
-      for(Day d:combined().values()){
-        total.sales+=d.sales;total.cash+=d.cash;
-        total.qr+=d.qr;total.transactions+=d.transactions;
-      }
+      for(Day d:combined().values())total.add(d);
       return total;
     }
     boolean hasHistoricalFallback(){
       for(String day:local.keySet())if(!remote.containsKey(day))return true;
+      for(String day:legacyOnly.keySet())if(remote.containsKey(day))return true;
       return false;
     }
   }
@@ -122,7 +143,8 @@ final class OwnerCashflow {
           String status=branch.getString("operatingStatus");
           BranchRow row=new BranchRow(branch.getId(),name,
             BranchAccounts.operatingLabel(status));
-          row.local=readLocalDays(row.id,from,to);
+          row.local=readLocalDays(row.id,from,to,false);
+          row.legacyOnly=readLocalDays(row.id,from,to,true);
           rows.add(row);
           ListenerRegistration listener=branch.getReference().collection("daily")
             .whereGreaterThanOrEqualTo(FieldPath.documentId(),from)
@@ -149,7 +171,8 @@ final class OwnerCashflow {
         redrawIfVisible();
       });
   }
-  TreeMap<String,Day> readLocalDays(String branchId,String from,String to){
+  TreeMap<String,Day> readLocalDays(String branchId,String from,String to,
+      boolean legacyOnly){
     TreeMap<String,Day> result=new TreeMap<>();
     SharedPreferences p=BranchAccounts.LEGACY_BRANCH.equals(branchId)?
       host.getPreferences(0):
@@ -159,22 +182,26 @@ final class OwnerCashflow {
       for(int i=0;i<sales.length();i++){
         JSONObject receipt=sales.optJSONObject(i);
         if(receipt==null||receipt.optBoolean("refunded",false))continue;
+        // Only pre-LIVE receipts may supplement a day with cloud totals.
+        if(legacyOnly&&!receipt.optString("liveOrderId","").isEmpty())continue;
         String day=host.entryDay(receipt);
         if(day.compareTo(from)<0||day.compareTo(to)>0)continue;
         long value=host.saleTotal(receipt);
         Day d=result.get(day);
         if(d==null){d=new Day();result.put(day,d);}
         d.sales+=value;d.transactions++;
-        String method=receipt.optString("method","").toLowerCase(Locale.ROOT);
-        if(method.contains("tunai")||method.equals("cash"))d.cash+=value;
-        else if(method.contains("qr")||method.contains("duitnow")||method.contains("tng"))
-          d.qr+=value;
+        int kind=host.paymentKind(receipt); // QR/Bank/TnG/Touch/Online as in old POS
+        if(kind==1)d.cash+=value;
+        else if(kind==2)d.qr+=value;
+        else d.unknown+=value;
       }
     }catch(Exception ignored){
       // Never erase or modify the old POS preferences on a read failure.
     }
     // Very old Warisan POS saved only day totals, not per-sale receipts.
-    for(String k:p.getAll().keySet()){
+    // Those totals cannot safely be supplemented into an existing cloud day
+    // because the underlying order IDs/methods are unavailable.
+    if(!legacyOnly)for(String k:p.getAll().keySet()){
       if(!k.startsWith("sales_")||k.length()!=16)continue;
       String day=k.substring(6);
       if(day.compareTo(from)<0||day.compareTo(to)>0)continue;
@@ -196,8 +223,7 @@ final class OwnerCashflow {
     Day all=new Day();
     for(BranchRow row:rows){
       Day one=row.totals();
-      all.sales+=one.sales;all.cash+=one.cash;
-      all.qr+=one.qr;all.transactions+=one.transactions;
+      all.add(one);
     }
     return all;
   }
@@ -229,9 +255,10 @@ final class OwnerCashflow {
       host.add(host.body,host.text(
         (cached?"Sebahagian angka daripada cache. Sambung internet untuk sahkan semula. ":"")+
         (local?"Termasuk rekod lama daripada telefon Owner pada tarikh yang belum ada data Cloud. ":"")+
-        "Jumlah tidak menggandakan rekod telefon dan Cloud pada hari sama. "+
-        "Rekod lama yang hanya ada pada telefon lain belum semestinya diselaraskan. "+
-        "Untung bersih memerlukan kos setiap branch; angka di sini ialah jualan kasar.",
+        "Rekod lama sebelum Live dipaparkan bersama transaksi Cloud tanpa mengira resit Live dua kali. "+
+        "Rekod yang hanya ada pada telefon lain mungkin belum diselaraskan. "+
+        "Bayaran tanpa kaedah jelas ditunjukkan sebagai BELUM DIKELASKAN, bukan QR atau Tunai. "+
+        "Untung bersih memerlukan kos setiap branch; angka ini jualan kasar.",
         11,host.muted,false),-1,-2);
     }
   }
@@ -253,8 +280,17 @@ final class OwnerCashflow {
     host.add(host.body,big,-1,-2);host.gap(host.body,9);
     LinearLayout pair=host.row();
     host.metric(pair,"TUNAI",ready()?rm(total.cash):"—",host.ink,null);
-    host.metric(pair,"QR",ready()?rm(total.qr):"—",host.gold,null);
+    host.metric(pair,"QR / DUITNOW  ›",ready()?rm(total.qr):"—",host.gold,
+      ()->showQrHistory(null));
     host.add(host.body,pair,-1,-2);host.gap(host.body,9);
+    if(ready()&&total.unknown>0){
+      LinearLayout misc=host.row();
+      host.metric(misc,"KAEDAH TIDAK DIKELASKAN",rm(total.unknown),
+        host.gold,null);
+      host.add(host.body,misc,-1,-2);host.gap(host.body,8);
+    }
+    host.action("🧾  REKOD BAYARAN QR / TNG / DUITNOW  ›",
+      ()->showQrHistory(null));
     LinearLayout tx=host.row();
     host.metric(tx,"TRANSAKSI SEMUA BRANCH",ready()?String.valueOf(total.transactions):"—",
       host.blue,()->{host.activePage=16;host.draw();});
@@ -307,8 +343,13 @@ final class OwnerCashflow {
     host.add(host.body,main,-1,-2);host.gap(host.body,9);
     LinearLayout pay=host.row();
     host.metric(pay,"TUNAI",rm(total.cash),host.gold,null);
-    host.metric(pay,"QR",rm(total.qr),host.blue,null);
+    host.metric(pay,"QR / DUITNOW  ›",rm(total.qr),host.blue,
+      ()->showQrHistory(chosen));
     host.add(host.body,pay,-1,-2);host.gap(host.body,9);
+    host.action("🧾  REKOD TRANSAKSI QR · "+chosen.name,()->showQrHistory(chosen));
+    if(total.unknown>0)
+      host.add(host.body,host.text("Bayaran belum dikelaskan: "+rm(total.unknown)+
+        " · Semak rekod lama yang tidak menyimpan kaedah pembayaran.",12,host.gold,true),-1,-2);
     LinearLayout count=host.row();
     host.metric(count,"BILANGAN TRANSAKSI",String.valueOf(total.transactions),host.ink,null);
     host.add(host.body,count,-1,-2);host.gap(host.body,10);
@@ -338,7 +379,9 @@ final class OwnerCashflow {
       .setMessage("Jumlah jualan: "+rm(value.sales)+
         "\nTunai: "+rm(value.cash)+"\nQR: "+rm(value.qr)+
         "\nTransaksi: "+value.transactions+
+        "\nBelum dikelaskan: "+rm(value.unknown)+
         "\nSumber: "+(value.cloud?"Firebase Live":"Rekod lama telefon Owner")+
+        (value.hasLocalSupplement?" + jualan sebelum Live":"")+
         "\n\nRekod lama mungkin tidak mempunyai pecahan Tunai/QR lengkap.")
       .setPositiveButton("TUTUP",null).show();
   }
