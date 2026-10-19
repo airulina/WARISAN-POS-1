@@ -576,6 +576,7 @@ selectedDay=date();selectedMonth=selectedDay.substring(0,7);rangeStart=selectedD
       ()->branchAccounts.manageBranchOperatingStatus());
     action("+  TAMBAH BRANCH",()->branchAccounts.createBranch());
     action("↔  TUKAR BRANCH AKTIF",()->branchAccounts.chooseBranch());
+    action("🏪  MAKLUMAT KEDAI / BRANCH",()->{activePage=8;draw();});
     action("📦  MASUK STOK IKUT BRANCH",()->{activePage=1;draw();});
     gap(body,12);
     add(body,text("PENGURUSAN PEKERJA",12,muted,true),-1,-2);gap(body,7);
@@ -589,6 +590,7 @@ selectedDay=date();selectedMonth=selectedDay.substring(0,7);rangeStart=selectedD
     add(body,text("LIVE & STATUS JUALAN",12,muted,true),-1,-2);gap(body,7);
     action("☁  LIVE BRANCH · SEMAK / AKTIFKAN",()->live.showDashboard());
     action("🏪  STATUS OPENING SEMUA BRANCH",()->live.showOpeningBranches());
+    action("☁  PANTAU JUALAN LIVE SEMUA BRANCH",()->live.showAllBranches());
     live.drawOpeningSummary();
     action("↻  TERBIT MENU KE BRANCH LIVE",()->live.publishMenu());
     action("📄  LAPORAN LIVE BULANAN (BRANCH AKTIF)",
@@ -704,7 +706,7 @@ selectedDay=date();selectedMonth=selectedDay.substring(0,7);rangeStart=selectedD
       action("🧾  Bill / Resit",()->{activePage=7;draw();});
        action("💳  Payment / DuitNow",()->{activePage=10;draw();});
       action("🍽  Pengurusan Menu",()->{activePage=6;draw();});
-      action("🏪  Maklumat Kedai",()->{activePage=8;draw();});
+
       action("⚠  Reset",()->{activePage=9;draw();});
     }else if(activePage==5){
       heading("Account",branchAccounts.staff()?
