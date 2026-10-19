@@ -111,6 +111,8 @@ final class LiveBranchStore {
         }
         if(host.activePage==0||host.activePage==1||host.activePage==12)host.draw();
       });
+      recoverPendingOrders();
+      reconcileLocalPending();
     }
     attachDay();
   }
@@ -119,6 +121,7 @@ final class LiveBranchStore {
     String newDay=host.businessDay();
     if(newDay.equals(activeDay))return;
     if(dayListener!=null)dayListener.remove();
+    if(orderListener!=null){orderListener.remove();orderListener=null;}
     activeDay=newDay;daySales=0;dayCash=0;dayQr=0;dayTransactions=0;
     String key=activeKey,selected=newDay;
     dayListener=daily(selected).addSnapshotListener((snap,error)->{
@@ -190,6 +193,61 @@ final class LiveBranchStore {
         .putInt("sales_"+day,host.posPrefs().getInt("sales_"+day,0)+toAdd)
         .commit();
     }catch(Exception ex){host.message("Sync rekod jualan gagal: "+ex.getMessage());return false;}
+  }
+  void recoverPendingOrders(){
+    if(!accounts.active())return;
+    String session=activeKey,who=accounts.user().getUid();
+    branch().collection("liveOrders").whereEqualTo("status","PENDING").get()
+      .addOnSuccessListener(results->{
+        if(!session.equals(activeKey))return;
+        JSONArray local=host.entries("pending_orders");boolean changed=false;
+        for(QueryDocumentSnapshot doc:results){
+          if(accounts.staff()&&!who.equals(doc.getString("actorUid")))continue;
+          boolean exists=false;
+          for(int i=0;i<local.length();i++){
+            JSONObject item=local.optJSONObject(i);
+            if(item!=null&&doc.getId().equals(item.optString("liveId",""))){exists=true;break;}
+          }
+          if(exists)continue;
+          try{
+            JSONObject recovered=new JSONObject();JSONArray qty=new JSONArray();
+            List<?> values=(List<?>)doc.get("qty");
+            if(values==null)continue;
+            for(Object v:values)qty.put(((Number)v).intValue());
+            String business=doc.getString("day");
+            int seq=host.posPrefs().getInt("order_seq_"+business,0)+1;
+            recovered.put("time",host.timestamp());recovered.put("businessDay",business);
+            recovered.put("order",seq);recovered.put("total",doc.getLong("total"));
+            recovered.put("qty",qty);recovered.put("paid",false);
+            recovered.put("cancelled",false);recovered.put("liveId",doc.getId());
+            recovered.put("recoveredFromCloud",true);
+            local.put(recovered);
+            host.posPrefs().edit().putInt("order_seq_"+business,seq).apply();
+            changed=true;
+          }catch(Exception ignored){}
+        }
+        if(changed){
+          host.posPrefs().edit().putString("pending_orders",local.toString()).commit();
+          host.draw();host.message("Order pending Live dipulihkan tanpa memadam data lama.");
+        }
+      }).addOnFailureListener(e->host.message("Semak pending cloud gagal: "+e.getMessage()));
+  }
+  void reconcileLocalPending(){
+    JSONArray local=host.entries("pending_orders");
+    for(int i=0;i<local.length();i++){
+      JSONObject o=local.optJSONObject(i);
+      if(o==null||o.optBoolean("paid",false)||o.optBoolean("cancelled",false))continue;
+      String cloudId=o.optString("liveId","");
+      if(cloudId.isEmpty())continue;
+      final int index=i;
+      orders(cloudId).get().addOnSuccessListener(doc->{
+        if(!doc.exists()||doc.getMetadata().isFromCache())return;
+        String state=doc.getString("status");
+        if("PAID".equals(state)){
+          host.restoreCloudPaymentLocal(index,doc.getString("method"));
+        }else if("CANCELLED".equals(state))host.cancelPendingLocally(index);
+      });
+    }
   }
   void activate(){
     if(!accounts.owner()){host.message("Owner sahaja boleh aktifkan Live.");return;}
