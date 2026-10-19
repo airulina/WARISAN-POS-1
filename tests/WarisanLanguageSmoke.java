@@ -16,7 +16,7 @@ public final class WarisanLanguageSmoke {
     assertEqual("BM heading","UNTUNG BERSIH POS TEMPATAN",false,"UNTUNG BERSIH POS TEMPATAN");
     assertEqual("EN heading","UNTUNG BERSIH POS TEMPATAN",true,"LOCAL POS NET PROFIT");
     assertEqual("EN app title","KIOS WARISAN · SISTEM JUALAN",true,"WARISAN KIOSK · SALES SYSTEM");
-    assertEqual("EN finance","DUIT · OVERALL",true,"FINANCES · OVERALL");
+    assertEqual("EN finance","DUIT · OVERALL",true,"FINANCES · OVERVIEW");
     assertEqual("BM finance","DUIT · OVERALL",false,"DUIT · KESELURUHAN");
     assertEqual("BM confirm","Confirm Order",false,"Sahkan Pesanan");
     assertEqual("EN receipt","RESIT BAYARAN PEMBEKAL",true,"SUPPLIER PAYMENT RECEIPT");
