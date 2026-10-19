@@ -70,6 +70,7 @@ private static final int RC_SIGN_IN = 9001;
   StaffSecurity staffSecurity;
   LiveBranchStore live;
   OwnerCashflow ownerCashflow;
+  OwnerBranchOrders ownerBranchOrders;
   BranchPresence presence;
   FirebaseFirestore firestoreForStaff(){return firestore;}
   android.content.SharedPreferences posPrefs(){
@@ -164,7 +165,7 @@ private static final int RC_SIGN_IN = 9001;
       }else p.edit().putBoolean("fix_supplier_receipt_detail_20260926",true).commit();
     }catch(Exception ignored){}
   }
-  @Override public void onCreate(Bundle b){super.onCreate(b);firebaseAuth = FirebaseAuth.getInstance();firestore = FirebaseFirestore.getInstance();branchAccounts=new BranchAccounts(this,firebaseAuth,firestore);ownerPassword=new OwnerPassword(this);staffSecurity=new StaffSecurity(this);live=new LiveBranchStore(this);ownerCashflow=new OwnerCashflow(this);presence=new BranchPresence(this);
+  @Override public void onCreate(Bundle b){super.onCreate(b);firebaseAuth = FirebaseAuth.getInstance();firestore = FirebaseFirestore.getInstance();branchAccounts=new BranchAccounts(this,firebaseAuth,firestore);ownerPassword=new OwnerPassword(this);staffSecurity=new StaffSecurity(this);live=new LiveBranchStore(this);ownerCashflow=new OwnerCashflow(this);ownerBranchOrders=new OwnerBranchOrders(this);presence=new BranchPresence(this);
 GoogleSignInOptions gso = new GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
         .requestIdToken(getString(R.string.default_web_client_id))
         .requestEmail()
@@ -664,7 +665,24 @@ selectedDay=date();selectedMonth=selectedDay.substring(0,7);rangeStart=selectedD
       action("Cetak laporan harian",()->print(staffDailyReceipt(day)));
       action("Transaksi hari ini / Mohon Refund",()->saleHistory(day));
       action("Semak kelulusan refund",()->staffSecurity.showMyRefunds());
-    }else if(activePage==11){heading("Order belum bayar","Semua order yang sudah confirm tetapi belum dibayar.");JSONArray pending=entries("pending_orders");int open=0;for(int i=0;i<pending.length();i++){JSONObject o=pending.optJSONObject(i);if(o!=null&&!o.optBoolean("paid",false)&&!o.optBoolean("cancelled",false))open++;}if(open==0){LinearLayout empty=col();empty.setPadding(dp(16),dp(18),dp(16),dp(18));empty.setBackground(shape(surface,15));add(empty,text("Tiada order belum bayar.",15,ink,true),-1,-2);gap(empty,5);add(empty,text("Order yang di-Confirm dari MENU akan muncul di sini.",12,muted,false),-1,-2);add(body,empty,-1,-2);}else drawPendingOrders();
+    }else if(activePage==11){
+      heading(branchAccounts.owner()?"ORDER · SEMUA BRANCH":"Order belum bayar",
+        branchAccounts.owner()?"Order tempatan dan order Cloud branch lain, lengkap dengan nombor resit serta asal branch.":
+          "Order yang sudah confirm tetapi belum dibayar.");
+      add(body,text("ORDER TEMPATAN · "+branchAccounts.branchName(),13,gold,true),-1,-2);
+      gap(body,7);
+      JSONArray pending=entries("pending_orders");int open=0;
+      for(int i=0;i<pending.length();i++){
+        JSONObject o=pending.optJSONObject(i);
+        if(o!=null&&!o.optBoolean("paid",false)&&!o.optBoolean("cancelled",false))open++;
+      }
+      if(open==0){
+        LinearLayout empty=col();empty.setPadding(dp(16),dp(18),dp(16),dp(18));
+        empty.setBackground(shape(surface,15));
+        add(empty,text("Tiada order tempatan belum bayar.",15,ink,true),-1,-2);
+        add(body,empty,-1,-2);
+      }else drawPendingOrders();
+      if(branchAccounts.owner())ownerBranchOrders.draw();
       gap(body,12);
     }else if(activePage==1){
       if(branchAccounts.owner())branchAccounts.showStockBranches();
@@ -1571,10 +1589,17 @@ selectedDay=date();selectedMonth=selectedDay.substring(0,7);rangeStart=selectedD
   void drawPendingOrders(){
     JSONArray pending=entries("pending_orders");int open=0;for(int i=0;i<pending.length();i++){JSONObject o=pending.optJSONObject(i);if(o!=null&&!o.optBoolean("paid",false)&&!o.optBoolean("cancelled",false))open++;}
     if(open==0)return;
-    for(int i=pending.length()-1;i>=0;i--){JSONObject o=pending.optJSONObject(i);if(o==null||o.optBoolean("paid",false)||o.optBoolean("cancelled",false))continue;final int index=i;LinearLayout card=col();card.setPadding(dp(13),dp(11),dp(13),dp(11));card.setBackground(shape(surface,13));LinearLayout top=row();top.addView(text("ORDER #"+String.format(Locale.US,"%04d",o.optInt("order")),14,ink,true),new LinearLayout.LayoutParams(0,-2,1));add(top,text(money(o.optInt("total")),16,gold,true),-2,-2);add(card,top,-1,-2);gap(card,5);add(card,text(orderItemsText(o.optJSONArray("qty")),12,muted,false),-1,-2);gap(card,8);LinearLayout buttons=row();TextView pay=chip("BAYAR",blue,Color.WHITE),cancel=chip("BATAL ORDER",0xffc83f46,Color.WHITE),reprint=chip("PRINT ORDER",0xff203f61,gold);pay.setGravity(Gravity.CENTER);cancel.setGravity(Gravity.CENTER);reprint.setGravity(Gravity.CENTER);buttons.addView(pay,new LinearLayout.LayoutParams(0,dp(40),1));LinearLayout.LayoutParams cp=new LinearLayout.LayoutParams(0,dp(40),1);cp.leftMargin=dp(6);buttons.addView(cancel,cp);LinearLayout.LayoutParams rp=new LinearLayout.LayoutParams(0,dp(40),1);rp.leftMargin=dp(6);buttons.addView(reprint,rp);add(card,buttons,-1,-2);pay.setOnClickListener(v->payPendingOrder(index));cancel.setOnClickListener(v->cancelPendingOrder(index));reprint.setOnClickListener(v->print(orderSlip(o)));add(body,card,-1,-2);gap(body,8);}
+    for(int i=pending.length()-1;i>=0;i--){JSONObject o=pending.optJSONObject(i);if(o==null||o.optBoolean("paid",false)||o.optBoolean("cancelled",false))continue;final int index=i;LinearLayout card=col();card.setPadding(dp(13),dp(11),dp(13),dp(11));card.setBackground(shape(surface,13));LinearLayout top=row();top.addView(text("🏬 "+branchAccounts.branchName(),14,ink,true),new LinearLayout.LayoutParams(0,-2,1));add(top,text(money(o.optInt("total")),16,gold,true),-2,-2);add(card,top,-1,-2);gap(card,5);add(card,text("NO. RESIT · "+pendingOrderReceiptNumber(o)+"   ·   BELUM BAYAR",12,blue,true),-1,-2);gap(card,5);add(card,text(orderItemsText(o.optJSONArray("qty")),12,muted,false),-1,-2);gap(card,8);LinearLayout buttons=row();TextView pay=chip("BAYAR",blue,Color.WHITE),cancel=chip("BATAL ORDER",0xffc83f46,Color.WHITE),reprint=chip("PRINT ORDER",0xff203f61,gold);pay.setGravity(Gravity.CENTER);cancel.setGravity(Gravity.CENTER);reprint.setGravity(Gravity.CENTER);buttons.addView(pay,new LinearLayout.LayoutParams(0,dp(40),1));LinearLayout.LayoutParams cp=new LinearLayout.LayoutParams(0,dp(40),1);cp.leftMargin=dp(6);buttons.addView(cancel,cp);LinearLayout.LayoutParams rp=new LinearLayout.LayoutParams(0,dp(40),1);rp.leftMargin=dp(6);buttons.addView(reprint,rp);add(card,buttons,-1,-2);pay.setOnClickListener(v->payPendingOrder(index));cancel.setOnClickListener(v->cancelPendingOrder(index));reprint.setOnClickListener(v->print(orderSlip(o)));add(body,card,-1,-2);gap(body,8);}
+  }
+  String pendingOrderReceiptNumber(JSONObject o){
+    String branch=branchAccounts.branchId();
+    if(branch==null)branch="utama";
+    String dateValue=entryDay(o);
+    return Integer.toHexString(branch.hashCode()).toUpperCase(Locale.US)+"-"+
+      dateValue.replace("-","")+"-"+String.format(Locale.US,"%04d",o.optInt("order"));
   }
   String orderItemsText(JSONArray q){StringBuilder b=new StringBuilder();if(q!=null)for(int i=0;i<Math.min(q.length(),names.length);i++){int n=q.optInt(i);if(n>0){if(b.length()>0)b.append("  •  ");b.append(names[i]).append(" × ").append(n);}}return b.toString();}
-  String orderSlip(JSONObject o){StringBuilder b=new StringBuilder();b.append(centerReceipt(posPrefs().getString("shop_name","WARISAN FROZEN"))).append("--------------------------------\n").append(centerReceipt("SLIP ORDER")).append(line("Order",String.format(Locale.US,"#%04d",o.optInt("order")))).append(line("Masa",o.optString("time"))).append("--------------------------------\n");JSONArray q=o.optJSONArray("qty");if(q!=null)for(int i=0;i<Math.min(q.length(),names.length);i++){int n=q.optInt(i);if(n>0)b.append(names[i]).append("\n").append(line("  "+n+" x "+money(prices[i]),money(n*prices[i])));}return b.append("--------------------------------\n").append(line("JUMLAH",money(o.optInt("total")))).append(centerReceipt("BELUM BAYAR")).append("\n\n").toString();}
+  String orderSlip(JSONObject o){StringBuilder b=new StringBuilder();b.append(centerReceipt(posPrefs().getString("shop_name","WARISAN FROZEN"))).append("--------------------------------\n").append(centerReceipt("SLIP ORDER")).append(line("No. Resit",pendingOrderReceiptNumber(o))).append(line("Branch",branchAccounts.branchName())).append(line("Masa",o.optString("time"))).append("--------------------------------\n");JSONArray q=o.optJSONArray("qty");if(q!=null)for(int i=0;i<Math.min(q.length(),names.length);i++){int n=q.optInt(i);if(n>0)b.append(names[i]).append("\n").append(line("  "+n+" x "+money(prices[i]),money(n*prices[i])));}return b.append("--------------------------------\n").append(line("JUMLAH",money(o.optInt("total")))).append(centerReceipt("BELUM BAYAR")).append("\n\n").toString();}
   void confirmOrder(){
     if(sum()<=0){message("Tambah menu dahulu");return;}
     int[] purchased=Arrays.copyOf(qty,qty.length);
