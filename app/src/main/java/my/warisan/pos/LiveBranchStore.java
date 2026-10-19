@@ -340,7 +340,14 @@ final class LiveBranchStore {
       DocumentSnapshot stockDoc=tx.get(inv);
       if(!stockDoc.exists())throw new IllegalStateException("Stok Live belum diaktifkan");
       ArrayList<Long> remaining=readStock(stockDoc);
-      if(remaining.size()<quantities.size())throw new IllegalStateException("Menu Live tidak sepadan");
+      if(remaining.size()<quantities.size())
+        throw new IllegalStateException("Menu pekerja lebih panjang daripada stok Cloud. Minta Owner Terbit Menu dan semak senarai stok.");
+      if(remaining.size()>30)
+        throw new IllegalStateException("Terlalu banyak slot stok Cloud; Owner perlu semak menu.");
+      // Older WARISAN databases may retain stock slots for hidden/deleted
+      // items. The Rules require stock.size() == order.qty.size(); pad with
+      // ZERO quantities to preserve those legacy slots without altering stock.
+      while(quantities.size()<remaining.size())quantities.add(0L);
       for(int i=0;i<quantities.size();i++){
         long quantity=quantities.get(i);
         if(quantity<0)throw new IllegalStateException("Kuantiti tidak sah");
@@ -369,13 +376,83 @@ final class LiveBranchStore {
           "Tempahan Cloud gagal, branch="+accounts.branchId()+" (stok+resit atomik)",e);
         String reason=e.getMessage()==null?"Tiada butiran ralat":e.getMessage();
         if(reason.contains("PERMISSION_DENIED")||reason.contains("PERMISSION DENIED")){
-          host.message("ORDER LIVE DISEKAT FIRESTORE. Semak Rules diterbitkan untuk projek warisan-pos. "+
-            "Stok/resit tidak boleh dianggap tersimpan. Ralat: "+reason);
+          host.message("ORDER LIVE DISEKAT FIRESTORE. Menyemak kebenaran baca Cloud...");
+          diagnoseReserveRejection(receiptId,quantities.size(),reason);
         }else{
           host.message("ORDER LIVE GAGAL (stok + resit): "+reason);
         }
       });
   }
+  /**
+   * No writes are made here. Detect stale deployed Rules vs legacy menu/stock
+   * dimension drift without asking staff to weaken Firebase permissions.
+   * Only show results while the worker is still assigned to the same branch.
+   */
+  void diagnoseReserveRejection(String receiptId,int menuSlots,String firestoreError){
+    if(accounts.user()==null)return;
+    final String key=accounts.ownerUid()+":"+accounts.branchId()+":"+accounts.user().getUid();
+    final String[] result=new String[4];
+    final java.util.concurrent.atomic.AtomicInteger pending=new java.util.concurrent.atomic.AtomicInteger(4);
+    final Runnable completed=()->{
+      if(pending.decrementAndGet()!=0)return;
+      if(accounts.user()==null||
+        !key.equals(accounts.ownerUid()+":"+accounts.branchId()+":"+accounts.user().getUid()))return;
+      StringBuilder report=new StringBuilder();
+      report.append("BRANCH: ").append(accounts.branchName()).append("\n");
+      report.append("BACA STOK CLOUD: ").append(result[0]).append("\n");
+      report.append("BACA ORDER BAHARU: ").append(result[1]).append("\n");
+      report.append("STATUS BRANCH: ").append(result[2]).append("\n");
+      report.append("AHLI PEKERJA: ").append(result[3]).append("\n");
+      report.append("SLOT MENU / ORDER: ").append(menuSlots).append("\n\n");
+      if(result[1].startsWith("DITOLAK"))
+        report.append("Kemungkinan Rules Firestore yang diterbitkan belum membenarkan bacaan order yang belum wujud.\n\n");
+      if(result[0].startsWith("OK")&&!result[0].contains(" / "+menuSlots+" slot"))
+        report.append("Panjang stok Cloud tidak sama dengan panjang order; semak menu versi lama.\n\n");
+      report.append("Tiada data ditulis oleh diagnostik. Jangan ulang order sebelum stok dan order disemak.");
+      host.darkBuilder().setTitle("DIAGNOSTIK ORDER LIVE · PEKERJA")
+        .setMessage(report.toString()).setPositiveButton("FAHAM",null).show();
+    };
+    inventory().get(com.google.firebase.firestore.Source.SERVER)
+      .addOnCompleteListener(task->{
+        if(task.isSuccessful()){
+          DocumentSnapshot doc=task.getResult();
+          Object raw=doc.get("stock");
+          int count=raw instanceof List?((List<?>)raw).size():-1;
+          result[0]=doc.exists()?"OK · "+count+" / "+menuSlots+" slot":"TIADA DOKUMEN";
+        }else result[0]="DITOLAK / GAGAL · "+diagnosticCode(task.getException());
+        completed.run();
+      });
+    orders(receiptId).get(com.google.firebase.firestore.Source.SERVER)
+      .addOnCompleteListener(task->{
+        if(task.isSuccessful()){
+          result[1]=task.getResult().exists()?"SUDAH WUJUD · semak transaksi":"OK · order belum wujud";
+        }else result[1]="DITOLAK / GAGAL · "+diagnosticCode(task.getException());
+        completed.run();
+      });
+    branch().get(com.google.firebase.firestore.Source.SERVER)
+      .addOnCompleteListener(task->{
+        if(task.isSuccessful()&&task.getResult().exists()){
+          result[2]=""+task.getResult().getString("operatingStatus");
+        }else result[2]="DITOLAK / GAGAL · "+diagnosticCode(task.getException());
+        completed.run();
+      });
+    branch().collection("members").document(accounts.user().getUid())
+      .get(com.google.firebase.firestore.Source.SERVER)
+      .addOnCompleteListener(task->{
+        if(task.isSuccessful()&&task.getResult().exists()){
+          Boolean active=task.getResult().getBoolean("active");
+          Boolean removed=task.getResult().getBoolean("removed");
+          result[3]=(Boolean.TRUE.equals(active)&&!Boolean.TRUE.equals(removed))?"AKTIF":"TIDAK AKTIF";
+        }else result[3]="DITOLAK / GAGAL · "+diagnosticCode(task.getException());
+        completed.run();
+      });
+  }
+  private static String diagnosticCode(Exception e){
+    if(e instanceof com.google.firebase.firestore.FirebaseFirestoreException)
+      return ((com.google.firebase.firestore.FirebaseFirestoreException)e).getCode().toString();
+    return e==null?"UNKNOWN":e.getClass().getSimpleName();
+  }
+
   void cancel(String id,Done onSuccess){
     if(!usable()||busy){host.message("Live offline. Order belum dibatalkan.");return;}
     busy=true;DocumentReference ref=orders(id),inv=inventory();
