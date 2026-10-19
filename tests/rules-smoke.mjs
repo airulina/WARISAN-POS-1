@@ -87,6 +87,33 @@ try{
   // nonexistent, never as a foreign worker document.
   assert.equal((await assertSucceeds(getDoc(d(anotherOwner,missingStaffIndex)))).exists(),false);
 
+  // Branch removal is Owner-only. A branch with historical Live stock
+  // cannot be permanently deleted; archive instead. Original Branch Utama
+  // may NEVER be deleted, even without any inventory.
+  await assertFails(deleteDoc(d(owner,branch)));
+  await assertFails(deleteDoc(d(staff,branch)));
+  await assertSucceeds(setDoc(d(owner,workspace+'/branches/utama_legacy'),{
+    ownerUid:'owner',name:'Branch Utama',archived:true,
+    operatingStatus:'OFFDAY'
+  }));
+  await assertFails(deleteDoc(d(owner,workspace+'/branches/utama_legacy')));
+  await assertSucceeds(setDoc(d(owner,workspace+'/branches/empty-extra'),{
+    ownerUid:'owner',name:'Branch Ujian',archived:false,operatingStatus:'OPEN'
+  }));
+  await assertFails(deleteDoc(d(owner,workspace+'/branches/empty-extra')));
+  await assertSucceeds(updateDoc(d(owner,workspace+'/branches/empty-extra'),{
+    archived:true,operatingStatus:'OFFDAY'
+  }));
+  await assertSucceeds(deleteDoc(d(owner,workspace+'/branches/empty-extra')));
+  await assertSucceeds(updateDoc(d(owner,branchTwo),{
+    archived:true,operatingStatus:'OFFDAY'
+  }));
+  await assertFails(getDoc(d(staffOtherBranch,workspace+'/paymentConfig/mainQr')));
+  await assertSucceeds(getDoc(d(staffOtherBranch,branchTwo)));
+  await assertSucceeds(updateDoc(d(owner,branchTwo),{
+    archived:false,operatingStatus:'OPEN'
+  }));
+
   // A single Owner-uploaded static payment QR is visible across all assigned
   // branches, but only the Owner can replace/delete it.
   const qrRef=d(owner,workspace+'/paymentConfig/mainQr');
