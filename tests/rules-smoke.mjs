@@ -82,5 +82,41 @@ try{
   }));
   assert.equal((await getDoc(d(owner,daily))).data().sales,260);
   await assertFails(updateDoc(d(staff,daily),{sales:999999}));
-  console.log('PASS: Owner/staff isolation, historical-report privacy, stock reservation, single payment, tampering checks.');
+  await assertFails(updateDoc(d(staff,ord),{status:'REFUNDED'}));
+
+  // Owner-only refund approvals, with an atomic reversal of the paid order.
+  const reqPath=branch+'/refundRequests/request1';
+  await assertSucceeds(setDoc(d(staff,reqPath),{
+    ownerUid:'owner',branchId:'branch1',employeeUid:'staff',
+    employeeEmail:'staff@example.test',businessDay:today,
+    saleFingerprint:'order1|260',receipt:'Sate Ayam x 2',
+    amount:260,status:'PENDING',requestedAt:serverTimestamp()
+  }));
+  await assertFails(updateDoc(d(staff,reqPath),{
+    status:'APPROVED',decidedBy:'staff',decidedAt:serverTimestamp()
+  }));
+  await assertSucceeds(updateDoc(d(owner,reqPath),{
+    status:'APPROVED',decidedBy:'owner',decidedAt:serverTimestamp()
+  }));
+  await assertSucceeds(updateDoc(d(staff,reqPath),{
+    status:'CLAIMED',claimedAt:serverTimestamp()
+  }));
+  await assertSucceeds(runTransaction(staff,async tx=>{
+    const receipt=await tx.get(d(staff,ord));
+    const report=await tx.get(d(staff,daily));
+    assert.equal(receipt.data().status,'PAID');
+    assert.equal(report.data().sales,260);
+    tx.update(d(staff,daily),{
+      sales:0,cash:0,qr:0,lastRefundId:'order1',updatedAt:serverTimestamp()
+    });
+    tx.update(d(staff,ord),{
+      status:'REFUNDED',refundApprovalId:'request1',
+      refundBy:'staff',refundedAt:serverTimestamp()
+    });
+  }));
+  assert.equal((await getDoc(d(owner,daily))).data().sales,0);
+  await assertSucceeds(updateDoc(d(staff,reqPath),{
+    status:'COMPLETED',completedAt:serverTimestamp()
+  }));
+  console.log('PASS: Owner/staff permissions, historical report privacy, atomic reserve/pay/refund, staff tampering denied.');
 }finally{await env.cleanup();}
