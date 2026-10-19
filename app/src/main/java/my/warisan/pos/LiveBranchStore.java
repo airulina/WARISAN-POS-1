@@ -105,6 +105,12 @@ final class LiveBranchStore {
               edit.putInt("price_"+i,((Number)p.get(i)).intValue());
             String custom=snapshot.getString("customMenu");
             if(custom!=null)edit.putString("custom_menu",custom);
+            Object hidden=snapshot.get("menuHidden");
+            if(hidden instanceof List){
+              List<?> flags=(List<?>)hidden;
+              for(int i=0;i<flags.size();i++)
+                edit.putBoolean("menu_hidden_"+i,Boolean.TRUE.equals(flags.get(i)));
+            }
             edit.putString("live_menu_version",marker).commit();
             host.loadMenu();
           }
@@ -259,13 +265,16 @@ final class LiveBranchStore {
       .setMessage("Stok sedia ada akan diambil SEKALI sebagai baki awal cloud. Data POS asal tidak diubah. Selepas itu transaksi kaunter Live memerlukan internet.")
       .setPositiveButton("AKTIFKAN",(dlg,which)->{
         final ArrayList<Long> initial=new ArrayList<>(),priceList=new ArrayList<>();
+        final ArrayList<Boolean> hiddenList=new ArrayList<>();
         for(int i=0;i<host.names.length;i++){
           initial.add((long)(host.unlimited(i)?0:host.stock(i)));
           priceList.add((long)host.prices[i]);
+          hiddenList.add(host.posPrefs().getBoolean("menu_hidden_"+i,false));
         }
         String name=accounts.branchName();
         Map<String,Object> initialDoc=new HashMap<>();
         initialDoc.put("stock",initial);initialDoc.put("menuPrices",priceList);
+        initialDoc.put("menuHidden",hiddenList);
         initialDoc.put("customMenu",host.posPrefs().getString("custom_menu","[]"));
         initialDoc.put("branchName",name);
         initialDoc.put("menuVersion",UUID.randomUUID().toString());
@@ -284,10 +293,15 @@ final class LiveBranchStore {
   void publishMenu(){
     if(!accounts.owner()||!usable()){host.message("Aktifkan branch Live dahulu.");return;}
     ArrayList<Long> prices=new ArrayList<>();
-    for(int v:host.prices)prices.add((long)v);
+    ArrayList<Boolean> hidden=new ArrayList<>();
+    for(int i=0;i<host.prices.length;i++){
+      prices.add((long)host.prices[i]);
+      hidden.add(host.posPrefs().getBoolean("menu_hidden_"+i,false));
+    }
     String custom=host.posPrefs().getString("custom_menu","[]");
     Map<String,Object> update=new HashMap<>();
     update.put("menuPrices",prices);update.put("customMenu",custom);
+    update.put("menuHidden",hidden);
     update.put("menuVersion",UUID.randomUUID().toString());
     inventory().update(update).addOnSuccessListener(v->host.message("Menu Live dikemas kini."))
       .addOnFailureListener(e->host.message("Menu Live gagal: "+e.getMessage()));
