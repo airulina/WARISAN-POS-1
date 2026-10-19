@@ -116,7 +116,8 @@ final class OwnerCashflow {
     Long v=d.getLong(field);return v==null?0:v;
   }
   void refresh(){
-    stop();
+    String current=selectedBranchId;
+    stop();selectedBranchId=current;
     ensureLoaded();
   }
   void ensureLoaded(){
@@ -124,7 +125,8 @@ final class OwnerCashflow {
     final String uid=accounts.ownerUid();
     final String from=start(),to=end(),scope=uid+":"+from+":"+to;
     if(scope.equals(subscriptionKey)&&branchListener!=null)return;
-    stop();subscriptionKey=scope;
+    String previousSelection=selectedBranchId;
+    stop();selectedBranchId=previousSelection;subscriptionKey=scope;
     branchListener=db.collection("workspaces").document(uid).collection("branches")
       .addSnapshotListener((results,error)->{
         if(!scope.equals(subscriptionKey)||!accounts.owner()||
@@ -216,7 +218,7 @@ final class OwnerCashflow {
     return true;
   }
   void redrawIfVisible(){
-    if(host.activePage==3||host.activePage==16||host.activePage==17)
+    if(host.activePage==3||host.activePage==16||host.activePage==17||host.activePage==19)
       host.draw();
   }
   Day overall(){
@@ -353,26 +355,121 @@ final class OwnerCashflow {
     LinearLayout count=host.row();
     host.metric(count,"BILANGAN TRANSAKSI",String.valueOf(total.transactions),host.ink,null);
     host.add(host.body,count,-1,-2);host.gap(host.body,10);
-    host.add(host.body,host.text("PECAHAN JUALAN MENGIKUT HARI",12,host.gold,true),-1,-2);
-    host.gap(host.body,7);
-    TreeMap<String,Day> each=branch.combined();
-    if(each.isEmpty())
-      host.add(host.body,host.text("Belum ada rekod jualan dalam tempoh ini.",12,host.muted,false),-1,-2);
-    else for(Map.Entry<String,Day> item:each.descendingMap().entrySet()){
-      Day day=item.getValue();
-      host.action(item.getKey()+"  ·  "+rm(day.sales)+
-        "\n  Tunai "+rm(day.cash)+"   QR "+rm(day.qr)+
-        "\n  "+day.transactions+" transaksi · "+(day.cloud?"Cloud Live":"Rekod lama telefon"),
-        ()->showDay(item.getKey(),day,chosen.name));
+    // Branch dashboard stays compact; all historical and new dates belong
+    // in the unified LAPORAN page, never as hundreds of cards here.
+    host.action("📊  LAPORAN · JUALAN LAMA + BARU  ›",()->{
+      host.activePage=19;host.draw();
+    });
+    host.gap(host.body,8);
+    dataMessage();
+  }
+  BranchRow selectedBranch(){
+    for(BranchRow row:rows)if(row.id.equals(selectedBranchId))return row;
+    return null;
+  }
+  void drawUnifiedReport(){
+    if(!accounts.owner()){
+      host.heading("Akses Ditolak","Laporan branch hanya boleh dilihat oleh Owner.");
+      return;
     }
-    if(branch.id.equals(accounts.branchId())){
-      host.gap(host.body,8);
-      host.action("📊  LAPORAN LAMA / KOS & UNTUNG BRANCH INI",()->{
+    ensureLoaded();
+    BranchRow branch=selectedBranch();
+    if(branch==null){
+      host.heading("Laporan","Pilih branch dahulu untuk lihat rekod jualan.");
+      host.action("‹  KEMBALI KE SENARAI BRANCH",()->{
+        host.activePage=16;host.draw();
+      });
+      return;
+    }
+    final BranchRow chosen=branch;
+    host.heading("LAPORAN · "+chosen.name,
+      "Rekod lama dan jualan Live dalam satu laporan mengikut tarikh.");
+    host.action("‹  KEMBALI KE "+chosen.name,()->{host.activePage=17;host.draw();});
+    modeSelector();
+    if(!loadError.isEmpty()||!ready()){
+      dataMessage();
+      host.action("↻  SEMAK SEMULA",()->refresh());
+      return;
+    }
+    Day total=chosen.totals();
+    host.add(host.body,host.text("RINGKASAN · "+period(),12,host.gold,true),-1,-2);
+    host.gap(host.body,8);
+    LinearLayout gross=host.row();
+    host.metric(gross,"JUMLAH JUALAN LAMA + LIVE",rm(total.sales),host.blue,null);
+    host.add(host.body,gross,-1,-2);host.gap(host.body,8);
+    LinearLayout payment=host.row();
+    host.metric(payment,"TUNAI",rm(total.cash),host.ink,null);
+    host.metric(payment,"QR / DUITNOW",rm(total.qr),host.gold,
+      ()->showQrHistory(chosen));
+    host.add(host.body,payment,-1,-2);host.gap(host.body,8);
+    LinearLayout counts=host.row();
+    host.metric(counts,"JUMLAH TRANSAKSI",String.valueOf(total.transactions),
+      host.blue,null);
+    host.add(host.body,counts,-1,-2);
+    if(total.unknown>0){
+      host.gap(host.body,6);
+      host.add(host.body,host.text("Kaedah bayaran tidak dikelaskan: "+rm(total.unknown),
+        12,host.muted,false),-1,-2);
+    }
+    host.gap(host.body,12);
+    host.action("🖨  LAPORAN A4 / PDF · REKOD LAMA + LIVE",()->{
+      String printable=reportText(chosen);
+      WarisanPrinting.textA4(host,printable,"Warisan Laporan "+chosen.name);
+    });
+    host.action("🧾  REKOD RESIT QR / TNG / DUITNOW",()->showQrHistory(chosen));
+    if(chosen.id.equals(accounts.branchId())){
+      host.action("📒  KOS, UNTUNG & LAPORAN POS TEMPATAN",()->{
         host.activePage=18;host.draw();
       });
     }
-    host.gap(host.body,8);
+    host.gap(host.body,13);
+    host.add(host.body,host.text("REKOD JUALAN MENGIKUT TARIKH",13,host.gold,true),-1,-2);
+    host.gap(host.body,7);
+    TreeMap<String,Day> days=chosen.combined();
+    if(days.isEmpty()){
+      host.add(host.body,host.text("Tiada rekod jualan untuk tarikh dipilih.",
+        12,host.muted,false),-1,-2);
+    }else{
+      for(Map.Entry<String,Day> item:days.descendingMap().entrySet()){
+        final String dayDate=item.getKey();
+        final Day figures=item.getValue();
+        String kind=figures.cloud?
+          (figures.hasLocalSupplement?"Live + Rekod Lama":"Live"):"Rekod Lama";
+        host.action(dayDate+" · "+rm(figures.sales)+"  ·  "+kind,
+          ()->showDay(dayDate,figures,chosen.name));
+      }
+    }
+    host.gap(host.body,12);
     dataMessage();
+  }
+  String reportText(BranchRow row){
+    Day total=row.totals();
+    StringBuilder b=new StringBuilder();
+    b.append("WARISAN POS · LAPORAN JUALAN\n")
+      .append(row.name).append("\n")
+      .append(period()).append("\n")
+      .append("-------------------------------\n")
+      .append("Jumlah Jualan: ").append(rm(total.sales)).append("\n")
+      .append("Tunai: ").append(rm(total.cash)).append("\n")
+      .append("QR/DuitNow: ").append(rm(total.qr)).append("\n")
+      .append("Belum dikelaskan: ").append(rm(total.unknown)).append("\n")
+      .append("Transaksi: ").append(total.transactions).append("\n")
+      .append("-------------------------------\n");
+    for(Map.Entry<String,Day> item:row.combined().descendingMap().entrySet()){
+      Day d=item.getValue();
+      b.append(item.getKey()).append(" : ").append(rm(d.sales)).append("\n")
+        .append("  Tunai ").append(rm(d.cash))
+        .append("  QR ").append(rm(d.qr))
+        .append("  TX ").append(d.transactions)
+        .append("  ")
+        .append(d.cloud?"Live":"Lama")
+        .append(d.hasLocalSupplement?"+Lama":"")
+        .append("\n");
+    }
+    b.append("-------------------------------\n")
+      .append("Data lama yang masih di telefon lain mungkin belum sync.\n")
+      .append("Kos dan untung bersih hanya dari rekod POS tempatan.\n");
+    return b.toString();
   }
   static final class QrReceipt {
     final String date,branch,method,status,reference,source,clock;
