@@ -77,6 +77,53 @@ try{
     ownerUid:'staff',branchId:'branch1',removed:false,updatedAt:serverTimestamp()
   }));
 
+  // First worker login binds one device; cannot silently change it afterward.
+  const workerProfile=d(staff,'staffProfiles/staff');
+  const primaryDevice='employee-installation-unique-00000001';
+  await assertSucceeds(updateDoc(workerProfile,{
+    deviceId:primaryDevice,deviceBoundAt:serverTimestamp()
+  }));
+  await assertFails(updateDoc(workerProfile,{
+    deviceId:'shared-phone-new-installation-00002'
+  }));
+  // Owner is authorized to release a worker device after checking identity.
+  await assertSucceeds(updateDoc(d(owner,'staffProfiles/staff'),{
+    deviceId:deleteField(),deviceBoundAt:deleteField()
+  }));
+  await assertSucceeds(updateDoc(workerProfile,{
+    deviceId:primaryDevice,deviceBoundAt:serverTimestamp()
+  }));
+  await assertSucceeds(setDoc(d(staff,branch+'/staffLogins/login1'),{
+    ownerUid:'owner',branchId:'branch1',employeeUid:'staff',
+    email:'staff@example.test',deviceTag:'000001',createdAt:serverTimestamp()
+  }));
+  await assertFails(setDoc(d(staff,branch+'/staffLogins/impersonation'),{
+    ownerUid:'owner',branchId:'branch1',employeeUid:'owner',
+    email:'owner@example.test',deviceTag:'fake',createdAt:serverTimestamp()
+  }));
+  // Security Rules alone cannot prove phone GPS, but reject employee
+  // Opening while the branch is explicitly closed by Owner.
+  await assertSucceeds(updateDoc(d(owner,branch),{openingEnabled:false}));
+  await assertFails(setDoc(d(staff,branch+'/liveSessions/'+today),{
+    ownerUid:'owner',branchId:'branch1',day:today,
+    openedBy:'staff',openedByEmail:'staff@example.test',
+    opening:0,open:true,updatedAt:serverTimestamp()
+  }));
+  await assertSucceeds(updateDoc(d(owner,branch),{openingEnabled:true}));
+  await assertSucceeds(setDoc(d(staff,branch+'/liveSessions/'+today),{
+    ownerUid:'owner',branchId:'branch1',day:today,
+    openedBy:'staff',openedByEmail:'staff@example.test',
+    opening:0,open:true,updatedAt:serverTimestamp()
+  }));
+  await assertSucceeds(setDoc(d(staff,branch+'/openingChecks/nearby'),{
+    ownerUid:'owner',branchId:'branch1',employeeUid:'staff',
+    day:today,status:'VERIFIED',distanceMeters:52,createdAt:serverTimestamp()
+  }));
+  await assertFails(setDoc(d(staff,branch+'/openingChecks/fake-identity'),{
+    ownerUid:'owner',branchId:'branch1',employeeUid:'owner',
+    day:today,status:'OUTSIDE_BRANCH',distanceMeters:1800,createdAt:serverTimestamp()
+  }));
+
   // Atomic cashier reservation: quantity 2 deducted from inventory.
   await assertSucceeds(runTransaction(staff,async tx=>{
     const before=await tx.get(d(staff,inv));
