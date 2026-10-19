@@ -1026,7 +1026,6 @@ final class WarisanLanguage {
     pair("Akses", "Access");
     pair("Bilik", "Room");
     pair("Waktu", "Time");
-    pair("Pesan", "Order");
     pair("Dipesan", "Ordered");
     pair("Tersalah", "Incorrect");
     pair("Berada", "Located");
@@ -1035,6 +1034,10 @@ final class WarisanLanguage {
     pair("Dalam talian", "Online");
     pair("Luar talian", "Offline");
     pair("Disahkan secara manual", "Confirmed manually");
+    // Resolve homonyms last: ORDER is a noun in POS screens, never "pesan".
+    alias("Order", "Pesanan", "Order");
+    alias("Orders", "Pesanan", "Orders");
+    alias("ORDER TEMPATAN", "PESANAN TEMPATAN", "LOCAL ORDERS");
     toEnglish=matcher(EN);
     toMalay=matcher(MS);
   }
