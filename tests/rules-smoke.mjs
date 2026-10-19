@@ -13,6 +13,7 @@ const env=await initializeTestEnvironment({
 const owner=env.authenticatedContext('owner',{email:'owner@example.test',email_verified:true}).firestore();
 const staff=env.authenticatedContext('staff',{email:'staff@example.test',email_verified:true}).firestore();
 const outsider=env.authenticatedContext('outsider',{email:'other@example.test',email_verified:true}).firestore();
+const staffGoogle=env.authenticatedContext('staff-google',{email:'staff@example.test',email_verified:true}).firestore();
 const workspace='workspaces/owner';
 const branch=workspace+'/branches/branch1';
 const inv=branch+'/live/current';
@@ -35,6 +36,10 @@ try{
       uid:'staff',email:'staff@example.test',role:'STAFF',active:true,
       ownerUid:'owner',branchId:'branch1',branchName:'Utama',createdAt:new Date()
     });
+    await setDoc(d(db,'staffEmails/staff@example.test'),{
+      email:'staff@example.test',role:'STAFF',workerUid:'staff',
+      ownerUid:'owner',branchId:'branch1',removed:false,updatedAt:new Date()
+    });
     await setDoc(d(db,inv),inventory);
     await setDoc(d(db,lastYear),{sales:100,cash:100,qr:0,transactions:1});
   });
@@ -44,6 +49,13 @@ try{
   await assertSucceeds(getDoc(d(owner,lastYear)));
   await assertFails(getDoc(d(staff,lastYear)));
   await assertFails(updateDoc(d(staff,inv),{stock:[999,10,10,10,0,10,10]}));
+  await assertFails(setDoc(d(staff,'workspaces/staff'),{
+    ownerUid:'staff',name:'NOT AN OWNER'
+  }));
+  // Another login provider / UID with the SAME worker email must be rejected.
+  await assertFails(setDoc(d(staffGoogle,'workspaces/staff-google'),{
+    ownerUid:'staff-google',name:'NOT AN OWNER'
+  }));
 
   // A staff member cannot create arbitrary owner-controlled accounts.
   await assertFails(setDoc(d(staff,'staffProfiles/staff'),{
@@ -122,15 +134,26 @@ try{
   await assertSucceeds(updateDoc(d(staff,reqPath),{
     status:'COMPLETED',completedAt:serverTimestamp()
   }));
-  // Owner removes a former employee. Archive credentials/access but retain sales history.
+  // Blocking temporarily doesn't release the email for Owner signup.
   const membership=d(owner,branch+'/members/staff');
   const profile=d(owner,'staffProfiles/staff');
+  const tempBlock=writeBatch(owner);
+  tempBlock.update(membership,{active:false,removed:false,updatedAt:serverTimestamp()});
+  tempBlock.update(profile,{active:false,removed:false,updatedAt:serverTimestamp()});
+  await assertSucceeds(tempBlock.commit());
+  await assertFails(setDoc(d(staffGoogle,'workspaces/staff-google'),{
+    ownerUid:'staff-google',name:'STILL STAFF'
+  }));
+  // Owner removes a former employee. Archive credentials/access but retain sales history.
   const revocation=writeBatch(owner);
   revocation.update(membership,{
     active:false,removed:true,removedAt:serverTimestamp(),updatedAt:serverTimestamp()
   });
   revocation.update(profile,{
     active:false,removed:true,removedAt:serverTimestamp(),updatedAt:serverTimestamp()
+  });
+  revocation.update(d(owner,'staffEmails/staff@example.test'),{
+    removed:true,updatedAt:serverTimestamp()
   });
   await assertSucceeds(revocation.commit());
   await assertFails(getDoc(d(staff,inv)));
@@ -139,12 +162,19 @@ try{
   await assertSucceeds(getDoc(profile));
   await assertSucceeds(getDoc(d(owner,daily))); // historical sales remain
   await assertFails(updateDoc(d(staff,'staffProfiles/staff'),{active:true,removed:false}));
+  // After formal removal, this email can create a brand-new Owner workspace.
+  await assertSucceeds(setDoc(d(staffGoogle,'workspaces/staff-google'),{
+    ownerUid:'staff-google',name:'New business after worker left'
+  }));
   const restore=writeBatch(owner);
   restore.update(membership,{
     active:true,removed:false,removedAt:deleteField(),updatedAt:serverTimestamp()
   });
   restore.update(profile,{
     active:true,removed:false,removedAt:deleteField(),updatedAt:serverTimestamp()
+  });
+  restore.update(d(owner,'staffEmails/staff@example.test'),{
+    removed:false,updatedAt:serverTimestamp()
   });
   await assertSucceeds(restore.commit());
   await assertSucceeds(getDoc(d(staff,inv)));
