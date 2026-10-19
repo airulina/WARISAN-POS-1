@@ -28,6 +28,11 @@ final class OwnerSalesChart extends View {
     }
     setMinimumHeight((int)(context.getResources().getDisplayMetrics().density*205));
   }
+  private String display(String text){
+    Context current=getContext();
+    return WarisanLanguage.translate(text,
+      current instanceof MainActivity && ((MainActivity)current).english());
+  }
   @Override protected void onDraw(Canvas c){
     super.onDraw(c);
     float density=getResources().getDisplayMetrics().density;
@@ -35,10 +40,10 @@ final class OwnerSalesChart extends View {
     p.setColor(Color.rgb(18,43,68));
     c.drawRoundRect(new RectF(0,0,w,h),14*density,14*density,p);
     p.setTextSize(12*density);p.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
-    p.setColor(Color.rgb(230,237,245));c.drawText("GRAF JUALAN HARIAN · "+month,14*density,24*density,p);
+    p.setColor(Color.rgb(230,237,245));c.drawText(display("GRAF JUALAN HARIAN · "+month),14*density,24*density,p);
     if(values.isEmpty()){
       p.setColor(muted);p.setTextSize(12*density);
-      c.drawText("Tiada jualan untuk bulan dipilih.",14*density,h/2,p);return;
+      c.drawText(display("Tiada jualan untuk bulan dipilih."),14*density,h/2,p);return;
     }
     long max=0;for(long v:values)max=Math.max(max,v);
     if(max<=0)max=1;
