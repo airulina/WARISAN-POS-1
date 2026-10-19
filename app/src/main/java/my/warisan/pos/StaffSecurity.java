@@ -258,61 +258,122 @@ final class StaffSecurity {
         });
     }).addOnFailureListener(e->host.message("Email / Password gagal: "+e.getMessage()));
   }
+
+  /** Tell the employee which Firestore check failed; never bypass permission rules. */
+  void failWorkerLogin(String stage,Exception error,String guidance){
+    if(accounts.auth.getCurrentUser()!=null)accounts.auth.signOut();
+    accounts.staffBranchVerified=false;
+    host.draw();
+    boolean denied=error instanceof com.google.firebase.firestore.FirebaseFirestoreException
+      && ((com.google.firebase.firestore.FirebaseFirestoreException)error).getCode()
+        == com.google.firebase.firestore.FirebaseFirestoreException.Code.PERMISSION_DENIED;
+    String detail=denied?"PERMISSION_DENIED: Firebase menolak akses.":(
+      error==null?"":String.valueOf(error.getMessage()));
+    host.darkBuilder().setTitle("LOGIN PEKERJA · "+stage)
+      .setMessage(detail+"\n\n"+guidance+
+        "\n\nData jualan, stok dan rekod lama tidak diubah.")
+      .setPositiveButton("FAHAM",null).show();
+  }
+
+  /** Verify membership and branch on the server before binding a single device.
+   *  A separate profile-only transaction avoids hiding the failing permission
+   *  behind a mixed multi-document transaction.
+   */
   void bindWorkerDevice(FirebaseUser user,com.google.firebase.firestore.DocumentSnapshot profile){
     final String uid=user.getUid();
     final String device=host.getSharedPreferences("warisan_identity",0)
       .getString("device_uid","");
-    if(device.isEmpty()){accounts.auth.signOut();host.message("ID telefon tidak tersedia.");return;}
+    if(device.length()<30){
+      failWorkerLogin("PERANTI",null,"ID telefon belum tersedia. Minta Owner semak pemasangan aplikasi.");return;
+    }
     final String assignedOwner=profile.getString("ownerUid");
     final String assignedBranch=profile.getString("branchId");
     final String assignedName=profile.getString("branchName");
-    if(assignedOwner==null||assignedBranch==null){
-      accounts.auth.signOut();host.message("Profil branch pekerja tidak lengkap.");return;
+    if(assignedOwner==null||assignedOwner.isEmpty()||
+      assignedBranch==null||assignedBranch.isEmpty()){
+      failWorkerLogin("PROFIL",null,
+        "Profil pekerja tidak mempunyai Owner/branch yang sah. Minta Owner semak akaun pekerja.");
+      return;
     }
-    DocumentReference ref=db.collection("staffProfiles").document(uid);
-    DocumentReference branchRef=db.collection("workspaces").document(assignedOwner)
+    final DocumentReference workerRef=db.collection("staffProfiles").document(uid);
+    final DocumentReference branchRef=db.collection("workspaces").document(assignedOwner)
       .collection("branches").document(assignedBranch);
-    db.runTransaction(tx->{
-      com.google.firebase.firestore.DocumentSnapshot branch=tx.get(branchRef);
-      if(!branch.exists()||!assignedOwner.equals(branch.getString("ownerUid")))
-        throw new IllegalStateException("Branch pekerja tidak sah / tiada akses.");
-      String operation=branch.getString("operatingStatus");
-      if("OFFDAY".equals(operation)||"STOCK_OUT".equals(operation))
-        throw new IllegalStateException("BRANCH "+(operation.equals("OFFDAY")?"OFF DAY":"STOK HABIS")+
-          " · Owner telah menutup "+assignedName+". Hubungi Owner.");
-      if(operation!=null&&!"OPEN".equals(operation))
-        throw new IllegalStateException("Status branch tidak dikenali. Hubungi Owner.");
-      com.google.firebase.firestore.DocumentSnapshot current=tx.get(ref);
-      if(!current.exists()||!Boolean.TRUE.equals(current.getBoolean("active"))||
-        !"STAFF".equals(current.getString("role"))||
-        Boolean.TRUE.equals(current.getBoolean("removed"))||
-        !assignedBranch.equals(current.getString("branchId")))
-        throw new IllegalStateException("Akaun pekerja tidak aktif atau branch berubah.");
-      String bound=current.getString("deviceId");
-      if(bound!=null&&!bound.isEmpty()&&!device.equals(bound))
-        throw new IllegalStateException("Akaun ini sudah diikat pada telefon lain. Minta Owner RESET PERANTI.");
-      if(bound==null||bound.isEmpty())
-        tx.update(ref,"deviceId",device,"deviceBoundAt",
-          com.google.firebase.firestore.FieldValue.serverTimestamp());
-      return null;
-    }).addOnSuccessListener(ok->{
-      if(accounts.user()==null||!uid.equals(accounts.user().getUid()))return;
-      accounts.setSession(uid,assignedOwner,assignedBranch,
-        assignedName==null?"Branch":assignedName,"STAFF");
-      accounts.staffBranchVerified=true;
-      observeWorker();
-      host.draw();
-      recordStaffLogin(uid,mailOf(user),assignedOwner,assignedBranch,device);
-      host.message("Log In berjaya · "+accounts.branchName());
-      // No GPS is needed. Server branch status determines access.
-    }).addOnFailureListener(e->{
-      accounts.auth.signOut();host.draw();
-      host.darkBuilder().setTitle("LOG IN PEKERJA DISEKAT")
-        .setMessage(e.getMessage()+"\n\nAkaun ini ditetapkan kepada satu branch "+
-          "dan satu telefon. Jika Owner tetapkan OFF DAY atau STOK HABIS, "+
-          "pekerja tidak boleh login sehingga Owner buka semula branch. Tiada GPS diperlukan.")
-        .setPositiveButton("FAHAM",null).show();
-    });
+    final DocumentReference memberRef=branchRef.collection("members").document(uid);
+
+    // Staff can get ONLY their own member document. Absent membership must
+    // never be treated as permission to access any other branch.
+    memberRef.get(com.google.firebase.firestore.Source.SERVER)
+      .addOnSuccessListener(member->{
+        if(accounts.user()==null||!uid.equals(accounts.user().getUid()))return;
+        if(!member.exists()){
+          failWorkerLogin("KEAHLIAN BRANCH",null,
+            "Profil ada, tetapi rekod members untuk branch ini tiada. "+
+            "Minta Owner pulihkan keahlian pekerja daripada profil sedia ada. "+
+            "Jangan daftar akaun baharu atau reset data.");
+          return;
+        }
+        if(!"STAFF".equals(member.getString("role"))||
+          !Boolean.TRUE.equals(member.getBoolean("active"))||
+          Boolean.TRUE.equals(member.getBoolean("removed"))||
+          (member.contains("ownerUid")&&!assignedOwner.equals(member.getString("ownerUid")))||
+          (member.contains("branchId")&&!assignedBranch.equals(member.getString("branchId")))){
+          failWorkerLogin("AKSES BRANCH",null,
+            "Keahlian pekerja tidak aktif atau tidak sepadan dengan branch yang ditetapkan. "+
+            "Minta Owner semak Urus Pekerja.");return;
+        }
+        branchRef.get(com.google.firebase.firestore.Source.SERVER)
+          .addOnSuccessListener(branch->{
+            if(accounts.user()==null||!uid.equals(accounts.user().getUid()))return;
+            if(!branch.exists()||!assignedOwner.equals(branch.getString("ownerUid"))){
+              failWorkerLogin("BRANCH",null,"Branch asal tidak dijumpai. Minta Owner semak branch.");return;
+            }
+            String operation=branch.getString("operatingStatus");
+            if("OFFDAY".equals(operation)||"STOCK_OUT".equals(operation)){
+              failWorkerLogin("BRANCH DITUTUP",null,
+                "Owner telah menetapkan "+(operation.equals("OFFDAY")?"OFF DAY":"STOK HABIS")+
+                " untuk "+(assignedName==null?assignedBranch:assignedName)+
+                ". Owner perlu buka semula branch sebelum login.");return;
+            }
+            if(operation!=null&&!"OPEN".equals(operation)){
+              failWorkerLogin("STATUS BRANCH",null,
+                "Status branch tidak dikenali. Minta Owner semak status operasi.");return;
+            }
+            // Read/check/write only the signed-in worker profile in this
+            // transaction. A competing phone cannot steal an existing binding.
+            db.runTransaction(tx->{
+              com.google.firebase.firestore.DocumentSnapshot current=tx.get(workerRef);
+              if(!current.exists()||!Boolean.TRUE.equals(current.getBoolean("active"))||
+                !"STAFF".equals(current.getString("role"))||
+                Boolean.TRUE.equals(current.getBoolean("removed"))||
+                !assignedOwner.equals(current.getString("ownerUid"))||
+                !assignedBranch.equals(current.getString("branchId")))
+                throw new IllegalStateException("Akaun pekerja tidak aktif atau branch berubah.");
+              String bound=current.getString("deviceId");
+              if(bound!=null&&!bound.isEmpty()&&!device.equals(bound))
+                throw new IllegalStateException(
+                  "Akaun sudah diikat pada telefon lain. Minta Owner RESET PERANTI.");
+              if(bound==null||bound.isEmpty())
+                tx.update(workerRef,"deviceId",device,"deviceBoundAt",
+                  com.google.firebase.firestore.FieldValue.serverTimestamp());
+              return null;
+            }).addOnSuccessListener(done->{
+              if(accounts.user()==null||!uid.equals(accounts.user().getUid()))return;
+              accounts.setSession(uid,assignedOwner,assignedBranch,
+                assignedName==null?"Branch":assignedName,"STAFF");
+              // Do not trust the earlier one-time branch read indefinitely:
+              // observeBranchAccess() must verify OPEN again before unlocking POS.
+              observeWorker();
+              recordStaffLogin(uid,mailOf(user),assignedOwner,assignedBranch,device);
+            }).addOnFailureListener(e->failWorkerLogin("IKAT TELEFON",e,
+              "Jika akaun sudah terikat pada peranti lain, minta Owner RESET PERANTI. "+
+              "Jika PERMISSION_DENIED, Publish firestore.rules terkini di Firebase "+
+              "untuk benarkan pekerja mengikat telefon sendiri."));
+          }).addOnFailureListener(e->failWorkerLogin("SEMAK BRANCH",e,
+            "Owner perlu periksa status branch dan Publish firestore.rules terkini. "+
+            "Pekerja mesti dibenarkan membaca status branch sendiri, bukan data branch lain."));
+      }).addOnFailureListener(e->failWorkerLogin("SEMAK KEAHLIAN",e,
+        "Owner perlu pastikan rules Firestore sudah Publish dan rekod "+
+        "workspaces/.../branches/.../members/{uid} wujud untuk pekerja ini."));
   }
   String mailOf(FirebaseUser user){
     return user.getEmail()==null?"":user.getEmail().trim().toLowerCase(Locale.ROOT);
