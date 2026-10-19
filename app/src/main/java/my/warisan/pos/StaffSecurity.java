@@ -52,26 +52,29 @@ final class StaffSecurity {
       .addOnSuccessListener(result->{
         if(!accounts.owner()||!ownerUid.equals(accounts.ownerUid()))return;
         ArrayList<String> names=new ArrayList<>(),ids=new ArrayList<>();
-        int chosen=0;
         for(QueryDocumentSnapshot branch:result){
           ids.add(branch.getId());
           names.add(branch.getString("name")==null?branch.getId():branch.getString("name"));
-          if(branch.getId().equals(accounts.branchId()))chosen=ids.size()-1;
         }
         if(ids.isEmpty()){host.message("Daftar branch dahulu sebelum daftar pekerja.");return;}
-        showCreateEmployeeForm(ids,names,chosen);
+        showCreateEmployeeForm(ids,names);
       }).addOnFailureListener(e->host.message("Senarai branch tidak dapat diambil: "+e.getMessage()));
   }
-  void showCreateEmployeeForm(ArrayList<String> ids,ArrayList<String> branchNames,int selected){
+  void showCreateEmployeeForm(ArrayList<String> ids,ArrayList<String> branchNames){
     if(!accounts.owner())return;
     LinearLayout layout=host.col();layout.setPadding(host.dp(18),0,host.dp(18),0);
     EditText email=input("Email pekerja",false);
     EditText password=input("Password sementara pekerja (min 10 aksara)",true);
     EditText confirm=input("Sahkan password pekerja",true);
     android.widget.Spinner branches=new android.widget.Spinner(host);
+    // No default branch. Previously the Owner's active Branch Utama was
+    // preselected, silently attaching new employees to the wrong shop.
+    ArrayList<String> branchChoices=new ArrayList<>();
+    branchChoices.add("— PILIH BRANCH PEKERJA —");
+    branchChoices.addAll(branchNames);
     android.widget.ArrayAdapter<String> adapter=new android.widget.ArrayAdapter<>(host,
-      android.R.layout.simple_spinner_dropdown_item,branchNames);
-    branches.setAdapter(adapter);branches.setSelection(selected);
+      android.R.layout.simple_spinner_dropdown_item,branchChoices);
+    branches.setAdapter(adapter);branches.setSelection(0);
     host.add(layout,host.text("EMAIL",12,host.gold,true),-1,-2);
     host.add(layout,email,-1,-2);
     host.add(layout,host.text("PASSWORD",12,host.gold,true),-1,-2);
@@ -89,18 +92,29 @@ final class StaffSecurity {
           host.message("Password minimum 10 aksara dan mesti sepadan.");return;
         }
         if(!accounts.owner())return;
-        int i=branches.getSelectedItemPosition();
-        if(i<0||i>=ids.size()){host.message("Pilih branch yang sah.");return;}
+        int i=branches.getSelectedItemPosition()-1;
+        if(i<0||i>=ids.size()){
+          host.darkBuilder().setTitle("PILIH BRANCH DAHULU")
+            .setMessage("Pekerja mesti dipadankan kepada branch secara jelas. "+
+              "Jangan biarkan pilihan Branch Utama secara automatik.")
+            .setPositiveButton("FAHAM",null).show();
+          return;
+        }
         String ownerUid=accounts.ownerUid(),branchId=ids.get(i),branchName=branchNames.get(i);
-        db.collection("workspaces").document(ownerUid)
-          .collection("branches").document(branchId)
-          .get(com.google.firebase.firestore.Source.SERVER)
-          .addOnSuccessListener(branch->{
-            if(!accounts.owner()||!ownerUid.equals(accounts.ownerUid()))return;
-            if(!branch.exists()){host.message("Branch tidak wujud. Cuba semula.");return;}
-            provisionWorker(mail,p,ownerUid,branchId,branchName);
-          }).addOnFailureListener(e->showRegistrationProblem(
-            friendlyRegistrationError("FIRESTORE",e),e));
+        host.darkBuilder().setTitle("SAHKAN BRANCH PEKERJA")
+          .setMessage("Email: "+mail+"\nBranch: "+branchName+
+            "\n\nPekerja akan masuk ke branch ini sahaja. Pastikan pilihan betul.")
+          .setPositiveButton("YA, DAFTAR",(confirmDialog,confirmWhich)->
+            db.collection("workspaces").document(ownerUid)
+              .collection("branches").document(branchId)
+              .get(com.google.firebase.firestore.Source.SERVER)
+              .addOnSuccessListener(branch->{
+                if(!accounts.owner()||!ownerUid.equals(accounts.ownerUid()))return;
+                if(!branch.exists()){host.message("Branch tidak wujud. Cuba semula.");return;}
+                provisionWorker(mail,p,ownerUid,branchId,branchName);
+              }).addOnFailureListener(e->showRegistrationProblem(
+                friendlyRegistrationError("FIRESTORE",e),e)))
+          .setNegativeButton("BATAL",null).show();
       }).setNegativeButton("BATAL",null).show();
   }
   void showRegistrationProblem(String text,Exception ignored){
@@ -559,7 +573,7 @@ final class StaffSecurity {
           !accounts.branchId().equals(profile.getString("branchId")))){
           if(workerAccessListener!=null){workerAccessListener.remove();workerAccessListener=null;}
           host.live.stop();accounts.auth.signOut();host.draw();
-          host.message("Akses pekerja telah dinyahaktifkan oleh Owner.");
+          host.message("Akses atau branch pekerja berubah. Log In semula untuk branch yang Owner tetapkan.");
         }
       });
   }
@@ -682,6 +696,7 @@ final class StaffSecurity {
     if(worker.removed()){
       options.add("Aktifkan semula akses pekerja");
     }else{
+      if(worker.active())options.add("TUKAR BRANCH PEKERJA");
       options.add(worker.active()?"Sekat akses sementara":"Aktifkan semula pekerja");
       options.add("BUANG PEKERJA · Tarik balik semua akses");
     }
@@ -692,7 +707,9 @@ final class StaffSecurity {
     host.darkBuilder().setTitle(worker.email()+"\n"+worker.branchName+" · "+status)
       .setItems(options.toArray(new String[0]),(dialog,choice)->{
         String action=options.get(choice);
-        if(action.startsWith("BUANG")){
+        if(action.startsWith("TUKAR BRANCH")){
+          chooseWorkerDestination(worker);
+        }else if(action.startsWith("BUANG")){
           confirmRemoveWorker(worker);
         }else if(action.startsWith("Sekat")){
           confirmBlockWorker(worker);
@@ -705,6 +722,149 @@ final class StaffSecurity {
         }else manageWorkers();
       }).setNegativeButton("Tutup",null).show();
   }
+  /** A worker's FirebaseAuth email/password stays unchanged. One atomic
+   *  Firestore transaction reassigns the profile, role email index and member
+   *  document, and deletes only the OLD membership (not sales or receipts).
+   *  An existing session is forced out by its staffProfiles listener.
+   */
+  void chooseWorkerDestination(WorkerRow worker){
+    if(!accounts.owner()||accounts.user()==null||worker.removed()||!worker.active()){
+      host.message("Tukar branch hanya untuk pekerja aktif. Aktifkan pekerja dahulu.");return;
+    }
+    final String ownerId=accounts.ownerUid();
+    final String workerId=worker.member.getId();
+    final String sourceBranch=worker.branchId;
+    db.collection("workspaces").document(ownerId).collection("branches")
+      .get(com.google.firebase.firestore.Source.SERVER)
+      .addOnSuccessListener(branches->{
+        if(!accounts.owner()||!ownerId.equals(accounts.ownerUid()))return;
+        ArrayList<String> names=new ArrayList<>(),ids=new ArrayList<>();
+        for(QueryDocumentSnapshot b:branches){
+          if(b.getId().equals(sourceBranch))continue;
+          ids.add(b.getId());
+          String branchName=b.getString("name");
+          names.add(branchName==null||branchName.trim().isEmpty()?b.getId():branchName);
+        }
+        if(ids.isEmpty()){
+          host.message("Tiada branch lain. Tambah branch dahulu.");return;
+        }
+        host.darkBuilder().setTitle("TUKAR BRANCH · "+worker.email())
+          .setItems(names.toArray(new String[0]),(dialog,chosen)->{
+            final String destination=ids.get(chosen),destinationName=names.get(chosen);
+            host.darkBuilder().setTitle("SAHKAN PINDAH PEKERJA")
+              .setMessage("Email: "+worker.email()+"\nDARI: "+worker.branchName+
+                "\nKE: "+destinationName+
+                "\n\nAkaun dan password kekal. Akses ke branch lama ditarik balik; "+
+                "pekerja perlu login semula untuk branch baharu. "+
+                "Pastikan semua order belum bayar pada telefon branch lama sudah diurus. "+
+                "Rekod jualan, stok dan resit branch lama tidak dipindahkan atau dipadam.")
+              .setPositiveButton("YA, TUKAR BRANCH",(d,w)->
+                transferWorkerBranch(worker,ownerId,workerId,sourceBranch,
+                  destination,destinationName))
+              .setNegativeButton("BATAL",null).show();
+          }).setNegativeButton("BATAL",null).show();
+      }).addOnFailureListener(e->host.message("Gagal muat branch dari Firebase: "+e.getMessage()));
+  }
+
+  void transferWorkerBranch(WorkerRow worker,String ownerId,String workerId,
+    String sourceBranch,String destBranch,String destName){
+    if(!accounts.owner()||accounts.user()==null||!ownerId.equals(accounts.ownerUid())||
+      sourceBranch.equals(destBranch)||!workerId.equals(worker.member.getId())){
+      host.message("Sesi Owner/branch telah berubah. Sila cuba semula.");return;
+    }
+    final String email=worker.email().trim().toLowerCase(Locale.ROOT);
+    if(!android.util.Patterns.EMAIL_ADDRESS.matcher(email).matches()){
+      host.message("Email pekerja tidak sah. Tiada data diubah.");return;
+    }
+    final DocumentReference profileRef=db.collection("staffProfiles").document(workerId);
+    final DocumentReference emailRef=db.collection("staffEmails").document(email);
+    final DocumentReference sourceRef=db.collection("workspaces").document(ownerId)
+      .collection("branches").document(sourceBranch).collection("members").document(workerId);
+    final DocumentReference destinationBranch=db.collection("workspaces").document(ownerId)
+      .collection("branches").document(destBranch);
+    final DocumentReference destinationRef=destinationBranch.collection("members").document(workerId);
+    final DocumentReference transferAudit=db.collection("workspaces").document(ownerId)
+      .collection("staffTransfers").document();
+    final String actorUid=accounts.user().getUid();
+    db.runTransaction(tx->{
+      // Every transaction read MUST happen before the first write.
+      com.google.firebase.firestore.DocumentSnapshot profile=tx.get(profileRef);
+      com.google.firebase.firestore.DocumentSnapshot oldMember=tx.get(sourceRef);
+      com.google.firebase.firestore.DocumentSnapshot newMember=tx.get(destinationRef);
+      com.google.firebase.firestore.DocumentSnapshot target=tx.get(destinationBranch);
+      com.google.firebase.firestore.DocumentSnapshot index=tx.get(emailRef);
+      if(!target.exists()||!ownerId.equals(target.getString("ownerUid")))
+        throw new IllegalStateException("Branch destinasi tidak wujud atau bukan milik Owner.");
+      if(!profile.exists()||!oldMember.exists()||
+        !ownerId.equals(profile.getString("ownerUid"))||
+        !workerId.equals(profile.getString("uid"))||
+        !"STAFF".equals(profile.getString("role"))||
+        !sourceBranch.equals(profile.getString("branchId"))||
+        !email.equals(profile.getString("email"))||
+        !Boolean.TRUE.equals(profile.getBoolean("active"))||
+        Boolean.TRUE.equals(profile.getBoolean("removed"))||
+        !workerId.equals(oldMember.getString("uid"))||
+        !"STAFF".equals(oldMember.getString("role"))||
+        !Boolean.TRUE.equals(oldMember.getBoolean("active"))||
+        Boolean.TRUE.equals(oldMember.getBoolean("removed"))){
+        throw new IllegalStateException("Profil atau keahlian sudah berubah. Refresh Urus Pekerja.");
+      }
+      if(newMember.exists())
+        throw new IllegalStateException("Keahlian branch tujuan sudah wujud. Batal pindah untuk mengelakkan akses berganda.");
+      if(index.exists()&&(!ownerId.equals(index.getString("ownerUid"))||
+        !workerId.equals(index.getString("workerUid"))||
+        !sourceBranch.equals(index.getString("branchId"))||
+        !"STAFF".equals(index.getString("role"))||
+        Boolean.TRUE.equals(index.getBoolean("removed"))))
+        throw new IllegalStateException("Indeks email tak sepadan. Semak rekod pekerja sebelum pindah.");
+      Map<String,Object> newFields=new HashMap<>(oldMember.getData());
+      newFields.remove("removedAt");
+      newFields.put("uid",workerId);
+      newFields.put("email",email);
+      newFields.put("ownerUid",ownerId);
+      newFields.put("branchId",destBranch);
+      newFields.put("branchName",destName);
+      newFields.put("role","STAFF");
+      newFields.put("active",true);
+      newFields.put("removed",false);
+      newFields.put("updatedAt",FieldValue.serverTimestamp());
+      // Only membership is removed. Transaction history is stored in
+      // separate branches/{branchId}/liveOrders, daily, and other collections.
+      tx.delete(sourceRef);
+      tx.set(destinationRef,newFields);
+      tx.update(profileRef,"branchId",destBranch,"branchName",destName,
+        "updatedAt",FieldValue.serverTimestamp());
+      if(index.exists()){
+        tx.update(emailRef,"branchId",destBranch,
+          "updatedAt",FieldValue.serverTimestamp());
+      }else{
+        Map<String,Object> emailFields=new HashMap<>();
+        emailFields.put("email",email);emailFields.put("workerUid",workerId);
+        emailFields.put("ownerUid",ownerId);emailFields.put("branchId",destBranch);
+        emailFields.put("role","STAFF");emailFields.put("removed",false);
+        emailFields.put("updatedAt",FieldValue.serverTimestamp());
+        tx.set(emailRef,emailFields);
+      }
+      Map<String,Object> audit=new HashMap<>();
+      audit.put("ownerUid",ownerId);audit.put("actorUid",actorUid);
+      audit.put("workerUid",workerId);audit.put("fromBranch",sourceBranch);
+      audit.put("toBranch",destBranch);audit.put("createdAt",FieldValue.serverTimestamp());
+      tx.set(transferAudit,audit);
+      return null;
+    }).addOnSuccessListener(result->{
+      if(!accounts.owner()||!ownerId.equals(accounts.ownerUid()))return;
+      host.darkBuilder().setTitle("BRANCH PEKERJA DIKEMAS KINI")
+        .setMessage(worker.email()+"\n"+worker.branchName+" → "+destName+
+          "\n\nPekerja perlu Log Out dan Log In semula untuk masuk branch baharu. "+
+          "Email/password dan semua rekod branch asal kekal.")
+        .setPositiveButton("OK",(d,w)->manageWorkers()).show();
+    }).addOnFailureListener(e->host.darkBuilder()
+      .setTitle("TUKAR BRANCH GAGAL")
+      .setMessage("Tiada pertukaran separuh siap kerana Firebase menggunakan transaksi atomik. "+
+        "Jangan daftar email baharu.\n\n"+e.getMessage())
+      .setPositiveButton("FAHAM",null).show());
+  }
+
   void confirmWorkerDeviceReset(WorkerRow worker){
     if(!accounts.owner())return;
     host.darkBuilder().setTitle("RESET TELEFON PEKERJA?")
