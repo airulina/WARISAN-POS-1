@@ -1598,6 +1598,20 @@ final class WarisanLanguage {
     prefix("TAMBAH STOK · ", "TAMBAH STOK · ", "ADD STOCK · ");
     prefix("HISTORY STOK LIVE · ", "SEJARAH STOK MASA NYATA · ", "LIVE STOCK HISTORY · ");
     prefix("EDIT BAKI STOK · ", "UBAH BAKI STOK · ", "EDIT STOCK BALANCE · ");
+    exact("PESANAN CAWANGAN LAIN · AWAN", "PESANAN CAWANGAN LAIN · AWAN", "ORDERS FROM OTHER BRANCHES · CLOUD");
+    exact("↻  SEGAR SEMULA PESANAN CAWANGAN", "↻  SEGAR SEMULA PESANAN CAWANGAN", "↻  REFRESH BRANCH ORDERS");
+    exact("Memuatkan order daripada branch lain...", "Sedang memuatkan pesanan daripada cawangan lain...", "Loading orders from other branches...");
+    exact("Sebahagian order branch tidak dapat dibaca. Sila refresh bila online.", "Sebahagian pesanan cawangan tidak dapat dibaca. Segar semula apabila dalam talian.", "Some branch orders could not be read. Refresh when online.");
+    exact("Gagal mengambil senarai branch. Semak internet atau akses Firebase.", "Gagal mendapatkan senarai cawangan. Semak internet atau akses Firebase.", "Could not retrieve branch list. Check internet access or Firebase permissions.");
+    exact("Tiada pesanan aktif, berbayar atau bayaran balik daripada cawangan lain.", "Tiada pesanan aktif, berbayar atau bayaran balik daripada cawangan lain.", "There are no active, paid, or refunded orders from other branches.");
+    exact("Pesanan dibatalkan sebelum bayaran tidak dipaparkan. Pesanan yang sudah dibayar dan dibayar balik tetap dipaparkan. Rekod asal dan audit stok kekal di Firebase; urusan bayaran dibuat di cawangan asal.", "Pesanan dibatalkan sebelum bayaran tidak dipaparkan. Pesanan yang sudah dibayar dan dibayar balik tetap dipaparkan. Rekod asal dan audit stok kekal di Firebase; urusan bayaran dibuat di cawangan asal.", "Orders cancelled before payment are hidden. Paid and refunded orders remain visible. Original records and stock audit history remain in Firebase; payments are handled at the originating branch.");
+    exact("NO. RESIT", "NO. RESIT", "RECEIPT NO.");
+    exact("RUJUKAN AWAN", "RUJUKAN AWAN", "CLOUD REFERENCE");
+    exact("SUDAH DIBAYAR", "SUDAH DIBAYAR", "PAID");
+    exact("BELUM DIBAYAR", "BELUM DIBAYAR", "UNPAID");
+    exact("DIBAYAR BALIK", "DIBAYAR BALIK", "REFUNDED");
+    exact("DIBATALKAN", "DIBATALKAN", "CANCELLED");
+    exact("Dari", "Dari", "From");
     // Full labels and deliberately-approved templates are initialized above.
   }
 }
