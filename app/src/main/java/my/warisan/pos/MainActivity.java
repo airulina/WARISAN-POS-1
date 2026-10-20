@@ -950,6 +950,9 @@ selectedDay=date();selectedMonth=selectedDay.substring(0,7);rangeStart=selectedD
         ownerTile(payment,"Bank Setting","Bank · Merchant · API",
           ()->{activePage=10;draw();});
         add(body,payment,-1,-2);
+        gap(body,7);
+        action("🔔  QR AUTO · Notifikasi bayaran masuk",
+          ()->QrNotificationPayments.settings(this));
         ownerSection("AKAUN & BACKUP");
         LinearLayout accounts=row();
         ownerTile(accounts,"Tukar Password","Password Owner",
@@ -2062,31 +2065,46 @@ JSONArray list=entries("stock_distribution");JSONObject e=list.optJSONObject(ind
     ImageView image=new ImageView(this);
     if(!sharedPaymentQr.display(image)){message("Gambar QR Cloud tidak sah.");return;}
     add(box,image,-1,400);gap(box,7);
-    add(box,text("Semak bayaran diterima sebelum tekan BAYARAN DITERIMA.",12,muted,false),-1,-2);
+    add(box,text(QrNotificationPayments.enabled(this)?
+      "Menunggu notifikasi duit masuk yang sepadan. Jika gagal, sahkan manual selepas semak bank.":
+      "Semak bayaran diterima sebelum tekan BAYARAN DITERIMA.",12,muted,false),-1,-2);
     AlertDialog dialog=darkBuilder().setView(box)
       .setPositiveButton("BAYARAN DITERIMA",(d,w)->completePendingPayment(index,"Touch ’n Go",due))
       .setNegativeButton("BATAL",null).create();
-    dialog.setOnShowListener(v->styleDarkDialogNow(dialog));dialog.show();
+    dialog.setOnDismissListener(d->QrNotificationPayments.disarm(dialog));
+    dialog.setOnShowListener(v->{
+      styleDarkDialogNow(dialog);
+      QrNotificationPayments.arm(this,dialog,index,due,true);
+    });dialog.show();
   }
   void showBankQrPending(int index,int due){String provider=posPrefs().getString("payment_provider","Static DuitNow");if("Billplz".equals(provider)){startBillplzPending(index,due);return;}String base=posPrefs().getString("payment_base_url","").trim(),key=posPrefs().getString("payment_api_key","").trim(),merchant=posPrefs().getString("payment_merchant_id","").trim();if(base.isEmpty()||key.isEmpty()||merchant.isEmpty()){message("Bank Dynamic QR belum lengkap. Lengkapkan tetapan provider di Setting → Bank Setting.");return;}LinearLayout box=col();box.setPadding(dp(20),dp(18),dp(20),dp(10));box.setBackground(shape(surface,18));add(box,text("BANK DYNAMIC QR",20,ink,true),-1,-2);TextView dueAmount=text(money(due),30,gold,true);add(box,dueAmount,-1,-2);gap(box,10);add(box,text("Provider ini belum mempunyai create-payment sebenar dalam build ini.",13,muted,false),-1,-2);AlertDialog dialog=darkBuilder().setView(box).setPositiveButton("OK",null).create();dialog.setOnShowListener(v->{styleDarkDialogNow(dialog);});dialog.show();}
   void startBillplzPending(int index,int due){String collection=posPrefs().getString("payment_collection_id","").trim(),secret=posPrefs().getString("payment_secret","").trim(),callback=posPrefs().getString("payment_callback_url","").trim(),email=posPrefs().getString("payment_customer_email",posPrefs().getString("receipt_email","")).trim();if(collection.isEmpty()||secret.isEmpty()||callback.isEmpty()||email.isEmpty()){message("Billplz belum lengkap. Isi Collection ID, Secret Key, Callback URL dan Email pelanggan/kaunter di Setting → Bank Setting.");return;}if(!callback.startsWith("https://")){message("Callback URL Billplz mesti HTTPS.");return;}JSONArray pending=entries("pending_orders");JSONObject o=pending.optJSONObject(index);if(o==null){message("Order tidak dijumpai.");return;}int order=o.optInt("order");LinearLayout box=col();box.setPadding(dp(20),dp(18),dp(20),dp(10));box.setBackground(shape(surface,18));add(box,text("BILLPLZ · BANK",20,ink,true),-1,-2);add(box,text(money(due),30,gold,true),-1,-2);gap(box,8);TextView status=text("Mencipta bil Billplz…",13,muted,true);add(box,status,-1,-2);AlertDialog dialog=darkBuilder().setView(box).setNegativeButton("TUTUP",null).create();dialog.setOnShowListener(v->styleDarkDialogNow(dialog));dialog.show();new Thread(()->{try{String redirect=posPrefs().getString("payment_redirect_url","").trim();String body="collection_id="+form(collection)+"&email="+form(email)+"&name="+form("Warisan POS Customer")+"&amount="+due+"&callback_url="+form(callback)+"&description="+form("WARISAN POS Order #"+String.format(Locale.US,"%04d",order))+"&reference_1_label="+form("Order")+"&reference_1="+form(String.valueOf(order))+"&deliver=false"+(redirect.isEmpty()?"":"&redirect_url="+form(redirect));JSONObject bill=new JSONObject(httpBillplz("POST",billplzBase()+"/bills",body));String billId=bill.getString("id"),billUrl=bill.getString("url");runOnUiThread(()->{status.setText(ui("Bil siap. Selesaikan bayaran pada Billplz. Status akan disemak automatik."));try{startActivity(new Intent(Intent.ACTION_VIEW,Uri.parse(billUrl)));}catch(Exception e){message("Tidak dapat membuka halaman Billplz.");}});pollBillplzPending(index,due,billId,dialog,status);}catch(Exception e){runOnUiThread(()->{status.setText(ui("Gagal mencipta bil Billplz."));message("Semak Collection ID, Secret Key, Callback URL dan sambungan internet.");});}}).start();}
   void pollBillplzPending(int index,int due,String billId,AlertDialog dialog,TextView status){for(int attempt=0;attempt<100;attempt++){try{Thread.sleep(3000);JSONObject bill=new JSONObject(httpBillplz("GET",billplzBase()+"/bills/"+form(billId),null));if(bill.optBoolean("paid",false)&&"paid".equalsIgnoreCase(bill.optString("state"))){runOnUiThread(()->{if(dialog.isShowing())dialog.dismiss();completePendingPayment(index,"Billplz / Bank",due);});return;}runOnUiThread(()->{if(dialog.isShowing())status.setText(ui("Menunggu bayaran Billplz…"));});}catch(Exception ignored){}}runOnUiThread(()->{if(dialog.isShowing())status.setText(ui("Semakan automatik tamat. Buka order ini semula untuk semak/bayar."));});}
   String paymentReceiptFor(int[] purchased,String method,int due,int order,int tendered){int[] before=qty;try{qty=Arrays.copyOf(purchased,purchased.length);return receipt(method,due,order,tendered);}finally{qty=before;}}
   void completePendingPayment(int index,String method,int tendered){
+    completePendingPayment(index,method,tendered,false);
+  }
+  void completePendingPayment(int index,String method,int tendered,boolean automatic){
     JSONArray pending=entries("pending_orders");JSONObject order=pending.optJSONObject(index);
     if(order==null||order.optBoolean("paid",false)){message("Order sudah dibayar atau tidak ditemui");return;}
     String id=order.optString("liveId","");
     if(!id.isEmpty()){
       if(!live.usable()){message("Tiada internet. Pembayaran belum direkod di Cloud.");return;}
-      live.paid(id,method,()->completePendingPaymentLocal(index,method,tendered));
+      live.paid(id,method,()->completePendingPaymentLocal(index,method,tendered,automatic));
       return;
     }
     if(branchAccounts.staff()&&live.enabled()){
       message("Order ini tiada rekod cloud. Minta Owner semak.");return;
     }
-    completePendingPaymentLocal(index,method,tendered);
+    completePendingPaymentLocal(index,method,tendered,automatic);
   }
-  void completePendingPaymentLocal(int index,String method,int tendered){try{JSONArray pending=entries("pending_orders");JSONObject o=pending.optJSONObject(index);if(o==null||o.optBoolean("paid",false))throw new Exception();int due=o.optInt("total"),order=o.optInt("order");JSONArray q=o.optJSONArray("qty");int[] purchased=new int[names.length];for(int i=0;i<purchased.length;i++)purchased[i]=q==null?0:q.optInt(i);JSONObject sale=new JSONObject();sale.put("time",timestamp());String originalDay=entryDay(o);sale.put("businessDay",originalDay);sale.put("orderTime",o.optString("time",""));sale.put("paymentDate",date());sale.put("order",order);sale.put("total",due);sale.put("method",method);sale.put("refunded",false);sale.put("paid",true);sale.put("liveOrderId",o.optString("liveId",""));int cost=0;for(int i=0;i<purchased.length;i++)if(purchased[i]>0&&!unlimited(i))cost+=restockCost(i,purchased[i]);sale.put("costTotal",cost);JSONArray sq=new JSONArray();for(int n:purchased)sq.put(n);sale.put("qty",sq);JSONArray sales=entries("stock_sales");sales.put(sale);o.put("paid",true);o.put("paidTime",timestamp());o.put("method",method);pending.put(index,o);if(!posPrefs().edit().putString("pending_orders",pending.toString()).putString("stock_sales",sales.toString()).putInt("sales_"+originalDay,posPrefs().getInt("sales_"+originalDay,0)+due).commit())throw new IOException();String printed=paymentReceiptFor(purchased,method,due,order,tendered);playPaymentSound();draw();previewReceipt(printed,purchased,method,due,order,tendered);}catch(Exception e){message("Bayaran gagal direkod. Cuba semula.");}}
+  void completePendingPaymentLocal(int index,String method,int tendered){
+    completePendingPaymentLocal(index,method,tendered,false);
+  }
+  void completePendingPaymentLocal(int index,String method,int tendered,boolean automatic){try{JSONArray pending=entries("pending_orders");JSONObject o=pending.optJSONObject(index);if(o==null||o.optBoolean("paid",false))throw new Exception();int due=o.optInt("total"),order=o.optInt("order");JSONArray q=o.optJSONArray("qty");int[] purchased=new int[names.length];for(int i=0;i<purchased.length;i++)purchased[i]=q==null?0:q.optInt(i);JSONObject sale=new JSONObject();sale.put("time",timestamp());String originalDay=entryDay(o);sale.put("businessDay",originalDay);sale.put("orderTime",o.optString("time",""));sale.put("paymentDate",date());sale.put("order",order);sale.put("total",due);sale.put("method",method);sale.put("refunded",false);sale.put("paid",true);sale.put("liveOrderId",o.optString("liveId",""));int cost=0;for(int i=0;i<purchased.length;i++)if(purchased[i]>0&&!unlimited(i))cost+=restockCost(i,purchased[i]);sale.put("costTotal",cost);JSONArray sq=new JSONArray();for(int n:purchased)sq.put(n);sale.put("qty",sq);JSONArray sales=entries("stock_sales");sales.put(sale);o.put("paid",true);o.put("paidTime",timestamp());o.put("method",method);pending.put(index,o);if(!posPrefs().edit().putString("pending_orders",pending.toString()).putString("stock_sales",sales.toString()).putInt("sales_"+originalDay,posPrefs().getInt("sales_"+originalDay,0)+due).commit())throw new IOException();String printed=paymentReceiptFor(purchased,method,due,order,tendered);playPaymentSound();draw();
+    if(automatic)autoPrintReceipt(printed);
+    else previewReceipt(printed,purchased,method,due,order,tendered);
+    }catch(Exception e){message("Bayaran gagal direkod. Cuba semula.");}}
 
   void restoreCloudPaymentLocal(int index,String method){
     try{
@@ -2149,12 +2167,18 @@ JSONArray list=entries("stock_distribution");JSONObject e=list.optJSONObject(ind
     ImageView image=new ImageView(this);
     if(!sharedPaymentQr.display(image)){message("QR rasmi gagal dipaparkan.");return;}
     add(box,image,-1,390);gap(box,7);
-    TextView hint=text("QR rasmi Owner. Semak bayaran diterima sebelum sahkan.",12,muted,false);
+    TextView hint=text(QrNotificationPayments.enabled(this)?
+      "Menunggu notifikasi duit masuk yang sepadan. Semak manual jika notifikasi tidak tiba.":
+      "QR rasmi Owner. Semak bayaran diterima sebelum sahkan.",12,muted,false);
     hint.setGravity(Gravity.CENTER);add(box,hint,-1,-2);
     AlertDialog dialog=darkBuilder().setTitle("QR / DuitNow · WARISAN POS").setView(box)
       .setPositiveButton("Bayaran diterima",(d,w)->completePayment("QR / DuitNow",due,due))
       .setNegativeButton("Batal",null).create();
-    dialog.setOnShowListener(v->styleDarkDialogNow(dialog));dialog.show();
+    dialog.setOnDismissListener(d->QrNotificationPayments.disarm(dialog));
+    dialog.setOnShowListener(v->{
+      styleDarkDialogNow(dialog);
+      QrNotificationPayments.arm(this,dialog,-1,due,false);
+    });dialog.show();
   }
   String line(String left,String right){left=ui(left);right=ui(right);int spaces=Math.max(1,32-left.length()-right.length());return left+String.format(Locale.US,"%"+spaces+"s","")+right+"\n";}
   String receipt(String method,int due,int order,int tendered){StringBuilder b=new StringBuilder();
@@ -2173,6 +2197,9 @@ JSONArray list=entries("stock_distribution");JSONObject e=list.optJSONObject(ind
   void confirm(String method,int due){completePayment(method,due,due);}
   void confirm(String method,int due,int tendered){completePayment(method,due,tendered);}
   void completePayment(String method,int due,int tendered){
+    completePayment(method,due,tendered,false);
+  }
+  void completePayment(String method,int due,int tendered,boolean automatic){
       String saleDay=businessDay();int order=posPrefs().getInt("orders_"+saleDay,0)+1;
       int[] purchased=Arrays.copyOf(qty,qty.length);
       String printed=receipt(method,due,order,tendered);
@@ -2181,7 +2208,8 @@ JSONArray list=entries("stock_distribution");JSONObject e=list.optJSONObject(ind
       }catch(Exception e){message("Bayaran gagal direkod. Semak simpanan telefon.");return;}
       playPaymentSound();
       Arrays.fill(qty,0);draw();
-      previewReceipt(printed,purchased,method,due,order,tendered);
+      if(automatic)autoPrintReceipt(printed);
+      else previewReceipt(printed,purchased,method,due,order,tendered);
   }
 
   int saleTotal(JSONObject sale){
@@ -2380,14 +2408,32 @@ JSONArray list=entries("stock_distribution");JSONObject e=list.optJSONObject(ind
     printLocalized(ui(receipt));
   }
   void printLocalized(String receipt){
+    printLocalized(receipt,false);
+  }
+  void autoPrintReceipt(String printed){
+    if(!QrNotificationPayments.autoPrint(this))return;
+    String address=getPreferences(0).getString("printer","");
+    String mode=getPreferences(0).getString("printer_mode",
+      address.isEmpty()?"system":"thermal");
+    // Android A4/Wi-Fi printing always needs the system print dialog.
+    // For unattended receipt, skip it instead of showing a dialog.
+    if(!"thermal".equals(mode)||address.isEmpty())return;
+    if(Build.VERSION.SDK_INT>=31&&
+      checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT)!=PackageManager.PERMISSION_GRANTED)return;
+    BluetoothAdapter adapter=BluetoothAdapter.getDefaultAdapter();
+    if(adapter==null||!adapter.isEnabled())return;
+    printLocalized(ui(printed),true);
+  }
+  void printLocalized(String receipt,boolean automatic){
     String address=getPreferences(0).getString("printer","");
     String mode=getPreferences(0).getString("printer_mode",address.isEmpty()?"system":"thermal");
     if(!"thermal".equals(mode)){
       // Android's PrintManager detects installed A4/Wi-Fi/color print services.
-      WarisanPrinting.textA4(this,receipt,"Warisan POS Resit");
+      if(!automatic)WarisanPrinting.textA4(this,receipt,"Warisan POS Resit");
       return;
     }
     if(address.isEmpty()){
+      if(automatic)return;
       pendingReceipt=receipt;
       darkBuilder().setTitle("Pilih printer thermal")
         .setMessage("Belum ada printer thermal dipilih. Order dan bayaran tidak dibatalkan.")
@@ -2420,10 +2466,12 @@ JSONArray list=entries("stock_distribution");JSONObject e=list.optJSONObject(ind
         if(getPreferences(0).getBoolean("printer_logo",false)){
           try{printLogo(out);out.flush();}catch(Exception ignored){}
         }
-        runOnUiThread(()->message("Resit dihantar kepada printer thermal"));
+        if(!automatic)runOnUiThread(()->message("Resit dihantar kepada printer thermal"));
       }catch(Exception e){
         String reason=e.getMessage();
-        runOnUiThread(()->darkBuilder().setTitle("Cetakan gagal")
+        if(automatic){
+          runOnUiThread(()->message("Bayaran direkod. Printer tidak tersedia; cetakan dilangkau."));
+        }else runOnUiThread(()->darkBuilder().setTitle("Cetakan gagal")
           .setMessage((reason==null?"Sambungan printer gagal.":reason)+
             "\n\nOrder/bayaran telah disimpan. Pilih printer lain atau cuba cetak semula.")
           .setPositiveButton("PILIH PRINTER",(d,w)->{pendingReceipt=receipt;choosePrinter();})
