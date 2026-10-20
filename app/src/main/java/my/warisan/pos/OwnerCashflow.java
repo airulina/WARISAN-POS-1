@@ -339,6 +339,7 @@ final class OwnerCashflow {
     host.heading("DUIT · OVERALL",
       "Keseluruhan jualan. Tekan TOTAL SALE untuk pilih branch.");
     if(ready())duplicatedDataWarning();
+    host.staffShifts.drawOwnerBranches();
     host.action("🔓  OPENING / CLOSING · "+accounts.branchName(),()->{
       host.activePage=22;host.draw();
     });
@@ -508,6 +509,7 @@ final class OwnerCashflow {
     }
     host.add(host.body,host.text("JUMLAH SEMUA BRANCH: "+rm(overall().sales),16,host.gold,true),-1,-2);
     host.gap(host.body,12);
+    host.staffShifts.ensureOwner();
     for(BranchRow row:rows){
       Day total=row.totals();
       host.action("🏪  "+row.name+"\n      "+rm(total.sales)+
@@ -515,6 +517,9 @@ final class OwnerCashflow {
         ("BUKA".equals(row.status)?"":"  ·  "+row.status),()->{
           selectedBranchId=row.id;host.activePage=17;host.draw();
         });
+      host.add(host.body,host.text("    "+host.staffShifts.branchStatus(row.id),
+        12,host.muted,false),-1,-2);
+      host.gap(host.body,5);
     }
     host.gap(host.body,10);
     dataMessage();
@@ -531,6 +536,10 @@ final class OwnerCashflow {
     }
     final BranchRow chosen=branch;
     host.heading(chosen.name,"Jualan "+period()+" · "+chosen.status);
+    host.staffShifts.ensureOwner();
+    host.add(host.body,host.text("PEKERJA BERTUGAS HARI INI · "+
+      host.staffShifts.branchStatus(chosen.id),12,host.gold,true),-1,-2);
+    host.gap(host.body,9);
     host.action("‹  Kembali ke Jualan Semua Branch",()->{host.activePage=16;host.draw();});
     if(!branch.seen){dataMessage();return;}
     Day total=branch.totals();
