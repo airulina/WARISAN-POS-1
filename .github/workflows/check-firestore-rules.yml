@@ -7,6 +7,13 @@ on:
       - firebase.json
       - tests/**
       - .github/workflows/check-firestore-rules.yml
+  pull_request:
+    branches: [main]
+    paths:
+      - firestore.rules
+      - firebase.json
+      - tests/**
+      - .github/workflows/check-firestore-rules.yml
   workflow_dispatch:
 
 permissions:
