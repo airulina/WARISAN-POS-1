@@ -166,7 +166,17 @@ private static final int RC_SIGN_IN = 9001;
   LinearLayout.LayoutParams params(int w,int h){return new LinearLayout.LayoutParams(w<0?w:dp(w),h<0?h:dp(h));}
   void add(LinearLayout l,View v,int w,int h){l.addView(v,params(w,h));}
   void gap(LinearLayout l,int h){add(l,new View(this),1,h);}
-  TextView chip(String s,int back,int fore){TextView t=text(ui(s),13,fore,true);t.setGravity(Gravity.CENTER);t.setBackground(shape(back,11));t.setPadding(dp(8),dp(5),dp(8),dp(5));return t;}
+  TextView chip(String s,int back,int fore){
+    int contrast=fore;
+    if(back==blue&&fore==Color.WHITE)contrast=onPrimary;
+    else if(back==gold&&(fore==0xff17202c||fore==0xff131822))
+      contrast=onAccent;
+    else if(fore==Color.WHITE&&themeColor(back)==surfaceAlt)
+      contrast=navOffText;
+    TextView t=text(ui(s),13,contrast,true);
+    t.setGravity(Gravity.CENTER);t.setBackground(shape(back,11));
+    t.setPadding(dp(8),dp(5),dp(8),dp(5));return t;
+  }
   void loadMenu(){JSONArray custom=entries("custom_menu");int size=7+custom.length();names=Arrays.copyOf(new String[]{"Sate Ayam","Sate Daging","Sate Kambing","Nasi Impit","Extra Kuah Kacang","Laksa Utara","Kuih Siput"},size);icons=Arrays.copyOf(new String[]{"🍢","🥩","🍢","🍚","🥣","🍜","🥨"},size);prices=Arrays.copyOf(new int[]{160,180,200,60,100,700,500},size);qty=new int[size];
     for(int i=7;i<size;i++){JSONObject item=custom.optJSONObject(i-7);names[i]=item==null?"Menu":item.optString("name","Menu");icons[i]="🍽";prices[i]=item==null?0:item.optInt("price");}for(int i=0;i<size;i++)prices[i]=posPrefs().getInt("price_"+i,prices[i]);}
   void clearCurrentNasiDamageOnce(){
