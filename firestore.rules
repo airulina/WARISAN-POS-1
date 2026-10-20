@@ -395,9 +395,11 @@ service cloud.firestore {
         // Separate per-worker attendance. POS Opening is not a shift clock.
         // A staff member may start at most one shift per business day.
         match /shiftAttendance/{shiftId} {
+          // Read by exact own shift document, including before it exists.
           allow get: if owner(ownerUid) ||
-            (signedIn() && resource.data.employeeUid == request.auth.uid &&
-              assignedMember(ownerUid,branchId));
+            (assignedMember(ownerUid,branchId) &&
+              (shiftId == malaysiaDate(0)+"_"+request.auth.uid ||
+               shiftId == malaysiaDate(1)+"_"+request.auth.uid));
           allow list: if owner(ownerUid);
           allow create: if member(ownerUid,branchId)
             && request.resource.data.ownerUid == ownerUid
