@@ -73,6 +73,7 @@ private static final int RC_SIGN_IN = 9001;
   OwnerBranchOrders ownerBranchOrders;
   SharedPaymentQr sharedPaymentQr;
   BranchPresence presence;
+  StaffShifts staffShifts;
   FirebaseFirestore firestoreForStaff(){return firestore;}
   android.content.SharedPreferences posPrefs(){
     return branchAccounts==null?getPreferences(0):branchAccounts.posPrefs();
@@ -173,7 +174,7 @@ private static final int RC_SIGN_IN = 9001;
       }else p.edit().putBoolean("fix_supplier_receipt_detail_20260926",true).commit();
     }catch(Exception ignored){}
   }
-  @Override public void onCreate(Bundle b){super.onCreate(b);firebaseAuth = FirebaseAuth.getInstance();firestore = FirebaseFirestore.getInstance();branchAccounts=new BranchAccounts(this,firebaseAuth,firestore);ownerPassword=new OwnerPassword(this);staffSecurity=new StaffSecurity(this);live=new LiveBranchStore(this);ownerCashflow=new OwnerCashflow(this);ownerBranchOrders=new OwnerBranchOrders(this);sharedPaymentQr=new SharedPaymentQr(this);presence=new BranchPresence(this);
+  @Override public void onCreate(Bundle b){super.onCreate(b);firebaseAuth = FirebaseAuth.getInstance();firestore = FirebaseFirestore.getInstance();branchAccounts=new BranchAccounts(this,firebaseAuth,firestore);ownerPassword=new OwnerPassword(this);staffSecurity=new StaffSecurity(this);live=new LiveBranchStore(this);ownerCashflow=new OwnerCashflow(this);ownerBranchOrders=new OwnerBranchOrders(this);sharedPaymentQr=new SharedPaymentQr(this);presence=new BranchPresence(this);staffShifts=new StaffShifts(this);
 GoogleSignInOptions gso = new GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
         .requestIdToken(getString(R.string.default_web_client_id))
         .requestEmail()
@@ -701,6 +702,7 @@ selectedDay=date();selectedMonth=selectedDay.substring(0,7);rangeStart=selectedD
     gap(active,5);
     add(active,text(branchAccounts.branchName(),20,ink,true),-1,-2);
     add(body,active,-1,-2);
+    gap(body,12);staffShifts.drawOwnerBranches();
     ownerSection("CAWANGAN");
     LinearLayout first=row();
     ownerTile(first,"Senarai / Off Day","BUKA · CUTI · STOK HABIS",
@@ -726,7 +728,7 @@ selectedDay=date();selectedMonth=selectedDay.substring(0,7);rangeStart=selectedD
       "Rekod lama kekal dalam laporan semua branch.",11,muted,false),-1,-2);
     ownerSection("PEKERJA");
     LinearLayout staff=row();
-    ownerTile(staff,"+ Daftar Pekerja","Email · Password · Branch",
+    ownerTile(staff,"+ Daftar Pekerja","Nama · Email · Branch",
       ()->staffSecurity.createEmployee());
     ownerTile(staff,"Urus Pekerja","Tukar Branch · Akses",
       ()->staffSecurity.manageWorkers());
@@ -744,6 +746,7 @@ selectedDay=date();selectedMonth=selectedDay.substring(0,7);rangeStart=selectedD
   void ownerLogout(){
     if(!branchAccounts.owner()){message("Hanya Owner boleh log keluar Owner.");return;}
     if(live!=null)live.stop();
+    if(staffShifts!=null)staffShifts.stop();
     if(ownerCashflow!=null)ownerCashflow.stop();
     firebaseAuth.signOut();
     googleSignInClient.signOut().addOnCompleteListener(task->{
@@ -778,6 +781,7 @@ selectedDay=date();selectedMonth=selectedDay.substring(0,7);rangeStart=selectedD
       heading("HARI INI · "+branchAccounts.branchName(),
         branchAccounts.owner()?"Sesi Owner · Opening / Closing dan jualan Branch aktif.":
           "Sesi pekerja · Opening / Closing dan jualan hari ini.");
+      if(activePage==12)staffShifts.drawMyShift();
       add(body,text("OPENING / CLOSING",14,gold,true),-1,-2);gap(body,8);
       drawPosSession();
       gap(body,12);
