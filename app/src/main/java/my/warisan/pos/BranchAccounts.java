@@ -236,21 +236,10 @@ final class BranchAccounts {
     if(host.live!=null)host.live.attach();
     host.draw();
   }
-  void migrateLegacyIfFirstBranch(String branchId){
-    SharedPreferences target=host.getSharedPreferences("warisan_branch_"+branchId,Context.MODE_PRIVATE);
-    if(!target.getAll().isEmpty())return;
-    SharedPreferences.Editor e=target.edit();
-    for(Map.Entry<String,?> item:host.getPreferences(Context.MODE_PRIVATE).getAll().entrySet()){
-      Object v=item.getValue();String k=item.getKey();
-      if(v instanceof String)e.putString(k,(String)v);
-      else if(v instanceof Integer)e.putInt(k,(Integer)v);
-      else if(v instanceof Boolean)e.putBoolean(k,(Boolean)v);
-      else if(v instanceof Long)e.putLong(k,(Long)v);
-      else if(v instanceof Float)e.putFloat(k,(Float)v);
-      else if(v instanceof Set)e.putStringSet(k,(Set<String>)v);
-    }
-    e.commit();
-  }
+  // IMPORTANT: Do NOT recreate migrateLegacyIfFirstBranch().
+  // Older versions called it during registration and copied the entire
+  // Branch Utama ledger into the first new branch. New branches always
+  // receive a clean, independently named preferences file.
   void accountAlert(String title,String detail){
     host.darkBuilder().setTitle(title).setMessage(detail)
       .setPositiveButton("FAHAM",null).show();
