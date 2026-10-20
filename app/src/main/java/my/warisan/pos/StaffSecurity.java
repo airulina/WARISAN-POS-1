@@ -64,6 +64,8 @@ final class StaffSecurity {
   void showCreateEmployeeForm(ArrayList<String> ids,ArrayList<String> branchNames){
     if(!accounts.owner())return;
     LinearLayout layout=host.col();layout.setPadding(host.dp(18),0,host.dp(18),0);
+    EditText fullName=input("Nama penuh pekerja",false);
+    fullName.setInputType(InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_FLAG_CAP_WORDS);
     EditText email=input("Email pekerja",false);
     EditText password=input("Password sementara pekerja (min 10 aksara)",true);
     EditText confirm=input("Sahkan password pekerja",true);
@@ -76,6 +78,8 @@ final class StaffSecurity {
     android.widget.ArrayAdapter<String> adapter=new android.widget.ArrayAdapter<>(host,
       android.R.layout.simple_spinner_dropdown_item,branchChoices);
     branches.setAdapter(adapter);branches.setSelection(0);
+    host.add(layout,host.text("NAMA PENUH PEKERJA",12,host.gold,true),-1,-2);
+    host.add(layout,fullName,-1,-2);
     host.add(layout,host.text("EMAIL",12,host.gold,true),-1,-2);
     host.add(layout,email,-1,-2);
     host.add(layout,host.text("PASSWORD",12,host.gold,true),-1,-2);
@@ -84,6 +88,10 @@ final class StaffSecurity {
     host.add(layout,branches,-1,-2);
     host.darkBuilder().setTitle("DAFTAR PEKERJA")
       .setView(layout).setPositiveButton("DAFTAR",(d,w)->{
+        String workerName=fullName.getText().toString().trim().replaceAll("\\s+"," ");
+        if(workerName.length()<2||workerName.length()>100){
+          host.message("Isi nama penuh pekerja (2 hingga 100 aksara).");return;
+        }
         String mail=email.getText().toString().trim().toLowerCase(Locale.ROOT);
         String p=password.getText().toString();
         if(!android.util.Patterns.EMAIL_ADDRESS.matcher(mail).matches()){
@@ -103,7 +111,7 @@ final class StaffSecurity {
         }
         String ownerUid=accounts.ownerUid(),branchId=ids.get(i),branchName=branchNames.get(i);
         host.darkBuilder().setTitle("SAHKAN BRANCH PEKERJA")
-          .setMessage("Email: "+mail+"\nBranch: "+branchName+
+          .setMessage("Nama: "+workerName+"\nEmail: "+mail+"\nBranch: "+branchName+
             "\n\nPekerja akan masuk ke branch ini sahaja. Pastikan pilihan betul.")
           .setPositiveButton("YA, DAFTAR",(confirmDialog,confirmWhich)->
             db.collection("workspaces").document(ownerUid)
@@ -112,7 +120,7 @@ final class StaffSecurity {
               .addOnSuccessListener(branch->{
                 if(!accounts.owner()||!ownerUid.equals(accounts.ownerUid()))return;
                 if(!branch.exists()){host.message("Branch tidak wujud. Cuba semula.");return;}
-                provisionWorker(mail,p,ownerUid,branchId,branchName);
+                provisionWorker(mail,p,ownerUid,branchId,branchName,workerName);
               }).addOnFailureListener(e->showRegistrationProblem(
                 friendlyRegistrationError("FIRESTORE",e),e)))
           .setNegativeButton("BATAL",null).show();
@@ -166,7 +174,7 @@ final class StaffSecurity {
       (err.length()>180?err.substring(0,180):err)+
       "\n\nLihat Firebase Console → Authentication → Users dan Firestore Database → Rules.";
   }
-  void provisionWorker(String mail,String password,String oid,String bid,String name){
+  void provisionWorker(String mail,String password,String oid,String bid,String name,String fullName){
     if(!accounts.owner()||accounts.user()==null||!oid.equals(accounts.ownerUid())){
       showRegistrationProblem("Owner belum log masuk atau branch telah berubah.",null);return;
     }
@@ -177,6 +185,7 @@ final class StaffSecurity {
         if(worker==null){showRegistrationProblem("Firebase tidak memulangkan ID pekerja.",null);return;}
         Map<String,Object> profile=new HashMap<>();
         profile.put("uid",worker.getUid());profile.put("email",mail);
+        profile.put("fullName",fullName);
         profile.put("role","STAFF");profile.put("active",true);
         profile.put("ownerUid",oid);profile.put("branchId",bid);
         profile.put("branchName",name);profile.put("createdAt",new Date());
@@ -197,7 +206,7 @@ final class StaffSecurity {
           worker.sendEmailVerification().addOnCompleteListener(task->{
             staffProvisionAuth.signOut();
             if(task.isSuccessful())host.darkBuilder().setTitle("PEKERJA BERJAYA DIDAFTAR")
-              .setMessage(mail+"\n\nPekerja perlu buka email, sahkan alamat, "+
+              .setMessage(fullName+"\n"+mail+"\n\nPekerja perlu buka email, sahkan alamat, "+
                 "kemudian login melalui Email + Password.")
               .setPositiveButton("OK",null).show();
             else host.darkBuilder().setTitle("AKAUN PEKERJA SUDAH DIDAFTAR")
@@ -285,6 +294,9 @@ final class StaffSecurity {
                         if(!accounts.owner()||!ownerId.equals(accounts.ownerUid()))return;
                         Map<String,Object> data=new HashMap<>();
                         data.put("uid",workerId);data.put("email",mail);
+                        String savedName=profile.getString("fullName");
+                        if(savedName!=null&&!savedName.trim().isEmpty())
+                          data.put("fullName",savedName);
                         data.put("role","STAFF");data.put("active",true);
                         data.put("removed",false);data.put("ownerUid",ownerId);
                         data.put("branchId",branchId);
@@ -642,6 +654,10 @@ final class StaffSecurity {
       String v=member.getString("email");
       return v==null?"(Email tidak diketahui)":v;
     }
+    String fullName(){
+      String v=member.getString("fullName");
+      return v==null||v.trim().isEmpty()?"Nama belum ditetapkan":v.trim();
+    }
   }
   void manageWorkers(){
     if(!accounts.owner()){host.message("Hanya Owner boleh lihat senarai pekerja.");return;}
@@ -680,7 +696,7 @@ final class StaffSecurity {
           for(WorkerRow row:all){
             if(row.active())enabled++;
             String state=row.removed()?"DIBUANG":(row.active()?"AKTIF":"DISEKAT");
-            labels.add(row.email()+"\n"+row.branchName+"  ·  "+state);
+            labels.add(row.fullName()+"\n"+row.email()+" · "+row.branchName+"  ·  "+state);
           }
           // Android AlertDialog chooses the message panel INSTEAD of its list when
           // setMessage and setItems are both used: this hid actual employees.
@@ -701,11 +717,12 @@ final class StaffSecurity {
       options.add(worker.active()?"Sekat akses sementara":"Aktifkan semula pekerja");
       options.add("BUANG PEKERJA · Tarik balik semua akses");
     }
+    options.add("UBAH NAMA PEKERJA");
     options.add("RESET PERANTI · Benarkan telefon baharu");
     options.add("Hantar pautan reset password ke email");
     options.add("Kembali ke senarai");
     // Do not setMessage() together with setItems(): list actions would disappear.
-    host.darkBuilder().setTitle(worker.email()+"\n"+worker.branchName+" · "+status)
+    host.darkBuilder().setTitle(worker.fullName()+"\n"+worker.email()+"\n"+worker.branchName+" · "+status)
       .setItems(options.toArray(new String[0]),(dialog,choice)->{
         String action=options.get(choice);
         if(action.startsWith("TUKAR BRANCH")){
@@ -716,6 +733,8 @@ final class StaffSecurity {
           confirmBlockWorker(worker);
         }else if(action.startsWith("Aktifkan")){
           setEmployeeState(worker,true,false);
+        }else if(action.startsWith("UBAH NAMA")){
+          editWorkerName(worker);
         }else if(action.startsWith("RESET PERANTI")){
           confirmWorkerDeviceReset(worker);
         }else if(action.startsWith("Hantar")){
@@ -723,6 +742,35 @@ final class StaffSecurity {
         }else manageWorkers();
       }).setNegativeButton("Tutup",null).show();
   }
+  void editWorkerName(WorkerRow worker){
+    if(!accounts.owner()||accounts.user()==null)return;
+    EditText field=input("Nama penuh pekerja",false);
+    field.setInputType(InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_FLAG_CAP_WORDS);
+    String old=worker.member.getString("fullName");
+    if(old!=null)field.setText(old);
+    host.darkBuilder().setTitle("UBAH NAMA PEKERJA")
+      .setMessage("Email untuk log masuk kekal: "+worker.email())
+      .setView(field).setPositiveButton("SIMPAN",(d,w)->{
+        String name=field.getText().toString().trim().replaceAll("\\s+"," ");
+        if(name.length()<2||name.length()>100){
+          host.message("Nama mestilah 2 hingga 100 aksara.");return;
+        }
+        final String ownerId=accounts.ownerUid();
+        DocumentReference profile=db.collection("staffProfiles").document(worker.member.getId());
+        DocumentReference member=worker.member.getReference();
+        com.google.firebase.firestore.WriteBatch batch=db.batch();
+        Map<String,Object> fields=new HashMap<>();
+        fields.put("fullName",name);fields.put("updatedAt",FieldValue.serverTimestamp());
+        batch.update(profile,fields);
+        batch.update(member,"fullName",name);
+        batch.commit().addOnSuccessListener(v->{
+          if(accounts.owner()&&ownerId.equals(accounts.ownerUid())){
+            host.message("Nama pekerja dikemas kini.");manageWorkers();
+          }
+        }).addOnFailureListener(e->host.message("Gagal tukar nama: "+e.getMessage()));
+      }).setNegativeButton("BATAL",null).show();
+  }
+
   /** A worker's FirebaseAuth email/password stays unchanged. One atomic
    *  Firestore transaction reassigns the profile, role email index and member
    *  document, and deletes only the OLD membership (not sales or receipts).

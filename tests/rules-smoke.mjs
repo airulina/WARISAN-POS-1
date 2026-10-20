@@ -187,7 +187,8 @@ try{
   }));
   await assertSucceeds(setDoc(d(owner,'staffProfiles/newworker'),{
     uid:'newworker',role:'STAFF',active:true,ownerUid:'owner',
-    branchId:'branch1',email:'worker@example.test',branchName:'Utama',createdAt:new Date()
+    branchId:'branch1',email:'worker@example.test',fullName:'Pekerja Baharu',
+    branchName:'Utama',createdAt:new Date()
   }));
   // The email lock can only be created by the authenticated Owner after
   // a matching staff profile exists (protecting cross-provider sign-in).
@@ -200,6 +201,16 @@ try{
     ownerUid:'staff',branchId:'branch1',removed:false,updatedAt:serverTimestamp()
   }));
 
+  // A worker's display name is owned by Owner; worker cannot forge a name.
+  await assertSucceeds(updateDoc(d(owner,'staffProfiles/staff'),{
+    fullName:'Muhammad Amir',updatedAt:serverTimestamp()
+  }));
+  await assertSucceeds(updateDoc(d(owner,branch+'/members/staff'),{
+    fullName:'Muhammad Amir'
+  }));
+  await assertFails(updateDoc(d(staff,'staffProfiles/staff'),{
+    fullName:'Nama Palsu',updatedAt:serverTimestamp()
+  }));
   // First worker login binds one device; cannot silently change it afterward.
   const workerProfile=d(staff,'staffProfiles/staff');
   const primaryDevice='employee-installation-unique-00000001';
@@ -223,6 +234,43 @@ try{
   await assertFails(setDoc(d(staff,branch+'/staffLogins/impersonation'),{
     ownerUid:'owner',branchId:'branch1',employeeUid:'owner',
     email:'owner@example.test',deviceTag:'fake',createdAt:serverTimestamp()
+  }));
+  // Attendance is independent of POS Opening. A worker can only clock
+  // into their own record; Owner sees both employees on the same branch.
+  const staffShift=branch+'/shiftAttendance/'+today+'_staff';
+  const staff2Shift=branch+'/shiftAttendance/'+today+'_staff2';
+  const absentShift=await assertSucceeds(getDoc(d(staff,staffShift)));
+  assert.equal(absentShift.exists(),false);
+  await assertFails(getDoc(d(staff,staff2Shift)));
+  await assertSucceeds(setDoc(d(staff,staffShift),{
+    ownerUid:'owner',branchId:'branch1',day:today,
+    employeeUid:'staff',email:'staff@example.test',
+    active:true,startedAt:serverTimestamp()
+  }));
+  await assertSucceeds(setDoc(d(staff2,staff2Shift),{
+    ownerUid:'owner',branchId:'branch1',day:today,
+    employeeUid:'staff2',email:'staff2@example.test',
+    active:true,startedAt:serverTimestamp()
+  }));
+  await assertFails(setDoc(d(staff,branch+'/shiftAttendance/'+today+'_owner'),{
+    ownerUid:'owner',branchId:'branch1',day:today,
+    employeeUid:'owner',email:'owner@example.test',
+    active:true,startedAt:serverTimestamp()
+  }));
+  await assertFails(updateDoc(d(staff,staff2Shift),{
+    active:false,endedAt:serverTimestamp()
+  }));
+  await assertSucceeds(getDoc(d(owner,staff2Shift)));
+  await assertSucceeds(updateDoc(d(staff,staffShift),{
+    active:false,endedAt:serverTimestamp()
+  }));
+  await assertFails(updateDoc(d(staff,staffShift),{
+    active:true
+  }));
+  await assertFails(setDoc(d(staff,branchTwo+'/shiftAttendance/'+today+'_staff'),{
+    ownerUid:'owner',branchId:'jalan-kebun',day:today,
+    employeeUid:'staff',email:'staff@example.test',
+    active:true,startedAt:serverTimestamp()
   }));
   // A closed branch cannot OPEN a shift. GPS and the legacy
   // openingEnabled toggle are no longer part of this contract.
