@@ -71,6 +71,15 @@ public final class WarisanLanguageSmoke {
     assertEqual("No partial word salad EN",
       "Masuk branch previously before change stock.",true,
       "Masuk branch previously before change stock.");
+    assertEqual("BM cancelled hidden heading","PESANAN CAWANGAN LAIN · AWAN",false,
+      "PESANAN CAWANGAN LAIN · AWAN");
+    assertEqual("EN cancelled hidden heading","PESANAN CAWANGAN LAIN · AWAN",true,
+      "ORDERS FROM OTHER BRANCHES · CLOUD");
+    assertEqual("BM refunded status","DIBAYAR BALIK",false,"DIBAYAR BALIK");
+    assertEqual("EN refunded status","DIBAYAR BALIK",true,"REFUNDED");
+    assertEqual("EN paid status","SUDAH DIBAYAR",true,"PAID");
+    assertEqual("EN cancelled message","Tiada pesanan aktif, berbayar atau bayaran balik daripada cawangan lain.",true,
+      "There are no active, paid, or refunded orders from other branches.");
     assertEqual("Proper branch name", "Warisan Jalan Kebun",true,
       "Warisan Jalan Kebun");
     assertEqual("Email should remain unchanged",
