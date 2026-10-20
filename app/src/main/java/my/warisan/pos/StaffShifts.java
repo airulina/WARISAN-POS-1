@@ -174,7 +174,10 @@ final class StaffShifts {
     for(DocumentSnapshot doc:attendance.get(branchId)){
       if(!Boolean.TRUE.equals(doc.getBoolean("active")))continue;
       String uid=doc.getString("employeeUid");
-      String name=names==null||uid==null?null:names.get(uid);
+      // A transferred, removed or blocked member must never stay shown
+      // as actively working in the old branch merely from a stale shift.
+      if(uid==null||names==null||!names.containsKey(uid))continue;
+      String name=names.get(uid);
       if(name==null||name.trim().isEmpty())name=doc.getString("email");
       active.add(name==null?"Pekerja":name);
     }
