@@ -134,12 +134,12 @@ final class OwnerBranchOrders {
         new LinearLayout.LayoutParams(0,-2,1));
       host.add(top,host.text(OwnerCashflow.rm(order.total),15,host.gold,true),-2,-2);
       host.add(card,top,-1,-2);host.gap(card,5);
-      host.add(card,host.text((order.numbered?"NO. RESIT":"RUJUKAN CLOUD")+
+      host.add(card,host.text(host.ui(order.numbered?"NO. RESIT":"RUJUKAN AWAN")+
         " · "+order.number,12,host.blue,true),-1,-2);
       host.gap(card,3);
       String date=order.time.isEmpty()?(order.day==null?"":order.day):order.time;
-      host.add(card,host.text("Dari: "+order.branch+"   ·   "+date+
-        "   ·   "+status(order.status),11,host.muted,false),-1,-2);
+      host.add(card,host.text(host.ui("Dari")+": "+order.branch+"   ·   "+date+
+        "   ·   "+host.ui(status(order.status)),11,host.muted,false),-1,-2);
       StringBuilder products=new StringBuilder();
       if(order.qty!=null){
         for(int i=0;i<Math.min(order.qty.size(),host.names.length);i++){
@@ -162,10 +162,10 @@ final class OwnerBranchOrders {
       11,host.muted,false),-1,-2);
   }
   private static String status(String value){
-    if("PAID".equals(value))return "TELAH BAYAR";
-    if("PENDING".equals(value))return "BELUM BAYAR";
+    if("PAID".equals(value))return "SUDAH DIBAYAR";
+    if("PENDING".equals(value))return "BELUM DIBAYAR";
     if("CANCELLED".equals(value))return "DIBATALKAN";
-    if("REFUNDED".equals(value))return "REFUND";
+    if("REFUNDED".equals(value))return "DIBAYAR BALIK";
     return value==null?"STATUS TIDAK DIKETAHUI":value;
   }
 }
