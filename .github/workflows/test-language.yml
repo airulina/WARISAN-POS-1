@@ -7,6 +7,8 @@ on:
       - "app/src/main/java/my/warisan/pos/WarisanLanguage.java"
       - "tests/WarisanLanguageSmoke.java"
       - ".github/workflows/test-language.yml"
+      - "app/src/main/java/my/warisan/pos/OrderVisibility.java"
+      - "tests/OrderVisibilitySmoke.java"
   workflow_dispatch:
 
 permissions:
@@ -29,3 +31,9 @@ jobs:
             app/src/main/java/my/warisan/pos/WarisanLanguage.java \
             tests/WarisanLanguageSmoke.java
           java -cp /tmp/warisan-i18n my.warisan.pos.WarisanLanguageSmoke
+      - name: Test Owner order status visibility
+        run: |
+          javac -encoding UTF-8 -d /tmp/warisan-i18n \
+            app/src/main/java/my/warisan/pos/OrderVisibility.java \
+            tests/OrderVisibilitySmoke.java
+          java -cp /tmp/warisan-i18n my.warisan.pos.OrderVisibilitySmoke
