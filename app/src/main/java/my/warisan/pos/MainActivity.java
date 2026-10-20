@@ -53,7 +53,13 @@ private static final int RC_SIGN_IN = 9001;
   int costUnit(int id){return posPrefs().getInt("cost_"+id,id<defaultCosts.length?defaultCosts[id]:0);}
   int costPack(int id){return Math.max(1,posPrefs().getInt("cost_pack_"+id,id==3?30:1));}
   int restockCost(int id,int units){long total=((long)units*costUnit(id)+costPack(id)/2)/costPack(id);if(total>Integer.MAX_VALUE)throw new ArithmeticException("Kos terlalu besar");return (int)total;}
-  final int blue=Color.rgb(69,126,202), ink=Color.rgb(238,244,252), gold=Color.rgb(218,166,48), cream=Color.rgb(7,20,34), surface=Color.rgb(18,40,64), muted=Color.rgb(166,183,204);
+  // Display-only palette; loaded from device preference, never from branch sales data.
+  int blue=Color.rgb(69,126,202), ink=Color.rgb(238,244,252),
+      gold=Color.rgb(218,166,48), cream=Color.rgb(7,20,34),
+      surface=Color.rgb(18,40,64), muted=Color.rgb(166,183,204);
+  int surfaceAlt=0xff203f61, onPrimary=Color.WHITE,
+      onAccent=0xff131822, navOff=0xff143a65, navOffText=Color.WHITE;
+  boolean themeLight=false;
   LinearLayout body,basket; TextView total,today,items; Button payButton;
   static final int REQUEST_BLUETOOTH=42, EXPORT_CSV=43, EXPORT_PDF=44, PICK_IMAGE=45, EXPORT_BACKUP=46, IMPORT_BACKUP=47, PICK_TNG_QR=49, PICK_SHOP_LOGO=50;
   int exportYear;
@@ -134,7 +140,23 @@ private static final int RC_SIGN_IN = 9001;
     try(InputStream source=getContentResolver().openInputStream(uri)){BitmapFactory.decodeStream(source,null,size);}
     BitmapFactory.Options scaled=new BitmapFactory.Options();scaled.inSampleSize=1;while(size.outWidth/scaled.inSampleSize>360||size.outHeight/scaled.inSampleSize>360)scaled.inSampleSize*=2;
     try(InputStream source=getContentResolver().openInputStream(uri)){Bitmap bitmap=BitmapFactory.decodeStream(source,null,scaled);if(bitmap==null)throw new IOException("Gambar tidak dapat dibuka");view.setImageBitmap(bitmap);}}
-  GradientDrawable shape(int color,int radius){GradientDrawable d=new GradientDrawable();d.setColor(color);d.setCornerRadius(dp(radius));return d;}
+  int themeColor(int color){
+    // Older POS layouts contain literal navy colors. Re-map UI cards only.
+    // Do not recolor white receipt paper, printable reports or semantic warnings.
+    switch(color){
+      case 0xff203f61: case 0xff173b60: case 0xff294563:
+      case 0xff17314a: case 0xff20384f: case 0xff293a4d:
+      case 0xff102f4d: case 0xff10283f: case 0xff2b3f55:
+      case 0xff15263a: case 0xff31485f: case 0xff203b57:
+      case 0xff173f62:
+        return surfaceAlt;
+      default:return color;
+    }
+  }
+  GradientDrawable shape(int color,int radius){
+    GradientDrawable d=new GradientDrawable();
+    d.setColor(themeColor(color));d.setCornerRadius(dp(radius));return d;
+  }
   void makeCircle(ImageView view){
     GradientDrawable oval=new GradientDrawable();oval.setShape(GradientDrawable.OVAL);oval.setColor(Color.TRANSPARENT);view.setBackground(oval);view.setClipToOutline(true);view.setScaleType(ImageView.ScaleType.CENTER_CROP);
   }
@@ -173,7 +195,7 @@ private static final int RC_SIGN_IN = 9001;
       }else p.edit().putBoolean("fix_supplier_receipt_detail_20260926",true).commit();
     }catch(Exception ignored){}
   }
-  @Override public void onCreate(Bundle b){super.onCreate(b);firebaseAuth = FirebaseAuth.getInstance();firestore = FirebaseFirestore.getInstance();branchAccounts=new BranchAccounts(this,firebaseAuth,firestore);ownerPassword=new OwnerPassword(this);staffSecurity=new StaffSecurity(this);live=new LiveBranchStore(this);ownerCashflow=new OwnerCashflow(this);ownerBranchOrders=new OwnerBranchOrders(this);sharedPaymentQr=new SharedPaymentQr(this);presence=new BranchPresence(this);
+  @Override public void onCreate(Bundle b){super.onCreate(b);WarisanTheme.apply(this);firebaseAuth = FirebaseAuth.getInstance();firestore = FirebaseFirestore.getInstance();branchAccounts=new BranchAccounts(this,firebaseAuth,firestore);ownerPassword=new OwnerPassword(this);staffSecurity=new StaffSecurity(this);live=new LiveBranchStore(this);ownerCashflow=new OwnerCashflow(this);ownerBranchOrders=new OwnerBranchOrders(this);sharedPaymentQr=new SharedPaymentQr(this);presence=new BranchPresence(this);
 GoogleSignInOptions gso = new GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
         .requestIdToken(getString(R.string.default_web_client_id))
         .requestEmail()
@@ -295,7 +317,7 @@ selectedDay=date();selectedMonth=selectedDay.substring(0,7);rangeStart=selectedD
     gap(body,8);
     LinearLayout footer=row();footer.setPadding(dp(17),dp(9),dp(17),dp(10));footer.setBackgroundColor(surface);
     LinearLayout amount=col();add(amount,text("JUMLAH",11,muted,true),-1,-2);total=text("RM 0.00",22,blue,true);add(amount,total,-1,-2);footer.addView(amount,new LinearLayout.LayoutParams(0,-2,1));
-    payButton=new Button(this);payButton.setAllCaps(false);payButton.setText(ui("Confirm Order  →"));payButton.setTextColor(Color.WHITE);payButton.setTextSize(16);payButton.setBackground(shape(blue,12));payButton.setOnClickListener(v->confirmOrder());add(footer,payButton,140,51);add(screen,footer,-1,-2);refresh();addNavigation(screen);
+    payButton=new Button(this);payButton.setAllCaps(false);payButton.setText(ui("Confirm Order  →"));payButton.setTextColor(onPrimary);payButton.setTextSize(16);payButton.setBackground(shape(blue,12));payButton.setOnClickListener(v->confirmOrder());add(footer,payButton,140,51);add(screen,footer,-1,-2);refresh();addNavigation(screen);
   }
 
   void startHeaderClock(TextView view){final android.os.Handler h=new android.os.Handler(android.os.Looper.getMainLooper());final Runnable[] tick=new Runnable[1];tick[0]=()->{if(!view.isAttachedToWindow())return;view.setText(new SimpleDateFormat("dd/MM/yyyy  HH:mm:ss",Locale.US).format(new Date()));h.postDelayed(tick[0],1000);};view.post(tick[0]);}
@@ -326,7 +348,7 @@ selectedDay=date();selectedMonth=selectedDay.substring(0,7);rangeStart=selectedD
     for(int i=0;i<qty.length;i++)if(qty[i]>0){final int id=i;LinearLayout r=row();r.addView(text(names[i]+" × "+qty[i],14,ink,true),new LinearLayout.LayoutParams(0,dp(39),1));add(r,text(money(qty[i]*prices[i]),13,blue,true),-2,-2);TextView minus=chip("−",0xffc83f46,Color.WHITE);LinearLayout.LayoutParams m=params(32,30);m.leftMargin=dp(8);r.addView(minus,m);minus.setOnClickListener(v->{qty[id]--;draw();});add(basket,r,-1,-2);}
   }
   void addNavigation(LinearLayout screen){LinearLayout nav=row();nav.setBackgroundColor(cream);nav.setPadding(dp(7),dp(7),dp(7),dp(9));String[] labels=branchAccounts.staff()?new String[]{"MENU","ORDER","STOK","HARI INI","PRINTER","ACCOUNT"}:(english()?new String[]{"MENU","ORDERS","STOCK","CASH","BRANCH","SETTINGS"}:new String[]{"MENU","ORDER","STOK","DUIT","BRANCH","SETTING"});int[] pages=branchAccounts.staff()?new int[]{0,11,20,12,14,5}:new int[]{0,11,1,3,15,4};
-    for(int i=0;i<labels.length;i++){final int page=pages[i];boolean selected=(activePage==page)||(page==1&&activePage==13)||(page==3&&(activePage==2||activePage==16||activePage==17||activePage==18||activePage==19||activePage==21||activePage==22))||(page==4&&activePage>=4&&activePage<=10);TextView tab=text(labels[i],branchAccounts.staff()?10:9,selected?Color.rgb(19,24,34):Color.WHITE,true);tab.setGravity(Gravity.CENTER);tab.setBackground(shape(selected?gold:Color.rgb(20,58,101),11));LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(0,dp(49),1);p.setMargins(dp(3),0,dp(3),0);nav.addView(tab,p);tab.setOnClickListener(v->{activePage=page;draw();});}add(screen,nav,-1,-2);}
+    for(int i=0;i<labels.length;i++){final int page=pages[i];boolean selected=(activePage==page)||(page==1&&activePage==13)||(page==3&&(activePage==2||activePage==16||activePage==17||activePage==18||activePage==19||activePage==21||activePage==22))||(page==4&&activePage>=4&&activePage<=10);TextView tab=text(labels[i],branchAccounts.staff()?10:9,selected?onAccent:navOffText,true);tab.setGravity(Gravity.CENTER);tab.setBackground(shape(selected?gold:navOff,11));LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(0,dp(49),1);p.setMargins(dp(3),0,dp(3),0);nav.addView(tab,p);tab.setOnClickListener(v->{activePage=page;draw();});}add(screen,nav,-1,-2);}
   void heading(String title,String subtitle){
     LinearLayout brand=row();brand.setGravity(Gravity.CENTER_VERTICAL);ImageView logo=new ImageView(this);setStoreLogo(logo);makeCircle(logo);add(brand,logo,44,44);LinearLayout brandText=col();brandText.setPadding(dp(9),0,0,0);add(brandText,text("WARISAN POS",18,blue,true),-1,-2);add(brandText,text("KIOS WARISAN  ·  SISTEM JUALAN",9,muted,true),-1,-2);brand.addView(brandText,new LinearLayout.LayoutParams(0,-2,1));TextView clock=text("",9,gold,true);clock.setGravity(Gravity.RIGHT|Gravity.CENTER_VERTICAL);add(brand,clock,-2,-2);startHeaderClock(clock);add(body,brand,-1,-2);gap(body,15);
     add(body,text(title,23,ink,true),-1,-2);add(body,text(subtitle,12,muted,false),-1,-2);gap(body,16);
@@ -902,6 +924,15 @@ selectedDay=date();selectedMonth=selectedDay.substring(0,7);rangeStart=selectedD
         ownerTile(shop,"Printer / Resit","Cetak & test resit",
           ()->{activePage=7;draw();});
         add(body,shop,-1,-2);
+        ownerSection("PAPARAN & TEMA");
+        LinearLayout themeControls=row();
+        ownerTile(themeControls,"Pilih Tema","5 tema · Tukar bila-bila masa",
+          ()->WarisanTheme.choose(this));
+        ownerTile(themeControls,"Bahasa","BM Malaysia / English",
+          ()->chooseLanguage());
+        add(body,themeControls,-1,-2);gap(body,7);
+        add(body,text("Tema pilihan disimpan pada telefon ini sahaja. "+
+          "Jualan, stok, QR dan data branch tidak berubah.",11,muted,false),-1,-2);
         ownerSection("PEMBAYARAN");
         LinearLayout payment=row();
         ownerTile(payment,"QR / DuitNow","QR TNG / DuitNow sedia ada",
@@ -913,8 +944,8 @@ selectedDay=date();selectedMonth=selectedDay.substring(0,7);rangeStart=selectedD
         LinearLayout accounts=row();
         ownerTile(accounts,"Tukar Password","Password Owner",
           ()->ownerPassword.change());
-        ownerTile(accounts,"Bahasa","BM / English",
-          ()->chooseLanguage());
+        ownerTile(accounts,"Tema Aplikasi","Warisan Classic / 4 lagi",
+          ()->WarisanTheme.choose(this));
         add(body,accounts,-1,-2);gap(body,7);
         LinearLayout cloud=row();
         ownerTile(cloud,"Backup Cloud","Simpan ke Google",
