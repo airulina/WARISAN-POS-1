@@ -717,6 +717,11 @@ selectedDay=date();selectedMonth=selectedDay.substring(0,7);rangeStart=selectedD
     gap(body,8);
     action("🗂  PADAM / ARKIB BRANCH · OWNER",()->
       branchAccounts.manageBranchRemoval());
+    action("🔎  SEMAK DATA TERSALIN · BRANCH UTAMA / JALAN KEBUN",
+      ()->BranchDataAudit.show(this));
+    add(body,text("Pemeriksaan data tersalin ialah BACA SAHAJA. "+
+      "Jangan padam cawangan atau pulihkan backup sebelum audit selesai.",
+      11,gold,true),-1,-2);
     add(body,text("Branch dengan jualan, stok atau pekerja hanya boleh diarkibkan. "+
       "Rekod lama kekal dalam laporan semua branch.",11,muted,false),-1,-2);
     ownerSection("PEKERJA");
