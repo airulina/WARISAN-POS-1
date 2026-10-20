@@ -148,7 +148,9 @@ final class StaffShifts {
               if(!key.equals(ownerKey)||e!=null||members==null)return;
               Map<String,String> found=new HashMap<>();
               for(QueryDocumentSnapshot worker:members){
-                if(!"STAFF".equals(worker.getString("role")))continue;
+                if(!"STAFF".equals(worker.getString("role"))||
+                  !Boolean.TRUE.equals(worker.getBoolean("active"))||
+                  Boolean.TRUE.equals(worker.getBoolean("removed")))continue;
                 String label=worker.getString("fullName");
                 if(label==null||label.trim().isEmpty())label=worker.getString("email");
                 if(label!=null)found.put(worker.getId(),label);
