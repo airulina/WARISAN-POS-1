@@ -58,7 +58,10 @@ final class OwnerBranchOrders {
           if(name==null||name.trim().isEmpty())name="Branch "+b.getId();
           final String branchName=name;
           b.getReference().collection("liveOrders")
-            .orderBy("createdAt",Query.Direction.DESCENDING).limit(15).get()
+            // Fetch more than the number shown: cancelled test orders are
+            // hidden client-side and must not crowd out valid paid/refunded
+            // orders from the recent results.
+            .orderBy("createdAt",Query.Direction.DESCENDING).limit(100).get()
             .addOnSuccessListener(snapshot->{
               if(!owner.equals(ownerKey))return;
               for(DocumentSnapshot doc:snapshot.getDocuments()){
@@ -74,6 +77,7 @@ final class OwnerBranchOrders {
                   doc.getId().substring(0,Math.min(10,doc.getId().length())).toUpperCase(Locale.US);
                 o.day=doc.getString("day");
                 o.status=doc.getString("status");
+                if(!OrderVisibility.showInOwnerOrders(o.status))continue;
                 Long total=doc.getLong("total");o.total=total==null?0:total;
                 o.qty=(List<?>)doc.get("qty");
                 com.google.firebase.Timestamp time=doc.getTimestamp("createdAt");
@@ -108,9 +112,9 @@ final class OwnerBranchOrders {
     if(!host.branchAccounts.owner())return;
     load();
     host.gap(host.body,12);
-    host.add(host.body,host.text("ORDER DARI BRANCH LAIN · CLOUD",13,host.gold,true),-1,-2);
+    host.add(host.body,host.text("PESANAN CAWANGAN LAIN · AWAN",13,host.gold,true),-1,-2);
     host.gap(host.body,7);
-    host.action("↻  REFRESH ORDER SEMUA BRANCH",()->refresh());
+    host.action("↻  SEGAR SEMULA PESANAN CAWANGAN",()->refresh());
     if(loading){
       host.add(host.body,host.text("Memuatkan order daripada branch lain...",12,host.muted,false),-1,-2);
       return;
@@ -118,7 +122,7 @@ final class OwnerBranchOrders {
     if(!error.isEmpty())
       host.add(host.body,host.text(error,12,host.gold,true),-1,-2);
     if(orders.isEmpty()){
-      host.add(host.body,host.text("Tiada order Cloud branch lain yang dapat dipaparkan.",12,host.muted,false),-1,-2);
+      host.add(host.body,host.text("Tiada pesanan aktif, berbayar atau bayaran balik daripada cawangan lain.",12,host.muted,false),-1,-2);
       return;
     }
     for(RemoteOrder order:orders){
@@ -152,8 +156,9 @@ final class OwnerBranchOrders {
       }
       host.add(host.body,card,-1,-2);host.gap(host.body,7);
     }
-    host.add(host.body,host.text("Order Cloud dari branch lain untuk pemantauan Owner sahaja. "+
-      "Bayar atau batal dibuat pada branch asal; rekod tidak diubah dari paparan ini.",
+    host.add(host.body,host.text("Pesanan dibatalkan sebelum bayaran tidak dipaparkan. "+
+      "Pesanan yang sudah dibayar dan dibayar balik tetap dipaparkan. "+
+      "Rekod asal dan audit stok kekal di Firebase; urusan bayaran dibuat di cawangan asal.",
       11,host.muted,false),-1,-2);
   }
   private static String status(String value){
