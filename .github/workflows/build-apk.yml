@@ -5,6 +5,8 @@ on:
     branches: ["main"]
   pull_request:
     branches: [main]
+  pull_request:
+    branches: ["main"]
   workflow_dispatch:
 
 permissions:
@@ -55,6 +57,12 @@ jobs:
             echo "Cloud Functions dependency detected in Spark-only app"
             exit 1
           fi
+
+      - name: Verify QR notification parser (synthetic incoming/outgoing examples)
+        run: |
+          mkdir -p "$RUNNER_TEMP/qr-test"
+          javac -d "$RUNNER_TEMP/qr-test" app/src/main/java/my/warisan/pos/QrNotificationParser.java tests/QrNotificationParserSmoke.java
+          java -cp "$RUNNER_TEMP/qr-test" my.warisan.pos.QrNotificationParserSmoke
 
       - name: Build APK
         run: gradle assembleDebug --no-daemon
