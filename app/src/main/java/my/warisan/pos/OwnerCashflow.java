@@ -59,6 +59,8 @@ final class OwnerCashflow {
     TreeMap<String,Day> local = new TreeMap<>();
     TreeMap<String,Day> legacyOnly = new TreeMap<>();
     boolean seen=false,cache=false;
+    int copiedLegacySales=0;
+    boolean hasCopiedLocalData=false;
     BranchRow(String id,String name,String status){
       this.id=id;this.name=name;this.status=status;
     }
@@ -139,6 +141,11 @@ final class OwnerCashflow {
         for(ListenerRegistration l:dayListeners)l.remove();
         dayListeners.clear();rows.clear();
         listLoaded=true;loadError="";
+        boolean originalMainExists=false;
+        for(QueryDocumentSnapshot branch:results){
+          if(BranchAccounts.LEGACY_BRANCH.equals(branch.getId()))
+            originalMainExists=true;
+        }
         for(QueryDocumentSnapshot branch:results){
           String name=branch.getString("name");
           if(name==null||name.trim().isEmpty())name="Branch "+branch.getId();
@@ -146,8 +153,15 @@ final class OwnerCashflow {
           BranchRow row=new BranchRow(branch.getId(),name,
             Boolean.TRUE.equals(branch.getBoolean("archived"))?"ARKIB · REKOD LAMA":
               BranchAccounts.operatingLabel(status));
-          row.local=readLocalDays(row.id,from,to,false);
-          row.legacyOnly=readLocalDays(row.id,from,to,true);
+          if(!BranchAccounts.LEGACY_BRANCH.equals(row.id)){
+            BranchDataAudit.Result audit=BranchDataAudit.compare(
+              host.getPreferences(0),
+              host.getSharedPreferences("warisan_branch_"+row.id,0));
+            row.hasCopiedLocalData=audit.proven;
+            row.copiedLegacySales=audit.copiedSales;
+          }
+          row.local=readLocalDays(row.id,from,to,false,originalMainExists);
+          row.legacyOnly=readLocalDays(row.id,from,to,true,originalMainExists);
           rows.add(row);
           ListenerRegistration listener=branch.getReference().collection("daily")
             .whereGreaterThanOrEqualTo(FieldPath.documentId(),from)
@@ -175,16 +189,39 @@ final class OwnerCashflow {
       });
   }
   TreeMap<String,Day> readLocalDays(String branchId,String from,String to,
-      boolean legacyOnly){
+      boolean legacyOnly,boolean originalMainIncluded){
     TreeMap<String,Day> result=new TreeMap<>();
-    SharedPreferences p=BranchAccounts.LEGACY_BRANCH.equals(branchId)?
-      host.getPreferences(0):
+    boolean isOriginal=BranchAccounts.LEGACY_BRANCH.equals(branchId);
+    SharedPreferences p=isOriginal?host.getPreferences(0):
       host.getSharedPreferences("warisan_branch_"+branchId,0);
+    SharedPreferences source=host.getPreferences(0);
+    // Only suppress duplicates when the original Main Branch is ALSO
+    // represented in this overall report. Never silently drop historical
+    // sales when its source branch is absent.
+    boolean ignoreExactCopies=false;
+    Map<String,Integer> remainingCopies=java.util.Collections.emptyMap();
+    if(originalMainIncluded&&!isOriginal){
+      BranchDataAudit.Result audit=BranchDataAudit.compare(source,p);
+      if(audit.proven){
+        ignoreExactCopies=true;
+        remainingCopies=BranchDataAudit.frequencies(
+          BranchDataAudit.ledger(source,"stock_sales"));
+      }
+    }
     try{
       JSONArray sales=new JSONArray(p.getString("stock_sales","[]"));
       for(int i=0;i<sales.length();i++){
         JSONObject receipt=sales.optJSONObject(i);
         if(receipt==null||receipt.optBoolean("refunded",false))continue;
+        if(ignoreExactCopies){
+          String sign=BranchDataAudit.signature(receipt);
+          int copies=remainingCopies.containsKey(sign)?
+            remainingCopies.get(sign):0;
+          if(copies>0){
+            remainingCopies.put(sign,copies-1);
+            continue; // Proven historical copy; its source remains counted.
+          }
+        }
         // Only pre-LIVE receipts may supplement a day with cloud totals.
         if(legacyOnly&&!receipt.optString("liveOrderId","").isEmpty())continue;
         String day=host.entryDay(receipt);
@@ -208,6 +245,10 @@ final class OwnerCashflow {
       if(!k.startsWith("sales_")||k.length()!=16)continue;
       String day=k.substring(6);
       if(day.compareTo(from)<0||day.compareTo(to)>0)continue;
+      // The former signup migration also copied old sales_YYYY-MM-DD
+      // summary keys. Do not count them twice when source+clone match.
+      if(ignoreExactCopies&&source.contains(k)&&
+        source.getInt(k,0)==p.getInt(k,0))continue;
       if(!result.containsKey(day))
         result.put(day,new Day(p.getInt(k,0),0,0,0,false));
     }
@@ -221,6 +262,33 @@ final class OwnerCashflow {
   void redrawIfVisible(){
     if(host.activePage==3||host.activePage==16||host.activePage==17||host.activePage==19||host.activePage==21)
       host.draw();
+  }
+  int copiedLegacySaleCount(){
+    int copies=0;
+    for(BranchRow row:rows)copies+=row.copiedLegacySales;
+    return copies;
+  }
+  boolean hasCopiedLocalBranchData(){
+    for(BranchRow row:rows)if(row.hasCopiedLocalData)return true;
+    return false;
+  }
+  void duplicatedDataWarning(){
+    if(!hasCopiedLocalBranchData())return;
+    boolean hasOriginal=false;
+    for(BranchRow row:rows)
+      if(BranchAccounts.LEGACY_BRANCH.equals(row.id))hasOriginal=true;
+    host.add(host.body,host.text(
+      hasOriginal?
+        "AMARAN: Salinan rekod lama Branch Utama dikesan dalam cawangan tambahan. "+
+        "Resit tempatan yang sama telah dikecualikan daripada pengiraan berganda. "+
+        "Rekod Cloud dan stok masih perlu diaudit.":
+        "AMARAN: Data tempatan yang sepadan dengan Branch Utama dikesan, "+
+        "tetapi dokumen cawangan asal tiada dalam senarai. "+
+        "Jumlah jualan belum boleh dianggap tepat; jangan padam atau pulihkan backup.",
+      12,host.gold,true),-1,-2);
+    host.gap(host.body,8);
+    host.action("🔎  AUDIT DATA CAWANGAN (BACA SAHAJA)",
+      ()->BranchDataAudit.show(host));
   }
   Day overall(){
     Day all=new Day();
@@ -270,6 +338,7 @@ final class OwnerCashflow {
     host.cashDailyMode=false;
     host.heading("DUIT · OVERALL",
       "Keseluruhan jualan. Tekan TOTAL SALE untuk pilih branch.");
+    if(ready())duplicatedDataWarning();
     host.action("🔓  OPENING / CLOSING · "+accounts.branchName(),()->{
       host.activePage=22;host.draw();
     });
@@ -378,6 +447,7 @@ final class OwnerCashflow {
       return;
     }
     Day total=overall();
+    duplicatedDataWarning();
     host.add(host.body,host.text("SEMUA BRANCH · "+period(),12,host.gold,true),-1,-2);
     host.gap(host.body,7);
     LinearLayout summary=host.row();
