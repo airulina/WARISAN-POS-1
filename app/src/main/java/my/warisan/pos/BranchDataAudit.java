@@ -159,40 +159,124 @@ final class BranchDataAudit {
       Collections.<String>emptySet();
   }
 
+  /**
+   * Owner-only, READ-ONLY provenance audit. Local clone checks use complete
+   * JSON record signatures. Cloud is summarized separately: matching branch
+   * totals are NOT proof that Cloud records should be moved or deleted.
+   */
   static void show(MainActivity host){
     if(!host.branchAccounts.owner()){
       host.message("Audit cawangan hanya untuk pemilik.");return;
     }
     final String owner=host.branchAccounts.ownerUid();
     final SharedPreferences original=original(host);
-    FirebaseFirestore db=host.firestoreForStaff();
+    final FirebaseFirestore db=host.firestoreForStaff();
     db.collection("workspaces").document(owner).collection("branches")
       .get(Source.SERVER).addOnSuccessListener(snapshot->{
         if(!host.branchAccounts.owner()||
           !owner.equals(host.branchAccounts.ownerUid()))return;
-        StringBuilder report=new StringBuilder();
-        report.append("SEMAKAN DATA CAWANGAN (BACA SAHAJA)\n\n");
-        report.append("Bandingan dengan fail asal Branch Utama pada telefon ini. ")
-          .append("Tiada data diubah, dipindah atau dipadam.\n\n");
-        int flagged=0;
+        final ArrayList<QueryDocumentSnapshot> branches=new ArrayList<>();
+        final ArrayList<com.google.android.gms.tasks.Task<
+          com.google.firebase.firestore.QuerySnapshot>> dailyTasks=new ArrayList<>();
+        final ArrayList<com.google.android.gms.tasks.Task<
+          com.google.firebase.firestore.QuerySnapshot>> orderTasks=new ArrayList<>();
+        final ArrayList<com.google.android.gms.tasks.Task<?>> allTasks=new ArrayList<>();
+        boolean legacyExists=false;
         for(QueryDocumentSnapshot b:snapshot){
-          String id=b.getId();
-          if(BranchAccounts.LEGACY_BRANCH.equals(id))continue;
-          String name=b.getString("name");
-          if(name==null||name.isEmpty())name=id;
-          Result scan=compare(original,branch(host,id));
-          report.append(scan.summary(name)).append("\n");
-          if(scan.proven)flagged++;
+          branches.add(b);
+          if(BranchAccounts.LEGACY_BRANCH.equals(b.getId()))legacyExists=true;
+          // Query limited snapshots to avoid expensive historical downloads.
+          // The record totals are labelled SAMPLES, never all-time figures.
+          com.google.firebase.firestore.DocumentReference ref=b.getReference();
+          com.google.android.gms.tasks.Task<com.google.firebase.firestore.QuerySnapshot>
+            daily=ref.collection("daily").limit(35).get(Source.SERVER);
+          com.google.android.gms.tasks.Task<com.google.firebase.firestore.QuerySnapshot>
+            orders=ref.collection("liveOrders").limit(35).get(Source.SERVER);
+          dailyTasks.add(daily);orderTasks.add(orders);
+          allTasks.add(daily);allTasks.add(orders);
         }
-        if(flagged>0)report.append("PERHATIAN: Rekod sepadan boleh berasal ")
-          .append("daripada fungsi salin data cawangan pertama dalam APK lama. ")
-          .append("Jangan buat pemulihan sandaran atau padam cawangan.\n\n");
-        report.append("Pemeriksaan ini HANYA membandingkan fail tempatan ")
-          .append("pada telefon Owner. Rekod jualan dan stok dalam Firestore ")
-          .append("perlu disemak berasingan sebelum pemindahan sebenar.");
-        host.darkBuilder().setTitle("AUDIT REKOD CAWANGAN")
-          .setMessage(report.toString())
-          .setPositiveButton("FAHAM",null).show();
+        final boolean mainPresent=legacyExists;
+        host.message("Sedang menyemak salinan data tempatan dan sampel rekod Cloud. Tiada data diubah.");
+        com.google.android.gms.tasks.Tasks.whenAllComplete(allTasks)
+          .addOnSuccessListener(ignored->{
+            if(!host.branchAccounts.owner()||
+              !owner.equals(host.branchAccounts.ownerUid()))return;
+            StringBuilder report=new StringBuilder();
+            report.append("AUDIT DATA CAWANGAN · BACA SAHAJA\n\n");
+            report.append("Sumber asal: rekod Warisan POS lama pada telefon Owner.\n");
+            report.append("Resit tempatan dibandingkan hingga ke setiap medan JSON.\n");
+            report.append("Rekod Cloud disemak secara berasingan (maksimum 35 bagi setiap jenis).\n\n");
+            report.append("REKOD ASAL BRANCH UTAMA\n");
+            for(String ledger:LEDGERS)
+              report.append(ledger).append(": ")
+                .append(ledger(original,ledger).length()).append("\n");
+            report.append("\n");
+            if(!mainPresent){
+              report.append("AMARAN: ID asal Branch Utama (utama_legacy) tidak ditemui "+
+                "dalam Cloud. Rekod asal telefon tidak boleh dipautkan secara automatik "+
+                "kepada mana-mana cawangan tanpa pemeriksaan lanjut.\n\n");
+            }
+            int flagged=0;
+            for(int i=0;i<branches.size();i++){
+              QueryDocumentSnapshot branchDoc=branches.get(i);
+              String name=branchDoc.getString("name");
+              if(name==null||name.trim().isEmpty())name=branchDoc.getId();
+              report.append("CAWANGAN: ").append(name).append("\n");
+              if(BranchAccounts.LEGACY_BRANCH.equals(branchDoc.getId())){
+                report.append("  ID: ASAL (utama_legacy)\n");
+              }else{
+                Result audit=compare(original,branch(host,branchDoc.getId()));
+                report.append(audit.summary(""));
+                if(audit.proven)flagged++;
+                // Report UNIQUE records too; their existence means wholesale
+                // deletion/migration would destroy valid branch transactions.
+                for(String key:LEDGERS){
+                  int total=audit.total.containsKey(key)?audit.total.get(key):0;
+                  int copied=audit.found.containsKey(key)?audit.found.get(key):0;
+                  if(total>copied)report.append("  ").append(key)
+                    .append(": ").append(total-copied)
+                    .append(" rekod bukan salinan tepat\n");
+                }
+              }
+              report.append("  CLOUD / FIRESTORE:\n");
+              com.google.android.gms.tasks.Task<com.google.firebase.firestore.QuerySnapshot>
+                orderTask=orderTasks.get(i),dailyTask=dailyTasks.get(i);
+              if(orderTask.isSuccessful()){
+                int paid=0,pending=0,cancelled=0;
+                for(com.google.firebase.firestore.DocumentSnapshot order:
+                    orderTask.getResult().getDocuments()){
+                  String status=order.getString("status");
+                  if("PAID".equals(status))paid++;
+                  else if("PENDING".equals(status))pending++;
+                  else if("CANCELLED".equals(status))cancelled++;
+                }
+                report.append("  Sampel order Cloud: ")
+                  .append(orderTask.getResult().size())
+                  .append(" (bayar ").append(paid)
+                  .append(", belum bayar ").append(pending)
+                  .append(", batal ").append(cancelled).append(")\n");
+              }else report.append("  Order Cloud: TIDAK DAPAT DISAHKAN\n");
+              if(dailyTask.isSuccessful())
+                report.append("  Sampel rekod jualan harian Cloud: ")
+                  .append(dailyTask.getResult().size()).append("\n");
+              else report.append("  Jualan harian Cloud: TIDAK DAPAT DISAHKAN\n");
+              report.append("\n");
+            }
+            if(flagged>0)
+              report.append("AMARAN: Salinan rekod asal dikesan dalam cawangan "+
+                "tambahan. Jualan, kos dan stok yang tersalin perlu "+
+                "diasingkan daripada rekod tulen cawangan, satu rekod pada satu masa.\n\n");
+            report.append("TIADA DATA DIPADAM, DIPINDAH ATAU DIUBAH.\n");
+            report.append("Jangan padam cawangan, Clear Data atau pulih backup. "+
+              "Sampel Cloud tidak mengesahkan asal setiap transaksi; "+
+              "pemindahan Cloud memerlukan semakan ID resit/rekod yang lengkap.");
+            host.darkBuilder().setTitle("SEMAK ASAL DATA CAWANGAN")
+              .setMessage(report.toString())
+              .setPositiveButton("FAHAM",null).show();
+          }).addOnFailureListener(e->host.darkBuilder()
+            .setTitle("AUDIT TIDAK LENGKAP")
+            .setMessage("Cloud tidak dapat disemak. Tiada data diubah.\n"+e.getMessage())
+            .setPositiveButton("OK",null).show());
       }).addOnFailureListener(e->host.message(
         "Audit gagal membaca senarai cawangan: "+e.getMessage()));
   }
