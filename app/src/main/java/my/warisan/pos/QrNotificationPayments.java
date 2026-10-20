@@ -30,6 +30,7 @@ import java.util.Set;
 public final class QrNotificationPayments extends NotificationListenerService {
   private static final String STORE="warisan_qr_notification";
   private static final String ENABLED="enabled",SOURCE="source_package",PRINT="auto_print",USED="used_fingerprints";
+  private static final String LAST_TEXT_HASH="last_message_hash",LAST_TEXT_TIME="last_message_time";
   private static final long VALID_FOR_MS=180000L;
   private static final Object LOCK=new Object();
   private static Session current;
@@ -206,10 +207,13 @@ public final class QrNotificationPayments extends NotificationListenerService {
     int cents=QrNotificationParser.uniqueIncomingCents(title,text);
     if(cents!=s.due)return;
     String fingerprint=hash(pkg+"|"+sbn.getKey()+"|"+posted+"|"+title+"|"+text);
-    if(fingerprint==null)return;
+    String messageHash=hash(pkg+"|"+title+"|"+text);
+    if(fingerprint==null||messageHash==null)return;
     synchronized(LOCK){
       if(current!=s)return;
-      if(!reserveFingerprint(host,fingerprint))return;
+      // A bank can re-post the same alert under a NEW notification key/time.
+      // Never let identical content validate a second order within five minutes.
+      if(!reserveFingerprint(host,fingerprint,messageHash,posted))return;
       current=null;
     }
     host.runOnUiThread(()->{
@@ -239,13 +243,18 @@ public final class QrNotificationPayments extends NotificationListenerService {
       return b.toString();
     }catch(Exception e){return null;}
   }
-  private static boolean reserveFingerprint(Context ctx,String key){
+  private static boolean reserveFingerprint(Context ctx,String key,String messageHash,long posted){
     SharedPreferences pref=prefs(ctx);
     Set<String> found=new HashSet<>(pref.getStringSet(USED,new HashSet<>()));
     if(found.contains(key))return false;
+    long previous=pref.getLong(LAST_TEXT_TIME,0);
+    if(messageHash.equals(pref.getString(LAST_TEXT_HASH,""))&&
+      posted>=previous&&posted-previous<300000L)return false;
     found.add(key);
     // Retain a bounded window of anonymous event hashes, not notification text.
     if(found.size()>150){found.clear();found.add(key);}
-    return pref.edit().putStringSet(USED,found).commit();
+    return pref.edit().putStringSet(USED,found)
+      .putString(LAST_TEXT_HASH,messageHash).putLong(LAST_TEXT_TIME,posted)
+      .commit();
   }
 }
