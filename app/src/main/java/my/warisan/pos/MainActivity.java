@@ -2408,14 +2408,32 @@ JSONArray list=entries("stock_distribution");JSONObject e=list.optJSONObject(ind
     printLocalized(ui(receipt));
   }
   void printLocalized(String receipt){
+    printLocalized(receipt,false);
+  }
+  void autoPrintReceipt(String printed){
+    if(!QrNotificationPayments.autoPrint(this))return;
+    String address=getPreferences(0).getString("printer","");
+    String mode=getPreferences(0).getString("printer_mode",
+      address.isEmpty()?"system":"thermal");
+    // Android A4/Wi-Fi printing always needs the system print dialog.
+    // For unattended receipt, skip it instead of showing a dialog.
+    if(!"thermal".equals(mode)||address.isEmpty())return;
+    if(Build.VERSION.SDK_INT>=31&&
+      checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT)!=PackageManager.PERMISSION_GRANTED)return;
+    BluetoothAdapter adapter=BluetoothAdapter.getDefaultAdapter();
+    if(adapter==null||!adapter.isEnabled())return;
+    printLocalized(ui(printed),true);
+  }
+  void printLocalized(String receipt,boolean automatic){
     String address=getPreferences(0).getString("printer","");
     String mode=getPreferences(0).getString("printer_mode",address.isEmpty()?"system":"thermal");
     if(!"thermal".equals(mode)){
       // Android's PrintManager detects installed A4/Wi-Fi/color print services.
-      WarisanPrinting.textA4(this,receipt,"Warisan POS Resit");
+      if(!automatic)WarisanPrinting.textA4(this,receipt,"Warisan POS Resit");
       return;
     }
     if(address.isEmpty()){
+      if(automatic)return;
       pendingReceipt=receipt;
       darkBuilder().setTitle("Pilih printer thermal")
         .setMessage("Belum ada printer thermal dipilih. Order dan bayaran tidak dibatalkan.")
@@ -2448,10 +2466,12 @@ JSONArray list=entries("stock_distribution");JSONObject e=list.optJSONObject(ind
         if(getPreferences(0).getBoolean("printer_logo",false)){
           try{printLogo(out);out.flush();}catch(Exception ignored){}
         }
-        runOnUiThread(()->message("Resit dihantar kepada printer thermal"));
+        if(!automatic)runOnUiThread(()->message("Resit dihantar kepada printer thermal"));
       }catch(Exception e){
         String reason=e.getMessage();
-        runOnUiThread(()->darkBuilder().setTitle("Cetakan gagal")
+        if(automatic){
+          runOnUiThread(()->message("Bayaran direkod. Printer tidak tersedia; cetakan dilangkau."));
+        }else runOnUiThread(()->darkBuilder().setTitle("Cetakan gagal")
           .setMessage((reason==null?"Sambungan printer gagal.":reason)+
             "\n\nOrder/bayaran telah disimpan. Pilih printer lain atau cuba cetak semula.")
           .setPositiveButton("PILIH PRINTER",(d,w)->{pendingReceipt=receipt;choosePrinter();})
