@@ -14,7 +14,7 @@ final class QrNotificationParser {
   private static final Pattern INCOMING=Pattern.compile(
     "(?i)\\b(received|receive|credited|credit\\s+to|terima|diterima|wang\\s+masuk|duit\\s+masuk|bayaran\\s+diterima|payment\\s+received|incoming\\s+transfer)\\b");
   private static final Pattern OUTGOING=Pattern.compile(
-    "(?i)\\b(debited|sent|paid\\s+to|transfer\\s+to|transferred\\s+to|purchase|withdrawal|withdrawn|failed|unsuccessful|pending|dibayar|ditolak|keluar|gagal|refund|reversed|reversal|request\\s+money)\\b");
+    "(?i)\\b(debited|sent|paid\\s+to|transfer\\s+to|transferred\\s+to|purchase|withdrawal|withdrawn|failed|unsuccessful|pending|dibayar|ditolak|keluar|gagal|refund(?:ed|ing)?|reversed|reversal|request\\s+money)\\b");
 
   static int uniqueIncomingCents(String title,String body){
     String merged=((title==null?"":title)+" "+(body==null?"":body)).trim();
