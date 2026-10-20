@@ -392,6 +392,37 @@ service cloud.firestore {
               "status","distanceMeters","createdAt"]);
           allow update, delete: if false;
         }
+        // Separate per-worker attendance. POS Opening is not a shift clock.
+        // A staff member may start at most one shift per business day.
+        match /shiftAttendance/{shiftId} {
+          allow get: if owner(ownerUid) ||
+            (signedIn() && resource.data.employeeUid == request.auth.uid &&
+              assignedMember(ownerUid,branchId));
+          allow list: if owner(ownerUid);
+          allow create: if member(ownerUid,branchId)
+            && request.resource.data.ownerUid == ownerUid
+            && request.resource.data.branchId == branchId
+            && request.resource.data.day is string
+            && staffWorkingDay(request.resource.data.day)
+            && shiftId == request.resource.data.day+"_"+request.auth.uid
+            && request.resource.data.employeeUid == request.auth.uid
+            && request.resource.data.email == request.auth.token.email
+            && request.resource.data.active == true
+            && request.resource.data.startedAt == request.time
+            && request.resource.data.keys().hasOnly([
+              "ownerUid","branchId","day","employeeUid","email","active","startedAt"]);
+          allow update: if signedIn() && assignedMember(ownerUid,branchId)
+            && resource.data.employeeUid == request.auth.uid
+            && resource.data.ownerUid == ownerUid
+            && resource.data.branchId == branchId
+            && staffWorkingDay(resource.data.day)
+            && resource.data.active == true
+            && request.resource.data.active == false
+            && request.resource.data.endedAt == request.time
+            && request.resource.data.diff(resource.data).affectedKeys()
+              .hasOnly(["active","endedAt"]);
+          allow delete: if false;
+        }
         match /staffLogins/{eventId} {
           allow get, list: if owner(ownerUid);
           allow create: if member(ownerUid,branchId)
@@ -576,10 +607,13 @@ service cloud.firestore {
         && request.resource.data.role == "STAFF"
         && request.resource.data.active == true
         && request.resource.data.email is string
+        && request.resource.data.fullName is string
+        && request.resource.data.fullName.size() >= 2
+        && request.resource.data.fullName.size() <= 100
         && request.resource.data.branchId is string
         && exists(/databases/$(database)/documents/workspaces/$(request.auth.uid)/branches/$(request.resource.data.branchId))
         && request.resource.data.keys().hasOnly([
-          "uid","email","role","active","ownerUid",
+          "uid","email","fullName","role","active","ownerUid",
           "branchId","branchName","createdAt"]);
       allow update: if signedIn()
         && request.auth.uid == resource.data.ownerUid
@@ -603,6 +637,20 @@ service cloud.firestore {
           && request.resource.data.deviceId.size() <= 128
           && request.resource.data.diff(resource.data).affectedKeys()
             .hasOnly(["deviceId","deviceBoundAt"]));
+      // Owner-only display-name correction. No change to login, role,
+      // device binding or the employee's assigned branch is permitted.
+      allow update: if owner(resource.data.ownerUid)
+        && request.resource.data.ownerUid == resource.data.ownerUid
+        && request.resource.data.uid == resource.data.uid
+        && request.resource.data.email == resource.data.email
+        && request.resource.data.role == resource.data.role
+        && request.resource.data.branchId == resource.data.branchId
+        && request.resource.data.fullName is string
+        && request.resource.data.fullName.size() >= 2
+        && request.resource.data.fullName.size() <= 100
+        && request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(["fullName","updatedAt"])
+        && request.resource.data.updatedAt == request.time;
       // Owner can reassign an ACTIVE employee to a different branch only
       // if old membership is removed and new membership + index exist in
       // the very same atomic transaction. Historical branch data untouched.
