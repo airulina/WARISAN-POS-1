@@ -264,9 +264,9 @@ final class OwnerCashflow {
           dayListeners.add(unpaidListener);
           ListenerRegistration productsListener=branch.getReference().collection("orders")
             .whereEqualTo("day",day)
-            .addSnapshotListener((orders,error)->{
+            .addSnapshotListener((orders,productError)->{
               if(!scope.equals(subscriptionKey)||!rows.contains(row))return;
-              row.liveProductsReady=error==null&&orders!=null;
+              row.liveProductsReady=productError==null&&orders!=null;
               if(row.liveProductsReady){
                 long chicken=0,beef=0;
                 for(DocumentSnapshot order:orders.getDocuments()){
@@ -573,24 +573,29 @@ final class OwnerCashflow {
   }
   private void homeSmallMetric(LinearLayout line,String label,String value,int color){
     LinearLayout card=host.col();
-    card.setPadding(host.dp(10),host.dp(12),host.dp(9),host.dp(12));
+    card.setPadding(host.dp(6),host.dp(10),host.dp(5),host.dp(10));
     GradientDrawable shape=host.shape(host.surfaceAlt,11);
     shape.setStroke(host.dp(1),host.themeLight?0xffD3DFEC:0xff2D4761);
     card.setBackground(shape);
-    host.add(card,host.text(label,11,host.muted,false),-1,-2);
+    TextView labelText=host.text(label,10,host.muted,false);
+    labelText.setMaxLines(2);
+    host.add(card,labelText,-1,-2);
     host.gap(card,7);
-    TextView valueText=host.text(value,16,color,true);
-    valueText.setMaxLines(2);
+    TextView valueText=host.text(value,13,color,true);
+    valueText.setSingleLine(true);
+    if(android.os.Build.VERSION.SDK_INT>=26)
+      valueText.setAutoSizeTextTypeUniformWithConfiguration(9,14,1,
+        android.util.TypedValue.COMPLEX_UNIT_SP);
     host.add(card,valueText,-1,-2);
     LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(0,-2,1);
-    p.setMargins(host.dp(3),host.dp(3),host.dp(3),host.dp(3));
+    p.setMargins(host.dp(2),host.dp(3),host.dp(2),host.dp(3));
     line.addView(card,p);
   }
   private void homeShare(LinearLayout parent,String name,int count,int sum){
     int share=sum==0?0:(int)Math.round(count*100.0/sum);
+    host.add(parent,host.text(name,10,host.ink,false),-1,-2);
+    host.gap(parent,3);
     LinearLayout row=host.row();row.setGravity(Gravity.CENTER_VERTICAL);
-    TextView nameText=host.text(name,11,host.ink,false);
-    row.addView(nameText,new LinearLayout.LayoutParams(0,-2,2));
     LinearLayout track=host.row();
     track.setBackground(host.shape(host.surfaceAlt,5));
     if(share>0){
@@ -598,8 +603,8 @@ final class OwnerCashflow {
       track.addView(progress,new LinearLayout.LayoutParams(0,host.dp(9),share));
     }
     if(share<100)track.addView(new View(host),new LinearLayout.LayoutParams(0,host.dp(9),100-share));
-    row.addView(track,new LinearLayout.LayoutParams(0,host.dp(9),3));
-    TextView percent=host.text(share+"%",11,host.muted,false);
+    row.addView(track,new LinearLayout.LayoutParams(0,host.dp(8),4));
+    TextView percent=host.text(share+"%",10,host.muted,false);
     percent.setGravity(Gravity.RIGHT);
     row.addView(percent,new LinearLayout.LayoutParams(0,-2,1));
     host.add(parent,row,-1,-2);host.gap(parent,6);
@@ -626,43 +631,51 @@ final class OwnerCashflow {
     host.add(heading,status,-1,-2);
     host.add(card,header,-1,-2);host.gap(card,10);
 
-    LinearLayout first=host.row();
-    homeSmallMetric(first,en?"Today's Sales":"Jualan Hari Ini",rm(dayValue.sales),host.gold);
-    homeSmallMetric(first,en?"Net Profit":"Untung Bersih",
+    LinearLayout metrics=host.row();
+    homeSmallMetric(metrics,en?"Today's Sales":"Jualan Hari Ini",rm(dayValue.sales),host.gold);
+    homeSmallMetric(metrics,en?"Net Profit":"Untung Bersih",
       profitKnown?signedProfit(net):"—",profitKnown?host.profitColor(net):host.muted);
-    host.add(card,first,-1,-2);
-    LinearLayout second=host.row();
-    homeSmallMetric(second,en?"Operating + Product Cost":"Kos Operasi + Produk",
+    homeSmallMetric(metrics,en?"Total Costs":"Jumlah Kos",
       profitKnown?rm(cost):"—",host.ink);
-    homeSmallMetric(second,en?"Unpaid Orders · Cloud":"Belum Bayar · Cloud",
+    homeSmallMetric(metrics,en?"Unpaid · Cloud":"Belum Bayar",
       branch.unpaidReady?rm(branch.unpaidAmount):"—",host.ink);
-    host.add(card,second,-1,-2);
+    host.add(card,metrics,-1,-2);
 
     host.gap(card,9);
-    host.add(card,host.text(en?"DAILY SALES TREND":"GRAF JUALAN HARIAN",
-      11,host.gold,true),-1,-2);
-    host.add(card,new OwnerBranchTrendChart(host,branch.combined(),day),-1,host.dp(155));
+    LinearLayout chartAndProducts=host.row();
+    LinearLayout chartColumn=host.col();
+    chartAndProducts.addView(chartColumn,new LinearLayout.LayoutParams(0,-2,6));
+    host.add(chartColumn,host.text(en?"DAILY SALES TREND":"GRAF JUALAN HARIAN",
+      10,host.gold,true),-1,-2);
+    host.add(chartColumn,new OwnerBranchTrendChart(host,branch.combined(),day),-1,host.dp(135));
+    LinearLayout topItems=host.col();
+    topItems.setPadding(host.dp(7),0,0,0);
+    chartAndProducts.addView(topItems,new LinearLayout.LayoutParams(0,-2,4));
     if(profitKnown||branch.liveProductsReady){
       int[] sold=profitKnown?host.soldNetBetween(day,day):branch.liveProductCounts;
       int chicken=sold.length>0?Math.max(0,sold[0]):0;
       int beef=sold.length>1?Math.max(0,sold[1]):0;
-      host.add(card,host.text(profitKnown?(en?"TOP ITEMS · LOCAL POS":
+      host.add(topItems,host.text(profitKnown?(en?"TOP ITEMS · LOCAL POS":
         "MENU TERLARIS · POS TEMPATAN"):(en?"TOP ITEMS · LIVE ORDERS":
         "MENU TERLARIS · ORDER LIVE"),
-        11,host.gold,true),-1,-2);
-      host.gap(card,6);
+        10,host.gold,true),-1,-2);
+      host.gap(topItems,9);
       if(chicken+beef==0){
-        host.add(card,host.text(en?"No recorded chicken or beef sales":
+        host.add(topItems,host.text(en?"No recorded chicken or beef sales":
           "Tiada jualan ayam atau daging direkodkan",11,host.muted,false),-1,-2);
       }else{
-        homeShare(card,en?"Chicken Satay":"Sate Ayam",chicken,chicken+beef);
-        homeShare(card,en?"Beef Satay":"Sate Daging",beef,chicken+beef);
+        homeShare(topItems,en?"Chicken Satay":"Sate Ayam",chicken,chicken+beef);
+        homeShare(topItems,en?"Beef Satay":"Sate Daging",beef,chicken+beef);
       }
     }else{
-      host.add(card,host.text(en?"Item counts and cost details awaiting verified synchronization.":
+      host.add(topItems,host.text(en?"Top Items":"Menu Terlaris",
+        10,host.gold,true),-1,-2);
+      host.gap(topItems,10);
+      host.add(topItems,host.text(en?"Item counts and cost details awaiting verified synchronization.":
         "Butiran produk dan kos menunggu data yang boleh disahkan.",
         11,host.muted,false),-1,-2);
     }
+    host.add(card,chartAndProducts,-1,-2);
     host.gap(card,8);
     TextView details=host.text(en?"View Details   ›":"Lihat Butiran   ›",15,host.gold,true);
     details.setGravity(Gravity.CENTER);

@@ -24,6 +24,10 @@ assert.match(ownerHome,/Lihat Butiran/);
 assert.match(ownerHome,/Untung Bersih/);
 assert.match(ownerHome,/host\.profitColor\(net\)/);
 assert.match(ownerHome,/new OwnerBranchTrendChart/);
+assert.equal((ownerHome.match(/homeSmallMetric\(metrics,/g)||[]).length,4,
+  'Branch card must have four KPI tiles on the same row as in the reference');
+assert.match(ownerHome,/host\.add\(card,chartAndProducts,-1,-2\)/,
+  'Branch chart and top-product bars belong side-by-side');
 assert.match(ownerHome,/MENU TERLARIS · ORDER LIVE/);
 assert.match(finance,/whereEqualTo\("status","PENDING"\)/,
   'Unpaid orders should come from actual Cloud records');
