@@ -13,6 +13,7 @@ import com.google.firebase.firestore.DocumentChange;
 import com.google.firebase.firestore.QuerySnapshot;
 import com.google.firebase.firestore.Query;
 import com.google.firebase.firestore.QueryDocumentSnapshot;
+import com.google.firebase.firestore.Source;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Date;
@@ -61,13 +62,40 @@ final class LiveBranchStore {
   long cash(){return dayCash;}
   long qr(){return dayQr;}
   long transactions(){return dayTransactions;}
-  boolean soldQuantitiesReady(){return enabled()&&dayPaidUnitsConfirmed;}
+  boolean soldQuantitiesConfirmed(){return enabled()&&dayPaidUnitsConfirmed;}
+  // The on-device paid sales report remains a clearly labelled fallback while
+  // Firestore is loading, or when the owner cannot query branch orders.
+  private long[] localPaidUnits(){
+    long[] paid=new long[host.names.length];
+    if(!accounts.owner()||activeDay.isEmpty())return paid;
+    JSONArray sales=host.entries("stock_sales");
+    for(int j=0;j<sales.length();j++){
+      JSONObject sale=sales.optJSONObject(j);
+      if(sale==null||sale.optBoolean("refunded",false)||
+        !activeDay.equals(host.entryDay(sale))||
+        sale.optString("liveOrderId","").isEmpty())continue;
+      JSONArray items=sale.optJSONArray("qty");
+      if(items==null)continue;
+      for(int i=0;i<paid.length&&i<items.length();i++)
+        paid[i]+=Math.max(0,items.optLong(i));
+    }
+    return paid;
+  }
+  long[] soldQuantities(){
+    if(soldQuantitiesConfirmed())return Arrays.copyOf(dayPaidUnits,dayPaidUnits.length);
+    return localPaidUnits();
+  }
+  boolean soldQuantitiesReady(){
+    if(soldQuantitiesConfirmed())return true;
+    for(long n:localPaidUnits())if(n>0)return true;
+    return false;
+  }
   long soldToday(int item){
-    long[] current=dayPaidUnits;
+    long[] current=soldQuantities();
     return item>=0&&item<current.length?current[item]:0L;
   }
   long soldTotalToday(){
-    long sum=0;for(long n:dayPaidUnits)sum+=n;return sum;
+    long sum=0;for(long n:soldQuantities())sum+=n;return sum;
   }
   String day(){return activeDay;}
   int stock(int i){
@@ -161,40 +189,66 @@ final class LiveBranchStore {
     // Owner's existing local report also receives confirmed sales from workers.
     // Only orders from OTHER devices are merged; we never replace old records.
     if(accounts.owner()){
+      // INCLUDE is important: a cached query whose documents have not changed
+      // must still emit the server-confirmed metadata event. Otherwise the
+      // stock screen can remain stuck at "—" until a new order arrives.
       orderListener=branch().collection("liveOrders")
         .whereEqualTo("day",selected)
-        .addSnapshotListener((results,error)->{
+        .addSnapshotListener(MetadataChanges.INCLUDE,(results,error)->{
           if(!selected.equals(activeDay)||!key.equals(activeKey))return;
           if(error!=null||results==null){
             if(dayPaidUnitsConfirmed){dayPaidUnitsConfirmed=false;if(host.activePage==13)host.draw();}
             return;
           }
-          boolean changed=false;
-          for(DocumentChange diff:results.getDocumentChanges()){
-            if(mergeRemoteOrder(diff.getDocument()))changed=true;
-          }
-          // Recompute the full snapshot so status transitions and removals are
-          // reflected once; PENDING and REFUNDED must never inflate sales.
-          long[] paid=new long[host.names.length];
-          for(DocumentSnapshot order:results.getDocuments()){
-            if(!"PAID".equals(order.getString("status")))continue;
-            Object raw=order.get("qty");
-            if(!(raw instanceof List))continue;
-            List<?> quantities=(List<?>)raw;
-            for(int i=0;i<paid.length&&i<quantities.size();i++){
-              Object value=quantities.get(i);
-              if(value instanceof Number)paid[i]+=Math.max(0,((Number)value).longValue());
-            }
-          }
-          boolean confirmed=!results.getMetadata().isFromCache()&&
-            !results.getMetadata().hasPendingWrites();
-          boolean quantityChanged=!Arrays.equals(dayPaidUnits,paid)||
-            dayPaidUnitsConfirmed!=confirmed;
-          dayPaidUnits=paid;dayPaidUnitsConfirmed=confirmed;
-          if((changed&&(host.activePage==1||host.activePage==2||host.activePage==3))||
-             (quantityChanged&&host.activePage==13))host.draw();
+          acceptPaidOrders(results);
         });
     }
+  }
+  private void acceptPaidOrders(QuerySnapshot results){
+    boolean changed=false;
+    for(DocumentChange diff:results.getDocumentChanges())
+      if(mergeRemoteOrder(diff.getDocument()))changed=true;
+    // Count paid transactions by original business day before Closing.
+    // Reservation already decreased live inventory: NEVER subtract it again.
+    long[] paid=new long[host.names.length];
+    for(DocumentSnapshot order:results.getDocuments()){
+      if(!"PAID".equals(order.getString("status")))continue;
+      Object raw=order.get("qty");
+      if(!(raw instanceof List))continue;
+      List<?> quantities=(List<?>)raw;
+      for(int i=0;i<paid.length&&i<quantities.size();i++){
+        Object value=quantities.get(i);
+        if(value instanceof Number)paid[i]+=Math.max(0,((Number)value).longValue());
+      }
+    }
+    boolean confirmed=!results.getMetadata().isFromCache()&&
+      !results.getMetadata().hasPendingWrites();
+    boolean quantityChanged=!Arrays.equals(dayPaidUnits,paid)||
+      dayPaidUnitsConfirmed!=confirmed;
+    dayPaidUnits=paid;dayPaidUnitsConfirmed=confirmed;
+    if((changed&&(host.activePage==1||host.activePage==2||host.activePage==3))||
+       (quantityChanged&&host.activePage==13))host.draw();
+  }
+  void refreshPaidOrders(){
+    if(!accounts.owner()||!accounts.active()){
+      host.message("Owner sahaja boleh semak laporan jualan Cloud.");return;
+    }
+    if(!usable()){
+      host.message("Sambung internet untuk semak transaksi Cloud.");return;
+    }
+    final String selected=activeDay,key=activeKey;
+    if(selected.isEmpty())return;
+    branch().collection("liveOrders").whereEqualTo("day",selected)
+      .get(Source.SERVER).addOnSuccessListener(results->{
+        if(!selected.equals(activeDay)||!key.equals(activeKey))return;
+        acceptPaidOrders(results);
+        if(host.activePage==13)host.draw();
+        host.message("Semakan rekod jualan Cloud selesai · "+selected);
+      }).addOnFailureListener(error->{
+        if(!selected.equals(activeDay)||!key.equals(activeKey))return;
+        host.message("Tak dapat semak order Cloud: "+error.getMessage()+
+          ". Angka telefon sahaja mungkin tidak lengkap.");
+      });
   }
   boolean mergeRemoteOrder(DocumentSnapshot remote){
     if(!accounts.owner())return false;
