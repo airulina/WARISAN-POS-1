@@ -14,6 +14,7 @@ import com.google.firebase.firestore.QuerySnapshot;
 import com.google.firebase.firestore.Query;
 import com.google.firebase.firestore.QueryDocumentSnapshot;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
@@ -39,6 +40,9 @@ final class LiveBranchStore {
   private volatile boolean enabled=false,serverConfirmed=false,busy=false,inventoryChecked=false;
   private volatile List<Long> cloudStock=new ArrayList<>();
   private volatile long daySales=0,dayCash=0,dayQr=0,dayTransactions=0;
+  // Snapshot of PAID (not pending/refunded) orders from ALL devices in this branch.
+  private volatile long[] dayPaidUnits=new long[0];
+  private volatile boolean dayPaidUnitsConfirmed=false;
   private String cloudBranchName="";
   private final String deviceId;
   LiveBranchStore(MainActivity host){
@@ -57,6 +61,14 @@ final class LiveBranchStore {
   long cash(){return dayCash;}
   long qr(){return dayQr;}
   long transactions(){return dayTransactions;}
+  boolean soldQuantitiesReady(){return enabled()&&dayPaidUnitsConfirmed;}
+  long soldToday(int item){
+    long[] current=dayPaidUnits;
+    return item>=0&&item<current.length?current[item]:0L;
+  }
+  long soldTotalToday(){
+    long sum=0;for(long n:dayPaidUnits)sum+=n;return sum;
+  }
   String day(){return activeDay;}
   int stock(int i){
     if(i<0||i>=cloudStock.size())return 0;
@@ -77,6 +89,7 @@ final class LiveBranchStore {
     activeKey="";activeDay="";enabled=false;serverConfirmed=false;busy=false;
     inventoryChecked=false;
     cloudStock=new ArrayList<>();
+    dayPaidUnits=new long[0];dayPaidUnitsConfirmed=false;
   }
   void attach(){
     if(!accounts.active()){stop();return;}
@@ -136,13 +149,14 @@ final class LiveBranchStore {
     if(dayListener!=null)dayListener.remove();
     if(orderListener!=null){orderListener.remove();orderListener=null;}
     activeDay=newDay;daySales=0;dayCash=0;dayQr=0;dayTransactions=0;
+    dayPaidUnits=new long[0];dayPaidUnitsConfirmed=false;
     String key=activeKey,selected=newDay;
     dayListener=daily(selected).addSnapshotListener((snap,error)->{
       if(!selected.equals(activeDay)||!key.equals(activeKey)||snap==null||error!=null)return;
       Long sale=snap.getLong("sales"),cash=snap.getLong("cash"),qr=snap.getLong("qr"),tx=snap.getLong("transactions");
       daySales=sale==null?0:sale;dayCash=cash==null?0:cash;
       dayQr=qr==null?0:qr;dayTransactions=tx==null?0:tx;
-      if(host.activePage==12)host.draw();
+      if(host.activePage==12||host.activePage==13)host.draw();
     });
     // Owner's existing local report also receives confirmed sales from workers.
     // Only orders from OTHER devices are merged; we never replace old records.
@@ -150,12 +164,35 @@ final class LiveBranchStore {
       orderListener=branch().collection("liveOrders")
         .whereEqualTo("day",selected)
         .addSnapshotListener((results,error)->{
-          if(error!=null||results==null||!selected.equals(activeDay)||!key.equals(activeKey))return;
+          if(!selected.equals(activeDay)||!key.equals(activeKey))return;
+          if(error!=null||results==null){
+            if(dayPaidUnitsConfirmed){dayPaidUnitsConfirmed=false;if(host.activePage==13)host.draw();}
+            return;
+          }
           boolean changed=false;
           for(DocumentChange diff:results.getDocumentChanges()){
             if(mergeRemoteOrder(diff.getDocument()))changed=true;
           }
-          if(changed&&(host.activePage==1||host.activePage==2||host.activePage==3))host.draw();
+          // Recompute the full snapshot so status transitions and removals are
+          // reflected once; PENDING and REFUNDED must never inflate sales.
+          long[] paid=new long[host.names.length];
+          for(DocumentSnapshot order:results.getDocuments()){
+            if(!"PAID".equals(order.getString("status")))continue;
+            Object raw=order.get("qty");
+            if(!(raw instanceof List))continue;
+            List<?> quantities=(List<?>)raw;
+            for(int i=0;i<paid.length&&i<quantities.size();i++){
+              Object value=quantities.get(i);
+              if(value instanceof Number)paid[i]+=Math.max(0,((Number)value).longValue());
+            }
+          }
+          boolean confirmed=!results.getMetadata().isFromCache()&&
+            !results.getMetadata().hasPendingWrites();
+          boolean quantityChanged=!Arrays.equals(dayPaidUnits,paid)||
+            dayPaidUnitsConfirmed!=confirmed;
+          dayPaidUnits=paid;dayPaidUnitsConfirmed=confirmed;
+          if((changed&&(host.activePage==1||host.activePage==2||host.activePage==3))||
+             (quantityChanged&&host.activePage==13))host.draw();
         });
     }
   }
