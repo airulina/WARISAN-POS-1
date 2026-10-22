@@ -56,6 +56,9 @@ jobs:
             exit 1
           fi
 
+      - name: Verify five themes and readable text contrast
+        run: node tests/theme-contrast-smoke.mjs
+
       - name: Build APK
         run: gradle assembleDebug --no-daemon
 
