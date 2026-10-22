@@ -674,12 +674,24 @@ selectedDay=date();selectedMonth=selectedDay.substring(0,7);rangeStart=selectedD
   }
   void drawLiveBranchStock(){
     heading("Stok · "+branchAccounts.branchName(),
-      "OWNER · Baki stok sebenar daripada Firebase bagi branch ini.");
+      "OWNER · Baki stok dan jumlah terjual Live bagi branch ini.");
     action("‹  Kembali ke semua Branch",()->{activePage=1;draw();});
     action("☁  Live Branch: "+(live.usable()?"ONLINE":"Menunggu Server"),()->live.showDashboard());
     if(!live.usable())
       add(body,text("Offline: semua tindakan tambah, edit, rosak, Edar dan stok pulang "+
         "dikunci sehingga Cloud disahkan.",12,0xffff6b6b,true),-1,-2);
+    String liveDay=live.day().isEmpty()?businessDay():live.day();
+    add(body,text("RINGKASAN JUALAN LIVE · "+liveDay,13,gold,true),-1,-2);gap(body,6);
+    LinearLayout dayOverview=row();
+    metric(dayOverview,"JUMLAH JUALAN HARI INI",live.usable()?money((int)live.sales()):"—",blue,null);
+    metric(dayOverview,"JUMLAH ITEM TERJUAL",live.soldQuantitiesReady()?
+      live.soldTotalToday()+" unit":"—",themeLight?0xff087F65:0xff4ADEB9,null);
+    add(body,dayOverview,-1,-2);gap(body,7);
+    if(!live.soldQuantitiesReady()){
+      add(body,text("Bilangan terjual sedang disahkan daripada order Cloud. "+
+        "Tanda — bermaksud belum dapat disahkan, bukan sifar jualan.",11,muted,false),-1,-2);
+      gap(body,9);
+    }
     add(body,text("Stok awal branch Live ditetapkan semasa Live diaktifkan. "+
       "Gunakan EDIT BAKI untuk pembetulan stok awal/semasa, bukan pembelian baru.",
       11,muted,false),-1,-2);gap(body,9);
@@ -690,9 +702,14 @@ selectedDay=date();selectedMonth=selectedDay.substring(0,7);rangeStart=selectedD
         message("Item ini tiada had stok unit."));continue;}
       LinearLayout item=col();item.setPadding(dp(12),dp(12),dp(12),dp(12));
       item.setBackground(shape(surface,13));
-      add(item,text(names[id],16,ink,true),-1,-2);gap(item,5);
-      add(item,text("BAKI STOK LIVE: "+stock(id)+" "+(id<3?"cucuk":"unit"),
-        17,gold,true),-1,-2);gap(item,8);
+      add(item,text(names[id],16,ink,true),-1,-2);gap(item,8);
+      String unit=id<3?" cucuk":" unit";
+      LinearLayout numbers=row();
+      liveStockTile(numbers,"TERJUAL HARI INI",live.soldQuantitiesReady()?
+        live.soldToday(id)+unit:"—",false);
+      liveStockTile(numbers,"BAKI STOK LIVE",live.usable()?
+        stock(id)+unit:"—",true);
+      add(item,numbers,-1,-2);gap(item,11);
       LinearLayout actions=row();
       TextView restock=chip("+ RESTOCK",blue,Color.WHITE);
       restock.setGravity(Gravity.CENTER);
@@ -734,8 +751,21 @@ selectedDay=date();selectedMonth=selectedDay.substring(0,7);rangeStart=selectedD
     action("RINGKASAN BAKI STOK LIVE",()->showLiveStockSummary());
     add(body,text("History Edar, bayaran dan rosak terdahulu disimpan pada "+
       "telefon branch ini. History perubahan Cloud dibaca terus dari Firebase. "+
-      "Jangan anggap rekod tempatan sebagai semua sejarah Cloud.",
+      "Jualan terjual hanya order Live yang SUDAH DIBAYAR; baki stok juga "+
+      "menolak tempahan belum bayar. Rekod lama pada telefon lain mungkin tiada di sini.",
       11,muted,false),-1,-2);
+  }
+  /** Two clear compact figures per Live inventory item, readable in every theme. */
+  void liveStockTile(LinearLayout row,String label,String value,boolean balance){
+    LinearLayout tile=col();tile.setGravity(Gravity.CENTER_VERTICAL);
+    tile.setPadding(dp(11),dp(9),dp(8),dp(9));
+    tile.setBackground(shape(surfaceAlt,12));
+    add(tile,text(label,10,muted,true),-1,-2);gap(tile,6);
+    int highlight=balance?(value.startsWith("0 ")?profitColor(-1):gold):
+      (themeLight?0xff087F65:0xff4ADEB9);
+    add(tile,text(value,18,"—".equals(value)?muted:highlight,true),-1,-2);
+    LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(0,dp(73),1);
+    lp.setMargins(dp(3),0,dp(3),0);row.addView(tile,lp);
   }
   void showLiveStockSummary(){
     if(!branchAccounts.owner()||live==null||!live.usable()){
@@ -746,10 +776,13 @@ selectedDay=date();selectedMonth=selectedDay.substring(0,7);rangeStart=selectedD
     for(int i=0;i<names.length;i++){
       if(posPrefs().getBoolean("menu_hidden_"+i,false))continue;
       if(unlimited(i)){report.append(names[i]).append(": tanpa had unit\n");continue;}
-      report.append(names[i]).append(": ").append(stock(i))
+      report.append(names[i]).append(": terjual hari ini ")
+        .append(live.soldQuantitiesReady()?String.valueOf(live.soldToday(i)):"belum disahkan")
+        .append(" · baki ").append(stock(i))
         .append(i<3?" cucuk":" unit").append("\n");
     }
-    report.append("\nBaki semasa disahkan melalui Cloud. "+
+    report.append("\nTerjual = order Live sudah dibayar (bukan pending/refund). "+
+      "Baki semasa disahkan melalui Cloud dan boleh termasuk stok ditempah. "+
       "Untuk sejarah pembetulan, tekan HISTORY PERUBAHAN STOK LIVE.");
     darkBuilder().setTitle("RINGKASAN STOK LIVE").setMessage(report.toString())
       .setPositiveButton("TUTUP",null).show();
