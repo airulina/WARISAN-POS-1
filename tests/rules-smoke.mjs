@@ -249,7 +249,19 @@ try{
     updatedAt:serverTimestamp()
   }));
   await assertSucceeds(updateDoc(d(staff2,branch+'/liveSessions/'+today),{
-    open:false,closing:0,closedBy:'staff2',closedByEmail:'staff2@example.test',
+    open:false,closing:-500,closedBy:'staff2',closedByEmail:'staff2@example.test',
+    expenses:[{category:'Sewa',amount:1500},{category:'Plastik',amount:800}],
+    expenseTotal:2300,closingRemark:'Disahkan, baki tunai negatif',
+    updatedAt:serverTimestamp()
+  }));
+  // Existing v3.45 workers must remain able to close during staged rollout.
+  await assertSucceeds(setDoc(d(staffOtherBranch,branchTwo+'/liveSessions/'+today),{
+    ownerUid:'owner',branchId:'jalan-kebun',day:today,
+    openedBy:'staff-branch-two',openedByEmail:'branch-two@example.test',
+    opening:0,open:true,updatedAt:serverTimestamp()
+  }));
+  await assertSucceeds(updateDoc(d(staffOtherBranch,branchTwo+'/liveSessions/'+today),{
+    open:false,closing:0,closedBy:'staff-branch-two',closedByEmail:'branch-two@example.test',
     updatedAt:serverTimestamp()
   }));
   await assertFails(updateDoc(d(staff2,branch+'/liveSessions/'+today),{

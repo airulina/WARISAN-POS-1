@@ -944,7 +944,84 @@ final class LiveBranchStore {
     if(openingSummary.isEmpty())content.append("Belum menerima status daripada Firestore.");
     host.darkBuilder().setTitle("CASHFLOW LIVE · SEMUA BRANCH")
       .setMessage(content.toString())
+      .setNeutralButton("URUS CLOSING TERTINGGAL",(d,w)->showOwnerForcedClosing())
       .setPositiveButton("TUTUP",null).show();
+  }
+  /** Owner audit action: resolve an abandoned Cloud shift without rewriting sales. */
+  void showOwnerForcedClosing(){
+    if(!accounts.owner()||accounts.user()==null)return;
+    final String ownerId=accounts.ownerUid();
+    db.collection("workspaces").document(ownerId).collection("branches")
+      .get(Source.SERVER).addOnSuccessListener(branches->{
+        List<com.google.android.gms.tasks.Task<QuerySnapshot>> requests=new ArrayList<>();
+        ArrayList<String> names=new ArrayList<>();
+        for(QueryDocumentSnapshot branch:branches){
+          requests.add(branch.getReference().collection("liveSessions")
+            .whereEqualTo("open",true).get(Source.SERVER));
+          names.add(branch.getString("name")==null?branch.getId():branch.getString("name"));
+        }
+        if(requests.isEmpty()){host.message("Tiada cawangan.");return;}
+        com.google.android.gms.tasks.Tasks.whenAllSuccess(requests).addOnSuccessListener(results->{
+          if(!accounts.owner()||!ownerId.equals(accounts.ownerUid()))return;
+          ArrayList<DocumentSnapshot> sessions=new ArrayList<>();
+          ArrayList<String> labels=new ArrayList<>();
+          for(int i=0;i<results.size();i++){
+            QuerySnapshot batch=(QuerySnapshot)results.get(i);
+            for(DocumentSnapshot shift:batch.getDocuments()){
+              sessions.add(shift);
+              labels.add(names.get(i)+" · "+shift.getId()+" · "+
+                (shift.getString("openedByEmail")==null?"Pekerja":shift.getString("openedByEmail")));
+            }
+          }
+          if(sessions.isEmpty()){host.message("Tiada sesi Cloud tertinggal yang masih OPEN.");return;}
+          host.darkBuilder().setTitle("CLOSING TERTINGGAL · OWNER")
+            .setItems(labels.toArray(new String[0]),(dialog,index)->
+              confirmOwnerForcedClosing(sessions.get(index),labels.get(index)))
+            .setNegativeButton("BATAL",null).show();
+        }).addOnFailureListener(e->host.message("Semak sesi tertinggal gagal: "+e.getMessage()));
+      }).addOnFailureListener(e->host.message("Senarai cawangan gagal: "+e.getMessage()));
+  }
+  void confirmOwnerForcedClosing(DocumentSnapshot session,String label){
+    if(!accounts.owner())return;
+    LinearLayout form=host.col();form.setPadding(host.dp(18),host.dp(8),host.dp(18),host.dp(8));
+    host.add(form,host.text("Semak baki tunai sebenar. Ini hanya tutup SESI CLOUD, bukan mengubah jualan atau data telefon pekerja.",13,host.gold,true),-1,-2);
+    EditText balance=host.priceField("Baki tunai sebenar RM","0.00");
+    balance.setInputType(android.text.InputType.TYPE_CLASS_NUMBER|
+      android.text.InputType.TYPE_NUMBER_FLAG_DECIMAL|
+      android.text.InputType.TYPE_NUMBER_FLAG_SIGNED);
+    EditText reason=new EditText(host);reason.setHint("Sebab: pekerja terlupa Closing / berhenti mendadak");
+    reason.setSingleLine(false);reason.setMinLines(2);host.styleInput(reason);
+    host.add(form,host.text("BAKI TUNAI (BOLEH NEGATIF)",11,host.muted,true),-1,-2);
+    host.add(form,balance,-1,-2);host.add(form,host.text("SEBAB WAJIB",11,host.muted,true),-1,-2);
+    host.add(form,reason,-1,-2);
+    android.app.AlertDialog dialog=host.darkBuilder().setTitle(label)
+      .setView(form).setPositiveButton("SAHKAN CLOSING OWNER",null)
+      .setNegativeButton("BATAL",null).create();
+    dialog.setOnShowListener(v->{host.styleDarkDialogNow(dialog);
+      dialog.getButton(android.app.AlertDialog.BUTTON_POSITIVE).setOnClickListener(x->{
+        try{
+          int cash=host.parseCents(balance);String note=reason.getText().toString().trim();
+          if(cash < -100000000||cash > 100000000)throw new Exception("Nilai baki di luar julat.");
+          if(note.isEmpty()||note.length()>500)throw new Exception("Isi sebab Closing (maksimum 500 aksara).");
+          if(!accounts.owner()||accounts.user()==null)return;
+          final String actor=accounts.user().getUid(),email=accounts.user().getEmail();
+          db.runTransaction(tx->{
+            DocumentSnapshot current=tx.get(session.getReference());
+            if(!current.exists()||!Boolean.TRUE.equals(current.getBoolean("open")))
+              throw new IllegalStateException("Sesi sudah ditutup oleh pengguna lain.");
+            Map<String,Object> fields=new HashMap<>();
+            fields.put("open",false);fields.put("closing",cash);
+            fields.put("closedBy",actor);fields.put("closedByEmail",email==null?"OWNER":email);
+            fields.put("forcedByOwner",true);fields.put("forcedReason",note);
+            fields.put("closingRemark",note);fields.put("expenseTotal",0);
+            fields.put("expenses",new ArrayList<Map<String,Object>>());
+            fields.put("updatedAt",FieldValue.serverTimestamp());
+            tx.update(session.getReference(),fields);return null;
+          }).addOnSuccessListener(done->{dialog.dismiss();host.message("Sesi Cloud ditutup oleh Owner. Rekod jualan kekal.");})
+            .addOnFailureListener(e->host.message("Closing Owner gagal: "+e.getMessage()));
+        }catch(Exception e){host.message(e.getMessage()==null?"Semak jumlah dan sebab.":e.getMessage());}
+      });
+    });dialog.show();
   }
   void showOpeningAlerts(){
     if(!accounts.owner())return;
@@ -992,6 +1069,11 @@ final class LiveBranchStore {
       }).addOnFailureListener(e->host.message("Gagal semak branch: "+e.getMessage()));
   }
   void sessionConfirmed(boolean open,String day,int amount,Done onSuccess){
+    sessionConfirmed(open,day,amount,new JSONArray(),"",onSuccess);
+  }
+  /** Store staff Closing expenses alongside the cloud session for Owner audit. */
+  void sessionConfirmed(boolean open,String day,int amount,JSONArray expenses,
+      String remark,Done onSuccess){
     if(!usable()||!accounts.staff()||!accounts.staffBranchVerified){
       host.message("Opening/Closing pekerja memerlukan Live ONLINE dan branch BUKA.");return;
     }
@@ -1015,6 +1097,7 @@ final class LiveBranchStore {
       state.put(open?"openedBy":"closedBy",uid);
       state.put(open?"openedByEmail":"closedByEmail",accounts.user().getEmail());
       state.put(open?"opening":"closing",amount);
+      if(!open)addClosingMetadata(state,expenses,remark);
       state.put("updatedAt",FieldValue.serverTimestamp());
       tx.set(doc,state,com.google.firebase.firestore.SetOptions.merge());
       return null;
@@ -1033,6 +1116,22 @@ final class LiveBranchStore {
       .setPositiveButton("FAHAM",null).show());
   }
   void session(boolean open,String day,int amount){
+    session(open,day,amount,new JSONArray(),"");
+  }
+  private void addClosingMetadata(Map<String,Object> state,JSONArray expenses,String remark){
+    List<Map<String,Object>> lines=new ArrayList<>();long spent=0;
+    for(int i=0;i<expenses.length();i++){
+      JSONObject e=expenses.optJSONObject(i);if(e==null)continue;
+      String category=e.optString("category","");int amount=e.optInt("amount",0);
+      if(category.isEmpty()||amount<=0)continue;
+      Map<String,Object> row=new HashMap<>();row.put("category",category);
+      row.put("amount",amount);lines.add(row);spent+=amount;
+    }
+    state.put("expenses",lines);
+    state.put("expenseTotal",spent);
+    state.put("closingRemark",remark==null?"":remark);
+  }
+  void session(boolean open,String day,int amount,JSONArray expenses,String remark){
     if(!accounts.active()||!usable())return;
     DocumentReference doc=branch().collection("liveSessions").document(day);
     Map<String,Object> state=new HashMap<>();
@@ -1046,6 +1145,7 @@ final class LiveBranchStore {
       state.put("closedBy",accounts.user().getUid());
       state.put("closedByEmail",accounts.user().getEmail());
       state.put("closing",amount);state.put("open",false);
+      addClosingMetadata(state,expenses,remark);
     }
     state.put("updatedAt",FieldValue.serverTimestamp());
     doc.set(state,com.google.firebase.firestore.SetOptions.merge())

@@ -438,9 +438,28 @@ service cloud.firestore {
               && request.resource.data.closedBy == request.auth.uid
               && request.resource.data.closedByEmail == request.auth.token.email
               && request.resource.data.closing is number
-              && request.resource.data.closing >= 0
-              && request.resource.data.diff(resource.data).affectedKeys()
-                .hasOnly(["open","closing","closedBy","closedByEmail","updatedAt"]));
+              && (
+                // Rollout safety: v3.45 workers can still close while Owner
+                // upgrades Firestore rules ahead of deploying v3.46 APKs.
+                (request.resource.data.closing >= 0
+                  && request.resource.data.diff(resource.data).affectedKeys()
+                    .hasOnly(["open","closing","closedBy","closedByEmail","updatedAt"]))
+                ||
+                // v3.46 adds itemized expense audit and signed cash deficits.
+                (request.resource.data.closing >= -100000000
+                  && request.resource.data.closing <= 100000000
+                  && request.resource.data.expenses is list
+                  && request.resource.data.expenses.size() <= 20
+                  && request.resource.data.expenseTotal is number
+                  && request.resource.data.expenseTotal >= 0
+                  && request.resource.data.expenseTotal <= 100000000
+                  && request.resource.data.closingRemark is string
+                  && request.resource.data.closingRemark.size() <= 500
+                  && request.resource.data.diff(resource.data).affectedKeys()
+                    .hasAll(["expenses","expenseTotal","closingRemark"])
+                  && request.resource.data.diff(resource.data).affectedKeys()
+                    .hasOnly(["open","closing","closedBy","closedByEmail",
+                      "expenses","expenseTotal","closingRemark","updatedAt"]))));
           allow delete: if false;
         }
         // Refund requests: staff may request; ONLY Owner may approve/deny.
