@@ -410,7 +410,7 @@ final class OwnerCashflow {
     host.gap(host.body,6);
     LinearLayout profit=host.row();
     host.metric(profit,english?"LOCAL NET PROFIT":"UNTUNG BERSIH TEMPATAN",rm(localProfit),
-      localProfit>=0?host.gold:0xffff6b6b,null);
+      host.profitColor(localProfit),null);
     host.add(host.body,profit,-1,-2);host.gap(host.body,7);
     LinearLayout costs=host.row();
     host.metric(costs,english?"PRODUCT COST":"KOS PRODUK",rm(localCost),host.ink,null);
@@ -423,6 +423,7 @@ final class OwnerCashflow {
       "jualan dan kos yang direkod pada telefon ini untuk "+accounts.branchName()+
       ", bukan untung bersih semua cawangan.",11,host.muted,false),-1,-2);
     host.gap(host.body,10);
+    host.drawProductSalesSummary(day);
     host.action((english?"🔓  OPENING / CLOSING · ":"🔓  BUKA / TUTUP SESI · ")+
       accounts.branchName(),()->{host.activePage=22;host.draw();});
     host.action(english?"🏪  VIEW BRANCHES BY DATE":"🏪  LIHAT CAWANGAN IKUT TARIKH",()->{
@@ -453,7 +454,7 @@ final class OwnerCashflow {
     int monthlyLocalProfit=host.businessProfit(host.selectedMonth,false);
     host.metric(monthCards,english?"MONTHLY LOCAL POS PROFIT":
       "UNTUNG BULANAN POS TEMPATAN",rm(monthlyLocalProfit),
-      monthlyLocalProfit>=0?host.gold:0xffff6b6b,null);
+      host.profitColor(monthlyLocalProfit),null);
     host.add(host.body,monthCards,-1,-2);host.gap(host.body,7);
     host.action(english?"📊  VIEW FULL MONTHLY REPORT":
       "📊  LIHAT LAPORAN BULANAN PENUH",()->{
@@ -600,8 +601,7 @@ final class OwnerCashflow {
       LinearLayout profitBox=host.row();
       host.metric(profitBox,host.cashDailyMode?
           "UNTUNG HARIAN POS TEMPATAN":"UNTUNG BULANAN POS TEMPATAN",
-        rm(branchLocalProfit),
-        branchLocalProfit>=0?host.gold:0xffff6b6b,null);
+        rm(branchLocalProfit),host.profitColor(branchLocalProfit),null);
       host.add(host.body,profitBox,-1,-2);host.gap(host.body,6);
       host.add(host.body,host.text(host.english()?
           "Costs and profits come only from records on the active branch's phone. "+
@@ -705,7 +705,7 @@ final class OwnerCashflow {
       LinearLayout expenses=host.row();
       host.metric(expenses,"BELANJA OPERASI",rm(operations),host.ink,null);
       host.metric(expenses,"UNTUNG POS TEMPATAN",rm(profit),
-        profit>=0?host.gold:0xffff6b6b,null);
+        host.profitColor(profit),null);
       host.add(host.body,expenses,-1,-2);host.gap(host.body,8);
       host.add(host.body,host.text("Pengeluaran peribadi: "+rm(personal)+
         "  ·  Baki pembekal perlu bayar: "+rm(host.supplierDue()),12,host.muted,false),-1,-2);
