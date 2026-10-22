@@ -62,6 +62,9 @@ jobs:
       - name: Verify Owner profit and product charts
         run: node tests/owner-finance-smoke.mjs
 
+      - name: Verify Live stock sold and balance display
+        run: node tests/live-stock-smoke.mjs
+
       - name: Build APK
         run: gradle assembleDebug --no-daemon
 
