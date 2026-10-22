@@ -17,8 +17,6 @@ final class OwnerSalesChart extends View {
   private final ArrayList<Long> values=new ArrayList<>();
   private final ArrayList<String> labels=new ArrayList<>();
   private final Paint p=new Paint(Paint.ANTI_ALIAS_FLAG);
-  private final int blue=Color.rgb(73,135,215);
-  private final int muted=Color.rgb(166,184,202);
   OwnerSalesChart(Context context,TreeMap<String,OwnerCashflow.Day> days,String month){
     super(context);this.month=month;
     for(Map.Entry<String,OwnerCashflow.Day> entry:days.entrySet()){
@@ -35,12 +33,20 @@ final class OwnerSalesChart extends View {
   }
   @Override protected void onDraw(Canvas c){
     super.onDraw(c);
+    MainActivity host=getContext() instanceof MainActivity?
+      (MainActivity)getContext():null;
+    int background=host==null?Color.rgb(18,43,68):host.surface;
+    int title=host==null?Color.rgb(230,237,245):host.ink;
+    int muted=host==null?Color.rgb(166,184,202):host.muted;
+    int bar=host==null?Color.rgb(73,135,215):host.blue;
+    int grid=host==null?Color.rgb(53,78,102):
+      (host.themeLight?0xffD1DFEF:host.surfaceAlt);
     float density=getResources().getDisplayMetrics().density;
     float w=getWidth(),h=getHeight();
-    p.setColor(Color.rgb(18,43,68));
+    p.setColor(background);
     c.drawRoundRect(new RectF(0,0,w,h),14*density,14*density,p);
     p.setTextSize(12*density);p.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
-    p.setColor(Color.rgb(230,237,245));c.drawText(display("GRAF JUALAN HARIAN · "+month),14*density,24*density,p);
+    p.setColor(title);c.drawText(display("GRAF JUALAN HARIAN · "+month),14*density,24*density,p);
     if(values.isEmpty()){
       p.setColor(muted);p.setTextSize(12*density);
       c.drawText(display("Tiada jualan untuk bulan dipilih."),14*density,h/2,p);return;
@@ -51,7 +57,7 @@ final class OwnerSalesChart extends View {
     p.setTypeface(android.graphics.Typeface.DEFAULT);p.setTextSize(9*density);
     for(int i=0;i<=3;i++){
       float y=bottom-(bottom-top)*i/3f;
-      p.setColor(Color.rgb(53,78,102));p.setStrokeWidth(density);
+      p.setColor(grid);p.setStrokeWidth(density);
       c.drawLine(left,y,right,y,p);
       p.setColor(muted);
       c.drawText(String.format(Locale.US,"%.0f",max*i/300.0),4*density,y+3*density,p);
@@ -60,7 +66,7 @@ final class OwnerSalesChart extends View {
     for(int i=0;i<values.size();i++){
       float tall=(bottom-top)*(values.get(i)/(float)max);
       float x=left+step*i+step*.16f;
-      p.setColor(blue);
+      p.setColor(bar);
       c.drawRoundRect(new RectF(x,bottom-tall,x+Math.max(2*density,step*.68f),bottom),2*density,2*density,p);
       if(values.size()<=16||i%5==0){
         p.setColor(muted);p.setTextSize(8*density);

@@ -157,10 +157,22 @@ private static final int RC_SIGN_IN = 9001;
     GradientDrawable d=new GradientDrawable();
     d.setColor(themeColor(color));d.setCornerRadius(dp(radius));return d;
   }
+  GradientDrawable cardShape(int radius){
+    GradientDrawable d=shape(surface,radius);
+    if(themeLight)d.setStroke(dp(1),surfaceAlt);
+    return d;
+  }
   void makeCircle(ImageView view){
     GradientDrawable oval=new GradientDrawable();oval.setShape(GradientDrawable.OVAL);oval.setColor(Color.TRANSPARENT);view.setBackground(oval);view.setClipToOutline(true);view.setScaleType(ImageView.ScaleType.CENTER_CROP);
   }
-  TextView text(String s,int size,int color,boolean bold){TextView t=new TextView(this);t.setText(ui(s));t.setTextSize(size);t.setTextColor(color);if(bold)t.setTypeface(null,Typeface.BOLD);t.setGravity(Gravity.CENTER_VERTICAL);return t;}
+  TextView text(String s,int size,int color,boolean bold){
+    TextView t=new TextView(this);
+    t.setText(ui(s));t.setTextSize(size);
+    t.setTextColor(WarisanTheme.readableText(color,surface,ink));
+    if(bold)t.setTypeface(null,Typeface.BOLD);
+    t.setGravity(Gravity.CENTER_VERTICAL);
+    return t;
+  }
   LinearLayout col(){LinearLayout l=new LinearLayout(this);l.setOrientation(1);return l;}
   LinearLayout row(){LinearLayout l=new LinearLayout(this);l.setOrientation(0);l.setGravity(Gravity.CENTER_VERTICAL);return l;}
   LinearLayout.LayoutParams params(int w,int h){return new LinearLayout.LayoutParams(w<0?w:dp(w),h<0?h:dp(h));}
@@ -173,7 +185,9 @@ private static final int RC_SIGN_IN = 9001;
       contrast=onAccent;
     else if(fore==Color.WHITE&&themeColor(back)==surfaceAlt)
       contrast=navOffText;
+    int background=themeColor(back);
     TextView t=text(ui(s),13,contrast,true);
+    t.setTextColor(WarisanTheme.readableText(contrast,background,ink));
     t.setGravity(Gravity.CENTER);t.setBackground(shape(back,11));
     t.setPadding(dp(8),dp(5),dp(8),dp(5));return t;
   }
@@ -240,7 +254,12 @@ selectedDay=date();selectedMonth=selectedDay.substring(0,7);rangeStart=selectedD
     LinearLayout screen=col();screen.setBackgroundColor(cream);
     getWindow().setStatusBarColor(cream);
     getWindow().setNavigationBarColor(cream);
-    getWindow().getDecorView().setSystemUiVisibility(0);
+    int systemFlags=0;
+    if(themeLight){
+      systemFlags|=View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR;
+      if(Build.VERSION.SDK_INT>=26)systemFlags|=View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR;
+    }
+    getWindow().getDecorView().setSystemUiVisibility(systemFlags);
     if(Build.VERSION.SDK_INT>=35){
       screen.setOnApplyWindowInsetsListener((view,insets)->{
         view.setPadding(0,insets.getSystemWindowInsetTop(),0,insets.getSystemWindowInsetBottom());
@@ -327,20 +346,20 @@ selectedDay=date();selectedMonth=selectedDay.substring(0,7);rangeStart=selectedD
     gap(body,8);
     LinearLayout footer=row();footer.setPadding(dp(17),dp(9),dp(17),dp(10));footer.setBackgroundColor(surface);
     LinearLayout amount=col();add(amount,text("JUMLAH",11,muted,true),-1,-2);total=text("RM 0.00",22,blue,true);add(amount,total,-1,-2);footer.addView(amount,new LinearLayout.LayoutParams(0,-2,1));
-    payButton=new Button(this);payButton.setAllCaps(false);payButton.setText(ui("Confirm Order  →"));payButton.setTextColor(onPrimary);payButton.setTextSize(16);payButton.setBackground(shape(blue,12));payButton.setOnClickListener(v->confirmOrder());add(footer,payButton,140,51);add(screen,footer,-1,-2);refresh();addNavigation(screen);
+    payButton=new Button(this);payButton.setAllCaps(false);payButton.setText(ui("Confirm Order  →"));payButton.setTextColor(WarisanTheme.readableText(onPrimary,blue,ink));payButton.setTextSize(16);payButton.setBackground(shape(blue,12));payButton.setOnClickListener(v->confirmOrder());add(footer,payButton,140,51);add(screen,footer,-1,-2);refresh();addNavigation(screen);
   }
 
   void startHeaderClock(TextView view){final android.os.Handler h=new android.os.Handler(android.os.Looper.getMainLooper());final Runnable[] tick=new Runnable[1];tick[0]=()->{if(!view.isAttachedToWindow())return;view.setText(new SimpleDateFormat("dd/MM/yyyy  HH:mm:ss",Locale.US).format(new Date()));h.postDelayed(tick[0],1000);};view.post(tick[0]);}
   void product(LinearLayout pair,int id){
-    LinearLayout card=row();card.setGravity(Gravity.CENTER_VERTICAL);card.setPadding(dp(11),dp(10),dp(11),dp(10));card.setBackground(shape(surface,15));
+    LinearLayout card=row();card.setGravity(Gravity.CENTER_VERTICAL);card.setPadding(dp(11),dp(11),dp(11),dp(11));card.setBackground(cardShape(16));
     // Menu sengaja guna ikon ringan sahaja. Logo kedai kekal pada header/resit.
-    TextView icon=chip(icons[id],0xff203f61,gold);icon.setTextSize(20);icon.setGravity(Gravity.CENTER);add(card,icon,52,52);
+    TextView icon=chip(icons[id],0xff203f61,gold);icon.setTextSize(20);icon.setGravity(Gravity.CENTER);add(card,icon,46,46);
     LinearLayout info=col();info.setPadding(dp(11),0,dp(8),0);TextView name=text(names[id],15,ink,true);name.setMaxLines(2);add(info,name,-1,-2);gap(info,3);add(info,text(money(prices[id]),14,gold,true),-1,-2);
     int available=unlimited(id)?Integer.MAX_VALUE:stock(id);
     String shownStock=unlimited(id)?"Stok: Tanpa had":(live!=null&&live.enabled()&&!live.usable()?"Baki terakhir (offline): ":"Baki stok: ")+available+(available==0?" · HABIS":"")+" "+(id<3?"cucuk":"unit");
     TextView stockLabel=text(shownStock,11,available==0?0xffff4d4d:blue,true);add(info,stockLabel,-1,-2);card.addView(info,new LinearLayout.LayoutParams(0,-2,1));
     LinearLayout controls=row();controls.setGravity(Gravity.CENTER_VERTICAL);TextView minus=chip("−",0xffc83f46,Color.WHITE),number=text(""+qty[id],16,ink,true),plus=chip("+",blue,Color.WHITE);minus.setGravity(Gravity.CENTER);number.setGravity(Gravity.CENTER);plus.setGravity(Gravity.CENTER);
-    add(controls,minus,45,42);add(controls,number,44,42);add(controls,plus,45,42);add(card,controls,-2,-2);
+    add(controls,minus,39,43);add(controls,number,34,43);add(controls,plus,39,43);add(card,controls,-2,-2);
     number.setClickable(true);number.setOnClickListener(v->editOrderQuantity(id));
     minus.setOnClickListener(v->{qty[id]=Math.max(0,qty[id]-1);draw();});
     plus.setAlpha(available<=qty[id]?.35f:1f);plus.setEnabled(available>qty[id]);plus.setOnClickListener(v->stockLimit(id,1));
@@ -358,13 +377,13 @@ selectedDay=date();selectedMonth=selectedDay.substring(0,7);rangeStart=selectedD
     for(int i=0;i<qty.length;i++)if(qty[i]>0){final int id=i;LinearLayout r=row();r.addView(text(names[i]+" × "+qty[i],14,ink,true),new LinearLayout.LayoutParams(0,dp(39),1));add(r,text(money(qty[i]*prices[i]),13,blue,true),-2,-2);TextView minus=chip("−",0xffc83f46,Color.WHITE);LinearLayout.LayoutParams m=params(32,30);m.leftMargin=dp(8);r.addView(minus,m);minus.setOnClickListener(v->{qty[id]--;draw();});add(basket,r,-1,-2);}
   }
   void addNavigation(LinearLayout screen){LinearLayout nav=row();nav.setBackgroundColor(cream);nav.setPadding(dp(7),dp(7),dp(7),dp(9));String[] labels=branchAccounts.staff()?new String[]{"MENU","ORDER","STOK","HARI INI","PRINTER","ACCOUNT"}:(english()?new String[]{"MENU","ORDERS","STOCK","CASH","BRANCH","SETTINGS"}:new String[]{"MENU","ORDER","STOK","DUIT","BRANCH","SETTING"});int[] pages=branchAccounts.staff()?new int[]{0,11,20,12,14,5}:new int[]{0,11,1,3,15,4};
-    for(int i=0;i<labels.length;i++){final int page=pages[i];boolean selected=(activePage==page)||(page==1&&activePage==13)||(page==3&&(activePage==2||activePage==16||activePage==17||activePage==18||activePage==19||activePage==21||activePage==22))||(page==4&&activePage>=4&&activePage<=10);TextView tab=text(labels[i],branchAccounts.staff()?10:9,selected?onAccent:navOffText,true);tab.setGravity(Gravity.CENTER);tab.setBackground(shape(selected?gold:navOff,11));LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(0,dp(49),1);p.setMargins(dp(3),0,dp(3),0);nav.addView(tab,p);tab.setOnClickListener(v->{activePage=page;draw();});}add(screen,nav,-1,-2);}
+    for(int i=0;i<labels.length;i++){final int page=pages[i];boolean selected=(activePage==page)||(page==1&&activePage==13)||(page==3&&(activePage==2||activePage==16||activePage==17||activePage==18||activePage==19||activePage==21||activePage==22))||(page==4&&activePage>=4&&activePage<=10);int background=selected?gold:navOff,foreground=selected?onAccent:navOffText;TextView tab=text(labels[i],branchAccounts.staff()?10:10,foreground,true);tab.setTextColor(WarisanTheme.readableText(foreground,background,ink));tab.setGravity(Gravity.CENTER);tab.setMaxLines(1);tab.setEllipsize(android.text.TextUtils.TruncateAt.END);tab.setBackground(shape(background,13));LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(0,dp(53),1);p.setMargins(dp(2),0,dp(2),0);nav.addView(tab,p);tab.setOnClickListener(v->{activePage=page;draw();});}add(screen,nav,-1,-2);}
   void heading(String title,String subtitle){
     LinearLayout brand=row();brand.setGravity(Gravity.CENTER_VERTICAL);ImageView logo=new ImageView(this);setStoreLogo(logo);makeCircle(logo);add(brand,logo,44,44);LinearLayout brandText=col();brandText.setPadding(dp(9),0,0,0);add(brandText,text("WARISAN POS",18,blue,true),-1,-2);add(brandText,text("KIOS WARISAN  ·  SISTEM JUALAN",9,muted,true),-1,-2);brand.addView(brandText,new LinearLayout.LayoutParams(0,-2,1));TextView clock=text("",9,gold,true);clock.setGravity(Gravity.RIGHT|Gravity.CENTER_VERTICAL);add(brand,clock,-2,-2);startHeaderClock(clock);add(body,brand,-1,-2);gap(body,15);
     add(body,text(title,23,ink,true),-1,-2);add(body,text(subtitle,12,muted,false),-1,-2);gap(body,16);
   }
-  void action(String label,Runnable callback){TextView button=text(ui(label)+"   ›",15,blue,true);button.setPadding(dp(16),dp(14),dp(14),dp(14));button.setBackground(shape(surface,12));add(body,button,-1,-2);gap(body,9);button.setOnClickListener(v->callback.run());}
-  void metric(LinearLayout row,String title,String value,int highlight,Runnable tap){LinearLayout card=col();card.setPadding(dp(12),dp(12),dp(9),dp(12));card.setBackground(shape(surface,13));TextView name=text(title,11,muted,true);name.setMaxLines(2);add(card,name,-1,-2);gap(card,8);TextView figure=text(value,value.startsWith("RM")?16:20,highlight,true);figure.setMaxLines(1);figure.setEllipsize(android.text.TextUtils.TruncateAt.END);add(card,figure,-1,-2);LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(0,dp(94),1);p.setMargins(dp(3),0,dp(3),0);row.addView(card,p);if(tap!=null)card.setOnClickListener(v->tap.run());}
+  void action(String label,Runnable callback){TextView button=text(ui(label)+"   ›",15,blue,true);button.setMinHeight(dp(50));button.setPadding(dp(16),dp(12),dp(14),dp(12));button.setLineSpacing(dp(2),1f);button.setBackground(cardShape(15));add(body,button,-1,-2);gap(body,9);button.setOnClickListener(v->callback.run());}
+  void metric(LinearLayout row,String title,String value,int highlight,Runnable tap){LinearLayout card=col();card.setGravity(Gravity.CENTER_VERTICAL);card.setPadding(dp(13),dp(11),dp(10),dp(11));card.setBackground(cardShape(16));TextView name=text(title,11,muted,true);name.setMaxLines(2);add(card,name,-1,-2);gap(card,9);TextView figure=text(value,value.startsWith("RM")?16:20,highlight,true);figure.setMaxLines(2);add(card,figure,-1,-2);LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(0,dp(108),1);p.setMargins(dp(3),0,dp(3),0);row.addView(card,p);if(tap!=null)card.setOnClickListener(v->tap.run());}
   boolean legacySupplierRestock(JSONObject e){
     String c=e==null?"":e.optString("category","");if(!c.startsWith("Restock · "))return false;String item=c.substring("Restock · ".length()).trim();for(int id=0;id<names.length;id++)if(names[id].equals(item)&&supplierItem(id))return true;return false;
   }
@@ -1773,7 +1792,8 @@ JSONArray list=entries("stock_distribution");JSONObject e=list.optJSONObject(ind
     if(neutral!=null){neutral.setTextColor(blue);neutral.setTypeface(null,Typeface.BOLD);neutral.setBackgroundColor(Color.TRANSPARENT);}
   }
   AlertDialog.Builder darkBuilder(){
-    return new AlertDialog.Builder(this,AlertDialog.THEME_DEVICE_DEFAULT_DARK){
+    return new AlertDialog.Builder(this,themeLight?
+      AlertDialog.THEME_DEVICE_DEFAULT_LIGHT:AlertDialog.THEME_DEVICE_DEFAULT_DARK){
       @Override public AlertDialog.Builder setTitle(CharSequence x){return super.setTitle(ui(x==null?"":x.toString()));}
       @Override public AlertDialog.Builder setMessage(CharSequence x){return super.setMessage(ui(x==null?"":x.toString()));}
       @Override public AlertDialog.Builder setItems(CharSequence[] x,android.content.DialogInterface.OnClickListener l){return super.setItems(uiChars(x),l);}
@@ -2035,7 +2055,7 @@ JSONArray list=entries("stock_distribution");JSONObject e=list.optJSONObject(ind
     LinearLayout box=col();box.setPadding(dp(20),dp(18),dp(20),dp(14));box.setBackground(shape(surface,18));
     add(box,text(titleText,21,ink,true),-1,-2);if(subtitle!=null&&!subtitle.isEmpty()){gap(box,5);add(box,text(subtitle,12,muted,false),-1,-2);}gap(box,14);
     AlertDialog dialog=darkBuilder().setView(box).setNegativeButton("BATAL",null).create();
-    for(int i=0;i<labels.length;i++){final int which=i;TextView choice=text(labels[i],15,Color.WHITE,true);choice.setGravity(Gravity.CENTER_VERTICAL);choice.setPadding(dp(15),0,dp(15),0);choice.setBackground(shape(colors!=null&&i<colors.length?colors[i]:0xff203f61,12));add(box,choice,-1,50);if(i<labels.length-1)gap(box,8);choice.setOnClickListener(v->{dialog.dismiss();onPick.accept(which);});}
+    for(int i=0;i<labels.length;i++){final int which=i;int background=colors!=null&&i<colors.length?colors[i]:0xff203f61;TextView choice=text(labels[i],15,Color.WHITE,true);choice.setTextColor(WarisanTheme.readableText(Color.WHITE,themeColor(background),ink));choice.setGravity(Gravity.CENTER_VERTICAL);choice.setPadding(dp(15),0,dp(15),0);choice.setBackground(shape(background,12));add(box,choice,-1,50);if(i<labels.length-1)gap(box,8);choice.setOnClickListener(v->{dialog.dismiss();onPick.accept(which);});}
     dialog.setOnShowListener(v->{styleDarkDialogNow(dialog);Button b=dialog.getButton(AlertDialog.BUTTON_NEGATIVE);if(b!=null){b.setTextColor(gold);b.setTypeface(null,Typeface.BOLD);}});dialog.show();
   }
   void payPendingOrder(int index){JSONArray list=entries("pending_orders");JSONObject o=list.optJSONObject(index);if(o==null||o.optBoolean("paid",false)||o.optBoolean("cancelled",false)){message("Order ini sudah dibayar, dibatalkan atau tidak dijumpai.");return;}int due=o.optInt("total");showDarkChoice("BAYAR ORDER #"+String.format(Locale.US,"%04d",o.optInt("order")),money(due),new String[]{"TUNAI","QR"},new int[]{blue,0xff203f61},which->{if(which==0)cashPaymentPending(index,due);else chooseQrPending(index,due);});}

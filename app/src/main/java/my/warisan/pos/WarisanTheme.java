@@ -50,7 +50,7 @@ final class WarisanTheme {
   private static final Palette[] THEMES = new Palette[]{
     new Palette("classic","Warisan Classic","Biru gelap + emas",
       "#071422","#122840","#203F61","#EEF4FC","#A6B7CC",
-      "#DAA630","#457ECA","#FFFFFF","#131822","#143A65","#FFFFFF",false),
+      "#DAA630","#356BBC","#FFFFFF","#131822","#143A65","#FFFFFF",false),
     new Palette("black","Black Gold","Hitam + emas premium",
       "#090A0C","#1B1D22","#303136","#FFF8E8","#B4B0A4",
       "#F6C653","#B58A36","#151515","#191919","#25262A","#E3D5BA",false),
@@ -59,7 +59,7 @@ final class WarisanTheme {
       "#FF685D","#D83735","#FFFFFF","#1A1A1A","#2D3136","#E5E9ED",false),
     new Palette("jade","Jade Dark","Hijau zamrud",
       "#061C19","#12352D","#225345","#F0FFF8","#A9D0BF",
-      "#B4E3AE","#149A79","#FFFFFF","#08241E","#194339","#E2F7EA",false),
+      "#B4E3AE","#0C765D","#FFFFFF","#08241E","#194339","#E2F7EA",false),
     new Palette("light","Clean Blue","Putih + biru moden",
       "#EAF1F9","#FFFFFF","#DBE7F6","#1B2E49","#647895",
       "#1D5FC0","#276ECF","#FFFFFF","#FFFFFF","#DBE7F6","#254467",true)
@@ -72,6 +72,39 @@ final class WarisanTheme {
   static Palette current(Context context){
     return byId(context.getSharedPreferences(PREFS,Context.MODE_PRIVATE)
       .getString(KEY,DEFAULT));
+  }
+  private static double linear(int component){
+    double v=component/255.0;
+    return v<=0.04045?v/12.92:Math.pow((v+0.055)/1.055,2.4);
+  }
+  private static double luminance(int color){
+    return 0.2126*linear(Color.red(color))+
+      0.7152*linear(Color.green(color))+0.0722*linear(Color.blue(color));
+  }
+  static double contrastRatio(int first,int second){
+    double a=luminance(first),b=luminance(second);
+    return (Math.max(a,b)+0.05)/(Math.min(a,b)+0.05);
+  }
+  private static int blend(int from,int to,float fraction){
+    return Color.rgb(
+      Math.round(Color.red(from)*(1-fraction)+Color.red(to)*fraction),
+      Math.round(Color.green(from)*(1-fraction)+Color.green(to)*fraction),
+      Math.round(Color.blue(from)*(1-fraction)+Color.blue(to)*fraction));
+  }
+  /** Protects text on every palette, including legacy literal foreground colors. */
+  static int readableText(int preferred,int background,int fallback){
+    if(contrastRatio(preferred,background)>=4.5)return preferred;
+    int max=Math.max(Color.red(preferred),Math.max(Color.green(preferred),Color.blue(preferred)));
+    int min=Math.min(Color.red(preferred),Math.min(Color.green(preferred),Color.blue(preferred)));
+    // Neutral old white/grey lettering should use the current theme's text.
+    if(max-min<30&&contrastRatio(fallback,background)>=4.5)return fallback;
+    // Preserve warning/accent hue, but lighten or darken it until readable.
+    int target=luminance(background)>0.179?Color.BLACK:Color.WHITE;
+    for(int step=1;step<=20;step++){
+      int adjusted=blend(preferred,target,step/20f);
+      if(contrastRatio(adjusted,background)>=4.5)return adjusted;
+    }
+    return contrastRatio(fallback,background)>=4.5?fallback:target;
   }
   static void apply(MainActivity host){
     Palette p=current(host);
@@ -109,7 +142,12 @@ final class WarisanTheme {
       LinearLayout preview=host.col();
       preview.setGravity(Gravity.CENTER);
       preview.setBackground(host.shape(p.card,9));
-      preview.setPadding(host.dp(6),host.dp(7),host.dp(6),host.dp(7));
+      preview.setPadding(host.dp(8),host.dp(7),host.dp(8),host.dp(7));
+      TextView sample=host.text("Aa 123",12,readableText(p.accent,p.card,p.text),true);
+      sample.setTextColor(readableText(p.accent,p.card,p.text));
+      sample.setGravity(Gravity.CENTER);
+      host.add(preview,sample,-1,-2);
+      host.gap(preview,4);
       LinearLayout swatches=host.row();
       for(int color:new int[]{p.background,p.card,p.accent,p.primary}){
         View swatch=new View(host);
