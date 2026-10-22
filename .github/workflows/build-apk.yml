@@ -59,6 +59,9 @@ jobs:
       - name: Verify five themes and readable text contrast
         run: node tests/theme-contrast-smoke.mjs
 
+      - name: Verify Owner profit and product charts
+        run: node tests/owner-finance-smoke.mjs
+
       - name: Build APK
         run: gradle assembleDebug --no-daemon
 
