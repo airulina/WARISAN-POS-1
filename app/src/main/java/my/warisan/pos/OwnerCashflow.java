@@ -1,13 +1,9 @@
 package my.warisan.pos;
 
 import android.content.SharedPreferences;
-import android.graphics.Color;
-import android.graphics.drawable.GradientDrawable;
 import android.view.Gravity;
-import android.view.View;
-import android.widget.ImageView;
-import android.widget.LinearLayout;
 import android.widget.TextView;
+import android.widget.LinearLayout;
 import com.google.firebase.firestore.DocumentSnapshot;
 import com.google.firebase.firestore.FieldPath;
 import com.google.firebase.firestore.FirebaseFirestore;
@@ -22,9 +18,6 @@ import java.util.Map;
 import java.util.TreeMap;
 import java.util.HashSet;
 import java.util.Set;
-import java.text.SimpleDateFormat;
-import java.util.Calendar;
-import java.util.Date;
 import com.google.android.gms.tasks.Task;
 import com.google.android.gms.tasks.Tasks;
 import org.json.JSONArray;
@@ -71,10 +64,6 @@ final class OwnerCashflow {
     boolean seen=false,cache=false;
     int copiedLegacySales=0;
     boolean hasCopiedLocalData=false;
-    long unpaidAmount=0;
-    boolean unpaidReady=false;
-    int[] liveProductCounts=new int[2];
-    boolean liveProductsReady=false;
     BranchRow(String id,String name,String status,boolean archived){
       this.id=id;this.name=name;this.status=status;this.archived=archived;
     }
@@ -186,8 +175,7 @@ final class OwnerCashflow {
   void ensureLoaded(){
     if(!accounts.owner())return;
     final String uid=accounts.ownerUid();
-    final String from=start(),to=end(),day=host.selectedCashDay,
-      scope=uid+":"+from+":"+to+":"+day;
+    final String from=start(),to=end(),scope=uid+":"+from+":"+to;
     if(scope.equals(subscriptionKey)&&branchListener!=null)return;
     String previousSelection=selectedBranchId;
     stop();selectedBranchId=previousSelection;subscriptionKey=scope;
@@ -246,45 +234,6 @@ final class OwnerCashflow {
               redrawIfVisible();
             });
           dayListeners.add(listener);
-          ListenerRegistration unpaidListener=branch.getReference().collection("orders")
-            .whereEqualTo("status","PENDING")
-            .addSnapshotListener((pending,pendingError)->{
-              if(!scope.equals(subscriptionKey)||!rows.contains(row))return;
-              row.unpaidReady=pendingError==null&&pending!=null;
-              if(row.unpaidReady){
-                long cents=0;
-                for(DocumentSnapshot order:pending.getDocuments()){
-                  Long amount=order.getLong("total");
-                  if(amount!=null&&amount>0)cents+=amount;
-                }
-                row.unpaidAmount=cents;
-              }
-              redrawIfVisible();
-            });
-          dayListeners.add(unpaidListener);
-          ListenerRegistration productsListener=branch.getReference().collection("orders")
-            .whereEqualTo("day",day)
-            .addSnapshotListener((orders,productError)->{
-              if(!scope.equals(subscriptionKey)||!rows.contains(row))return;
-              row.liveProductsReady=productError==null&&orders!=null;
-              if(row.liveProductsReady){
-                long chicken=0,beef=0;
-                for(DocumentSnapshot order:orders.getDocuments()){
-                  if(!"PAID".equals(order.getString("status")))continue;
-                  Object quantity=order.get("qty");
-                  if(!(quantity instanceof List))continue;
-                  List<?> parts=(List<?>)quantity;
-                  if(parts.size()>0&&parts.get(0) instanceof Number)
-                    chicken+=Math.max(0,((Number)parts.get(0)).longValue());
-                  if(parts.size()>1&&parts.get(1) instanceof Number)
-                    beef+=Math.max(0,((Number)parts.get(1)).longValue());
-                }
-                row.liveProductCounts=new int[]{(int)Math.min(Integer.MAX_VALUE,chicken),
-                  (int)Math.min(Integer.MAX_VALUE,beef)};
-              }
-              redrawIfVisible();
-            });
-          dayListeners.add(productsListener);
         }
         redrawIfVisible();
       });
@@ -361,8 +310,7 @@ final class OwnerCashflow {
     return true;
   }
   void redrawIfVisible(){
-    if((host.activePage==0&&accounts.owner())||host.activePage==3||
-      host.activePage==16||host.activePage==17||host.activePage==19||host.activePage==21)
+    if(host.activePage==3||host.activePage==16||host.activePage==17||host.activePage==19||host.activePage==21)
       host.draw();
   }
   int copiedLegacySaleCount(){
@@ -445,251 +393,6 @@ final class OwnerCashflow {
         11,host.muted,false),-1,-2);
     }
   }
-
-  /** Owner's actual Utama: the supplied navy/gold overall + branch-card design. */
-  void drawOwnerHome(){
-    if(!accounts.owner())return;
-    final boolean en=host.english();
-    final String day=host.selectedCashDay;
-    host.cashDailyMode=false;
-    host.selectedMonth=day.substring(0,7);
-    ensureLoaded();
-
-    LinearLayout brand=host.row();brand.setGravity(Gravity.CENTER_VERTICAL);
-    ImageView logo=new ImageView(host);host.setStoreLogo(logo);host.makeCircle(logo);
-    host.add(brand,logo,44,44);
-    TextView brandTitle=host.text("WARISAN POS-1",22,host.gold,true);
-    LinearLayout.LayoutParams brandTitleLp=new LinearLayout.LayoutParams(0,-2,1);
-    brandTitleLp.leftMargin=host.dp(12);brand.addView(brandTitle,brandTitleLp);
-    host.add(host.body,brand,-1,-2);
-    host.gap(host.body,16);
-    host.add(host.body,host.text(en?"Home":"Utama",29,host.ink,true),-1,-2);
-    TextView datePicker=host.text((en?"Sales date: ":"Tarikh jualan: ")+day+"  ▾",12,host.gold,true);
-    datePicker.setPadding(host.dp(2),host.dp(8),host.dp(2),host.dp(12));
-    host.add(host.body,datePicker,-1,-2);
-    datePicker.setOnClickListener(v->host.pickDay(en?"Choose date":"Pilih tarikh",day,value->{
-      host.selectedCashDay=value;host.selectedMonth=value.substring(0,7);host.draw();
-    }));
-
-    if(!ready()){
-      LinearLayout placeholder=homePanel(true);
-      host.add(placeholder,host.text(en?"Overall · All branches":"Keseluruhan · Semua Cawangan",
-        17,host.ink,true),-1,-2);
-      host.gap(placeholder,10);
-      host.add(placeholder,host.text(en?"Loading verified branch sales...":
-        "Sedang memuatkan jualan cawangan yang disahkan...",13,host.muted,false),-1,-2);
-      host.add(host.body,placeholder,-1,-2);
-      if(!loadError.isEmpty())dataMessage();
-      return;
-    }
-
-    Day combined=overallOn(day);
-    int localSale=host.saleTotalBetween(day,day),localTx=host.transactionCountBetween(day,day);
-    int activeCount=0;BranchRow only=null;
-    for(BranchRow b:rows)if(!b.archived){activeCount++;only=b;}
-    final BranchRow sole=only;
-    Day soleDay=sole==null?null:sole.combined().get(day);
-    boolean soleVerified=activeCount==1&&sole!=null&&
-      homeLocalVerified(sole,soleDay==null?new Day():soleDay,localSale,localTx);
-
-    LinearLayout overall=homePanel(true);
-    host.add(overall,host.text(en?"Overall · All branches":"Keseluruhan · Semua Cawangan",
-      17,host.ink,true),-1,-2);
-    host.gap(overall,10);
-    LinearLayout totalRow=host.row();
-    homeFigure(totalRow,en?"Total Sales":"Jumlah Jualan",rm(combined.sales),host.gold,()->{
-      host.cashDailyMode=true;host.activePage=16;host.draw();
-    });
-    int profit=soleVerified?host.businessProfit(day,true):0;
-    homeFigure(totalRow,en?"Net Profit":"Untung Bersih",
-      soleVerified?signedProfit(profit):"—",
-      soleVerified?host.profitColor(profit):host.muted,()->{
-        if(soleVerified){selectedBranchId=sole.id;host.cashDailyMode=true;host.activePage=17;host.draw();}
-        else host.message("Untung keseluruhan memerlukan kos disahkan untuk semua cawangan.");
-      });
-    host.add(overall,totalRow,-1,-2);
-    host.add(host.body,overall,-1,-2);
-    host.gap(host.body,15);
-    host.add(host.body,host.text(en?"Active Branches":"Cawangan Aktif",24,host.ink,true),-1,-2);
-    host.gap(host.body,9);
-    if(activeCount==0){
-      host.add(host.body,host.text(en?"No active branches":"Tiada cawangan aktif",
-        13,host.muted,false),-1,-2);
-    }
-    // Branch Utama first, followed by all other active branches; archives are excluded.
-    ArrayList<BranchRow> active=new ArrayList<>();
-    for(BranchRow b:rows)if(!b.archived)active.add(b);
-    active.sort((a,b)->{
-      boolean aMain=homeMain(a),bMain=homeMain(b);
-      if(aMain!=bMain)return aMain?-1:1;
-      return a.name.compareToIgnoreCase(b.name);
-    });
-    for(BranchRow branch:active){
-      Day branchDay=branch.combined().get(day);
-      if(branchDay==null)branchDay=new Day();
-      drawOwnerHomeBranch(branch,branchDay,day,localSale,localTx,en);
-      host.gap(host.body,12);
-    }
-    if(!soleVerified){
-      host.add(host.body,host.text(en?
-        "Net profit stays blank where branch product and operating costs are not yet verified; sales are still shown.":
-        "Untung bersih ditanda — jika kos produk dan operasi belum disahkan. Jumlah jualan masih dipaparkan.",
-        11,host.muted,false),-1,-2);
-    }
-    if(hasCopiedLocalBranchData())duplicatedDataWarning();
-  }
-
-  private boolean homeMain(BranchRow branch){
-    return BranchAccounts.LEGACY_BRANCH.equals(branch.id)||
-      "Branch Utama".equalsIgnoreCase(branch.name);
-  }
-  private boolean homeLocalVerified(BranchRow branch,Day branchDay,int localSale,int localTx){
-    return branch.seen&&!branch.cache&&branch.id.equals(accounts.branchId())&&
-      branchDay.sales==localSale&&branchDay.transactions==localTx;
-  }
-  private String signedProfit(long cents){
-    return cents>0?"+"+rm(cents):cents<0?"-"+rm(-cents):rm(0);
-  }
-  private LinearLayout homePanel(boolean highlighted){
-    LinearLayout panel=host.col();
-    panel.setPadding(host.dp(14),host.dp(15),host.dp(14),host.dp(15));
-    GradientDrawable background=host.shape(host.surface,17);
-    background.setStroke(host.dp(highlighted?2:1),
-      highlighted?host.gold:(host.themeLight?0xff8799B2:0xff46617A));
-    panel.setBackground(background);
-    return panel;
-  }
-  private void homeFigure(LinearLayout parent,String label,String value,int color,Runnable tap){
-    LinearLayout valuePanel=host.col();
-    valuePanel.setPadding(host.dp(8),host.dp(5),host.dp(5),host.dp(5));
-    host.add(valuePanel,host.text(label,12,host.muted,false),-1,-2);
-    host.gap(valuePanel,6);
-    TextView number=host.text(value,19,color,true);
-    number.setMaxLines(2);
-    host.add(valuePanel,number,-1,-2);
-    LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(0,-2,1);
-    parent.addView(valuePanel,p);
-    if(tap!=null)valuePanel.setOnClickListener(v->tap.run());
-  }
-  private void homeSmallMetric(LinearLayout line,String label,String value,int color){
-    LinearLayout card=host.col();
-    card.setPadding(host.dp(6),host.dp(10),host.dp(5),host.dp(10));
-    GradientDrawable shape=host.shape(host.surfaceAlt,11);
-    shape.setStroke(host.dp(1),host.themeLight?0xffD3DFEC:0xff2D4761);
-    card.setBackground(shape);
-    TextView labelText=host.text(label,10,host.muted,false);
-    labelText.setMaxLines(2);
-    host.add(card,labelText,-1,-2);
-    host.gap(card,7);
-    TextView valueText=host.text(value,13,color,true);
-    valueText.setSingleLine(true);
-    if(android.os.Build.VERSION.SDK_INT>=26)
-      valueText.setAutoSizeTextTypeUniformWithConfiguration(9,14,1,
-        android.util.TypedValue.COMPLEX_UNIT_SP);
-    host.add(card,valueText,-1,-2);
-    LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(0,-2,1);
-    p.setMargins(host.dp(2),host.dp(3),host.dp(2),host.dp(3));
-    line.addView(card,p);
-  }
-  private void homeShare(LinearLayout parent,String name,int count,int sum){
-    int share=sum==0?0:(int)Math.round(count*100.0/sum);
-    host.add(parent,host.text(name,10,host.ink,false),-1,-2);
-    host.gap(parent,3);
-    LinearLayout row=host.row();row.setGravity(Gravity.CENTER_VERTICAL);
-    LinearLayout track=host.row();
-    track.setBackground(host.shape(host.surfaceAlt,5));
-    if(share>0){
-      View progress=new View(host);progress.setBackground(host.shape(host.gold,5));
-      track.addView(progress,new LinearLayout.LayoutParams(0,host.dp(9),share));
-    }
-    if(share<100)track.addView(new View(host),new LinearLayout.LayoutParams(0,host.dp(9),100-share));
-    row.addView(track,new LinearLayout.LayoutParams(0,host.dp(8),4));
-    TextView percent=host.text(share+"%",10,host.muted,false);
-    percent.setGravity(Gravity.RIGHT);
-    row.addView(percent,new LinearLayout.LayoutParams(0,-2,1));
-    host.add(parent,row,-1,-2);host.gap(parent,6);
-  }
-  private void drawOwnerHomeBranch(BranchRow branch,Day dayValue,String day,
-      int localSale,int localTx,boolean en){
-    boolean main=homeMain(branch);
-    boolean profitKnown=homeLocalVerified(branch,dayValue,localSale,localTx);
-    int cost=profitKnown?host.productCostBetween(day,day)+host.operatingExpenseTotal(day,true):0;
-    int net=profitKnown?host.businessProfit(day,true):0;
-    LinearLayout card=homePanel(main);
-    LinearLayout header=host.row();header.setGravity(Gravity.CENTER_VERTICAL);
-    TextView icon=host.text("▣",25,host.gold,true);
-    icon.setGravity(Gravity.CENTER);
-    icon.setBackground(host.shape(host.surfaceAlt,28));
-    host.add(header,icon,48,48);
-    LinearLayout heading=host.col();
-    LinearLayout.LayoutParams headLp=new LinearLayout.LayoutParams(0,-2,1);
-    headLp.leftMargin=host.dp(12);
-    header.addView(heading,headLp);
-    host.add(heading,host.text(branch.name+(main?"  🔒":""),18,host.ink,true),-1,-2);
-    TextView status=host.text(main?(en?"PERMANENTLY ACTIVE":"KEKAL AKTIF"):
-      branch.status,10,main?host.gold:host.profitColor(1),true);
-    host.add(heading,status,-1,-2);
-    host.add(card,header,-1,-2);host.gap(card,10);
-
-    LinearLayout metrics=host.row();
-    homeSmallMetric(metrics,en?"Today's Sales":"Jualan Hari Ini",rm(dayValue.sales),host.gold);
-    homeSmallMetric(metrics,en?"Net Profit":"Untung Bersih",
-      profitKnown?signedProfit(net):"—",profitKnown?host.profitColor(net):host.muted);
-    homeSmallMetric(metrics,en?"Total Costs":"Jumlah Kos",
-      profitKnown?rm(cost):"—",host.ink);
-    homeSmallMetric(metrics,en?"Unpaid · Cloud":"Belum Bayar",
-      branch.unpaidReady?rm(branch.unpaidAmount):"—",host.ink);
-    host.add(card,metrics,-1,-2);
-
-    host.gap(card,9);
-    LinearLayout chartAndProducts=host.row();
-    LinearLayout chartColumn=host.col();
-    chartAndProducts.addView(chartColumn,new LinearLayout.LayoutParams(0,-2,6));
-    host.add(chartColumn,host.text(en?"DAILY SALES TREND":"GRAF JUALAN HARIAN",
-      10,host.gold,true),-1,-2);
-    host.add(chartColumn,new OwnerBranchTrendChart(host,branch.combined(),day),-1,host.dp(135));
-    LinearLayout topItems=host.col();
-    topItems.setPadding(host.dp(7),0,0,0);
-    chartAndProducts.addView(topItems,new LinearLayout.LayoutParams(0,-2,4));
-    if(profitKnown||branch.liveProductsReady){
-      int[] sold=profitKnown?host.soldNetBetween(day,day):branch.liveProductCounts;
-      int chicken=sold.length>0?Math.max(0,sold[0]):0;
-      int beef=sold.length>1?Math.max(0,sold[1]):0;
-      host.add(topItems,host.text(profitKnown?(en?"TOP ITEMS · LOCAL POS":
-        "MENU TERLARIS · POS TEMPATAN"):(en?"TOP ITEMS · LIVE ORDERS":
-        "MENU TERLARIS · ORDER LIVE"),
-        10,host.gold,true),-1,-2);
-      host.gap(topItems,9);
-      if(chicken+beef==0){
-        host.add(topItems,host.text(en?"No recorded chicken or beef sales":
-          "Tiada jualan ayam atau daging direkodkan",11,host.muted,false),-1,-2);
-      }else{
-        homeShare(topItems,en?"Chicken Satay":"Sate Ayam",chicken,chicken+beef);
-        homeShare(topItems,en?"Beef Satay":"Sate Daging",beef,chicken+beef);
-      }
-    }else{
-      host.add(topItems,host.text(en?"Top Items":"Menu Terlaris",
-        10,host.gold,true),-1,-2);
-      host.gap(topItems,10);
-      host.add(topItems,host.text(en?"Item counts and cost details awaiting verified synchronization.":
-        "Butiran produk dan kos menunggu data yang boleh disahkan.",
-        11,host.muted,false),-1,-2);
-    }
-    host.add(card,chartAndProducts,-1,-2);
-    host.gap(card,8);
-    TextView details=host.text(en?"View Details   ›":"Lihat Butiran   ›",15,host.gold,true);
-    details.setGravity(Gravity.CENTER);
-    details.setPadding(host.dp(10),host.dp(12),host.dp(10),host.dp(12));
-    GradientDrawable outline=host.shape(host.cream,10);
-    outline.setStroke(host.dp(1),host.gold);
-    details.setBackground(outline);
-    host.add(card,details,-1,-2);
-    details.setOnClickListener(v->{
-      selectedBranchId=branch.id;host.cashDailyMode=true;
-      host.activePage=17;host.draw();
-    });
-    host.add(host.body,card,-1,-2);
-  }
   void drawOverview(){
     if(!accounts.owner()){
       host.heading("Akses Owner","Laporan semua cawangan hanya untuk Owner.");return;
@@ -701,7 +404,7 @@ final class OwnerCashflow {
     final String day=host.selectedCashDay;
     final boolean today=day.equals(host.date());
     final boolean english=host.english();
-    host.heading(english?"MONEY · OWNER":"DUIT · OWNER",
+    host.heading("SALE · OWNER",
       english?"Daily sales and local profit. Choose a date to review history.":
         "Jualan dan keuntungan harian. Pilih tarikh untuk semak sejarah.");
     host.action((english?"📅  SALES DATE: ":"📅  TARIKH JUALAN: ")+day+"  ▼",()->
@@ -727,13 +430,19 @@ final class OwnerCashflow {
     boolean overallProfitVerified=ready()&&activeBranches==1&&singleBranch!=null&&
       singleBranch.id.equals(accounts.branchId())&&daily.sales==localSales&&
       daily.transactions==localTx&&!singleBranch.cache;
-    host.add(host.body,host.text(
+    LinearLayout overallCard=host.col();
+    overallCard.setPadding(host.dp(12),host.dp(14),host.dp(12),host.dp(14));
+    overallCard.setBackground(host.borderedCard(true,18));
+    host.add(overallCard,host.text(english?"OVERALL · ALL BRANCHES":
+      "KESELURUHAN · SEMUA CAWANGAN",15,host.ink,true),-1,-2);
+    host.gap(overallCard,5);
+    host.add(overallCard,host.text(
       (english?(today?"TODAY":"SELECTED DAY"):(today?"HARI INI":"TARIKH DIPILIH"))+
-      " · "+day,13,host.gold,true),-1,-2);
-    host.gap(host.body,7);
+      " · "+day,11,host.muted,false),-1,-2);
+    host.gap(overallCard,10);
     LinearLayout sales=host.row();
     host.metric(sales,english?"TOTAL SALES · ALL BRANCHES  ›":
-      "JUMLAH JUALAN · SEMUA CAWANGAN  ›",ready()?rm(daily.sales):"—",host.blue,()->{
+      "JUMLAH JUALAN · SEMUA CAWANGAN  ›",ready()?rm(daily.sales):"—",host.gold,()->{
         host.cashDailyMode=true;host.activePage=16;host.draw();
       });
     int verifiedProfit=overallProfitVerified?host.businessProfit(day,true):0;
@@ -743,20 +452,33 @@ final class OwnerCashflow {
         if(overallProfitVerified){host.activePage=17;selectedBranchId=verifiedSingle.id;host.draw();}
         else host.message("Untung overall belum boleh disahkan: kos cawangan lain belum lengkap di Cloud.");
       });
-    host.add(host.body,sales,-1,-2);host.gap(host.body,8);
+    host.add(overallCard,sales,-1,-2);
+    host.add(host.body,overallCard,-1,-2);host.gap(host.body,20);
     if(ready()){
-      host.add(host.body,host.text(english?"ACTIVE BRANCHES":"CAWANGAN AKTIF",13,host.gold,true),-1,-2);
-      host.gap(host.body,6);
+      host.add(host.body,host.text(english?"ACTIVE BRANCHES":"CAWANGAN AKTIF",21,host.ink,true),-1,-2);
+      host.gap(host.body,11);
       for(BranchRow b:rows){
         if(b.archived)continue;
         Day bd=b.combined().get(day);if(bd==null)bd=new Day();
         final BranchRow chosen=b;
         boolean canProfit=b.id.equals(accounts.branchId())&&bd.sales==localSales&&
           bd.transactions==localTx&&!b.cache;
-        host.add(host.body,host.text("🏪  "+b.name,14,host.gold,true),-1,-2);
+        LinearLayout branchCard=host.col();
+        branchCard.setPadding(host.dp(12),host.dp(13),host.dp(12),host.dp(12));
+        branchCard.setBackground(host.borderedCard(canProfit,18));
+        LinearLayout branchTitle=host.row();
+        TextView name=host.text("🏪  "+b.name,18,host.ink,true);
+        branchTitle.addView(name,new LinearLayout.LayoutParams(0,-2,1));
+        TextView status=host.text(b.status,10,host.gold,true);
+        status.setGravity(Gravity.CENTER);
+        status.setPadding(host.dp(9),host.dp(5),host.dp(9),host.dp(5));
+        status.setBackground(host.shape(host.surfaceAlt,9));
+        host.add(branchTitle,status,-2,-2);
+        host.add(branchCard,branchTitle,-1,-2);
+        host.gap(branchCard,12);
         LinearLayout branchCards=host.row();
         host.metric(branchCards,english?"BRANCH SALES  ›":"JUALAN CAWANGAN  ›",
-          rm(bd.sales),host.blue,()->{
+          rm(bd.sales),host.gold,()->{
             selectedBranchId=chosen.id;host.cashDailyMode=true;
             host.activePage=17;host.draw();
           });
@@ -767,7 +489,28 @@ final class OwnerCashflow {
             selectedBranchId=chosen.id;host.cashDailyMode=true;
             host.activePage=17;host.draw();
           });
-        host.add(host.body,branchCards,-1,-2);host.gap(host.body,10);
+        host.add(branchCard,branchCards,-1,-2);
+        host.gap(branchCard,6);
+        // Existing cloud DAILY snapshot already includes CASH and QR. Showing
+        // these figures avoids guessing un-synced costs or outstanding debt.
+        LinearLayout methods=host.row();
+        host.metric(methods,english?"CASH":"TUNAI",rm(bd.cash),host.ink,null);
+        host.metric(methods,"QR / DUITNOW",rm(bd.qr),host.gold,null);
+        host.add(branchCard,methods,-1,-2);
+        host.gap(branchCard,8);
+        host.add(branchCard,new OwnerSalesChart(host,b.combined(),host.selectedMonth),-1,154);
+        host.gap(branchCard,9);
+        TextView details=host.text(english?"View Details  ›":"Lihat Butiran  ›",
+          14,host.gold,true);
+        details.setGravity(Gravity.CENTER);
+        details.setMinHeight(host.dp(42));
+        details.setBackground(host.borderedCard(false,11));
+        host.add(branchCard,details,-1,-2);
+        details.setOnClickListener(v->{
+          selectedBranchId=chosen.id;host.cashDailyMode=true;
+          host.activePage=17;host.draw();
+        });
+        host.add(host.body,branchCard,-1,-2);host.gap(host.body,11);
       }
       if(activeBranches==0)host.add(host.body,host.text("Tiada cawangan aktif.",12,host.muted,false),-1,-2);
       if(!overallProfitVerified)host.add(host.body,host.text(english?
@@ -963,10 +706,6 @@ final class OwnerCashflow {
   void drawBranchDetail(){
     if(!accounts.owner()){host.heading("Akses ditolak","Owner sahaja.");return;}
     ensureLoaded();
-    if(!listLoaded){
-      host.heading("Butiran Cawangan","Memuatkan maklumat cawangan...");
-      return;
-    }
     BranchRow branch=null;
     for(BranchRow row:rows)if(row.id.equals(selectedBranchId)){branch=row;break;}
     if(branch==null){
@@ -976,36 +715,8 @@ final class OwnerCashflow {
     }
     final BranchRow chosen=branch;
     host.heading(chosen.name,"Jualan "+period()+" · "+chosen.status);
-    host.action("‹  Kembali ke Utama",()->{host.activePage=0;host.draw();});
+    host.action("‹  Kembali ke Jualan Semua Branch",()->{host.activePage=16;host.draw();});
     if(!branch.seen){dataMessage();return;}
-    // Operations stay behind the selected branch, not cluttering the Owner's
-    // four navigation tabs or the product Menu with Opening/Closing buttons.
-    host.add(host.body,host.text(host.english()?"BRANCH OPERATIONS":"OPERASI CAWANGAN",
-      12,host.gold,true),-1,-2);
-    host.gap(host.body,6);
-    if(chosen.id.equals(accounts.branchId())){
-      LinearLayout operations=host.row();
-      host.ownerTile(operations,"MENU / ORDER","Urus jualan",()->{
-        host.activePage=23;host.draw();
-      });
-      host.ownerTile(operations,"STOK / RESTOCK","Admin sahaja",()->{
-        host.activePage=1;host.draw();
-      });
-      host.add(host.body,operations,-1,-2);
-      host.gap(host.body,7);
-      LinearLayout session=host.row();
-      host.ownerTile(session,"ORDER BELUM BAYAR","Live & tempatan",()->{
-        host.activePage=11;host.draw();
-      });
-      host.ownerTile(session,"OPENING / CLOSING","Owner boleh urus",()->{
-        host.activePage=22;host.draw();
-      });
-      host.add(host.body,session,-1,-2);
-    }else{
-      host.action("🏪  TUKAR KE CAWANGAN INI UNTUK URUS STOK / MENU",
-        ()->accounts.chooseBranch());
-    }
-    host.gap(host.body,10);
     Day total=branch.totals();
     LinearLayout main=host.row();
     host.metric(main,"TOTAL SALE · "+chosen.name+"  ›",rm(total.sales),host.blue,

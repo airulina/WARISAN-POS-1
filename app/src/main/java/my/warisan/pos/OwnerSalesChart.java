@@ -4,6 +4,7 @@ import android.content.Context;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
+import android.graphics.Path;
 import android.graphics.RectF;
 import android.view.View;
 import java.util.ArrayList;
@@ -38,7 +39,9 @@ final class OwnerSalesChart extends View {
     int background=host==null?Color.rgb(18,43,68):host.surface;
     int title=host==null?Color.rgb(230,237,245):host.ink;
     int muted=host==null?Color.rgb(166,184,202):host.muted;
-    int bar=host==null?Color.rgb(73,135,215):host.blue;
+    int bar=host==null?Color.rgb(224,174,72):host.gold;
+    int trend=host==null?Color.rgb(73,222,145):
+      (host.themeLight?0xff087F65:0xff4AF0A0);
     int grid=host==null?Color.rgb(53,78,102):
       (host.themeLight?0xffD1DFEF:host.surfaceAlt);
     float density=getResources().getDisplayMetrics().density;
@@ -63,15 +66,31 @@ final class OwnerSalesChart extends View {
       c.drawText(String.format(Locale.US,"%.0f",max*i/300.0),4*density,y+3*density,p);
     }
     float step=(right-left)/values.size();
+    Path salesTrend=new Path();
     for(int i=0;i<values.size();i++){
       float tall=(bottom-top)*(values.get(i)/(float)max);
       float x=left+step*i+step*.16f;
       p.setColor(bar);
-      c.drawRoundRect(new RectF(x,bottom-tall,x+Math.max(2*density,step*.68f),bottom),2*density,2*density,p);
+      float bw=Math.max(2*density,step*.68f);
+      c.drawRoundRect(new RectF(x,bottom-tall,x+bw,bottom),2*density,2*density,p);
+      float cx=x+bw/2,cy=bottom-tall;
+      if(i==0)salesTrend.moveTo(cx,cy);else salesTrend.lineTo(cx,cy);
       if(values.size()<=16||i%5==0){
         p.setColor(muted);p.setTextSize(8*density);
         c.drawText(labels.get(i),x,bottom+14*density,p);
       }
+    }
+    // The green line traces the SAME sales series as the gold bars; it is
+    // a visual trend, not an additional or estimated source of revenue.
+    p.setColor(trend);p.setStyle(Paint.Style.STROKE);
+    p.setStrokeWidth(2*density);p.setStrokeJoin(Paint.Join.ROUND);
+    c.drawPath(salesTrend,p);
+    p.setStyle(Paint.Style.FILL);
+    for(int i=0;i<values.size();i++){
+      float tall=(bottom-top)*(values.get(i)/(float)max);
+      float x=left+step*i+step*.16f;
+      p.setColor(trend);
+      c.drawCircle(x+Math.max(2*density,step*.68f)/2,bottom-tall,2.7f*density,p);
     }
   }
 }
