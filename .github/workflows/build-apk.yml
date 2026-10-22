@@ -71,6 +71,9 @@ jobs:
       - name: Verify v3.46 navigation and Owner UI restoration
         run: node tests/v346-ui-restoration-smoke.mjs
 
+      - name: Verify compact chart and second-screen branch periods
+        run: node tests/owner-branch-period-smoke.mjs
+
       - name: Build APK
         run: gradle assembleDebug --no-daemon
 

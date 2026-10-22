@@ -255,6 +255,19 @@ selectedDay=date();selectedMonth=selectedDay.substring(0,7);rangeStart=selectedD
         else startActivityForResult(googleSignInClient.getSignInIntent(),RC_SIGN_IN);
       }).setNegativeButton("BATAL",null).show();
   }
+  @Override public void onBackPressed(){
+    // System Back handles navigation. Pages do not need duplicate "Kembali"
+    // buttons; dialogs still handle their own Back key normally.
+    if(branchAccounts!=null&&branchAccounts.active()){
+      if(activePage==17||activePage==19||activePage==16||activePage==21||activePage==22){
+        activePage=3;draw();return;
+      }
+      if(activePage==13||activePage==20){activePage=1;draw();return;}
+      if(activePage==14){activePage=5;draw();return;}
+      if(activePage!=0){activePage=0;draw();return;}
+    }
+    super.onBackPressed();
+  }
   void draw(){
     if(sharedPaymentQr!=null&&branchAccounts!=null)sharedPaymentQr.attach();
     if(live!=null&&branchAccounts!=null&&branchAccounts.active())live.attachDay();
@@ -415,7 +428,9 @@ selectedDay=date();selectedMonth=selectedDay.substring(0,7);rangeStart=selectedD
     gap(chartCard,4);
     add(chartCard,text(en?"Daily number of skewers, ending "+day:
       "Bilangan cucuk sehari sehingga "+day,11,muted,false),-1,-2);
-    add(chartCard,new ProductSalesChart(this,day),-1,dp(214));
+    // add() applies dp itself: passing dp(214) made this chart twice as tall.
+    // The seven dates now use compact horizontal bars instead.
+    add(chartCard,new ProductSalesChart(this,day),-1,196);
     add(body,chartCard,-1,-2);gap(body,6);
     add(body,text(en?
       "Quantities include only recorded, non-refunded sales on this device, not every branch.":

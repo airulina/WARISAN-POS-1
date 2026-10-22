@@ -13,8 +13,8 @@ android {
         targetSdk 35
         // v3.46 behavior and data model; UI-only refresh. Higher code allows
         // installation over an accidentally installed v3.47 preview (code 51).
-        versionCode 52
-        versionName '3.46.1'
+        versionCode 53
+        versionName '3.46.2'
     }
 
     signingConfigs {

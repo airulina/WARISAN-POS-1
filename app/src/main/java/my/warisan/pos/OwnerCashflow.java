@@ -11,6 +11,7 @@ import com.google.firebase.firestore.ListenerRegistration;
 import com.google.firebase.firestore.QueryDocumentSnapshot;
 import com.google.firebase.firestore.QuerySnapshot;
 import java.util.ArrayList;
+import java.util.Calendar;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
@@ -18,6 +19,7 @@ import java.util.Map;
 import java.util.TreeMap;
 import java.util.HashSet;
 import java.util.Set;
+import java.text.SimpleDateFormat;
 import com.google.android.gms.tasks.Task;
 import com.google.android.gms.tasks.Tasks;
 import org.json.JSONArray;
@@ -41,6 +43,7 @@ final class OwnerCashflow {
   private ListenerRegistration branchListener;
   private final ArrayList<ListenerRegistration> dayListeners = new ArrayList<>();
   private final ArrayList<BranchRow> rows = new ArrayList<>();
+  private int detailPeriod=0; // 0 daily, 1 Monday-Sunday, 2 monthly
 
   static final class Day {
     long sales, cash, qr, transactions, unknown;
@@ -105,13 +108,42 @@ final class OwnerCashflow {
     dayListeners.clear();rows.clear();subscriptionKey="";
     listLoaded=false;loadError="";selectedBranchId="";
   }
+  private boolean inBranchDetail(){
+    return host.activePage==17||host.activePage==19;
+  }
+  /** Inclusive date range: the same interval drives sale cards and Closing. */
+  private String[] detailRange(){
+    String day=host.selectedCashDay;
+    if(day==null||!day.matches("\\d{4}-\\d{2}-\\d{2}"))day=host.date();
+    if(detailPeriod==0)return new String[]{day,day};
+    if(detailPeriod==2)return new String[]{day.substring(0,7)+"-01",day.substring(0,7)+"-31"};
+    try{
+      SimpleDateFormat iso=new SimpleDateFormat("yyyy-MM-dd",Locale.US);
+      iso.setLenient(false);
+      Calendar week=Calendar.getInstance();week.setTime(iso.parse(day));
+      int back=(week.get(Calendar.DAY_OF_WEEK)+5)%7;
+      week.add(Calendar.DAY_OF_MONTH,-back);
+      String from=iso.format(week.getTime());
+      week.add(Calendar.DAY_OF_MONTH,6);
+      return new String[]{from,iso.format(week.getTime())};
+    }catch(Exception ignored){return new String[]{day,day};}
+  }
+  private String detailPeriodLabel(){
+    String[] range=detailRange();
+    if(detailPeriod==0)return range[0];
+    if(detailPeriod==1)return "Minggu "+range[0]+" hingga "+range[1];
+    return host.monthLabel(range[0].substring(0,7));
+  }
   String start(){
+    if(inBranchDetail())return detailRange()[0];
     return host.cashDailyMode?host.selectedCashDay:host.selectedMonth+"-01";
   }
   String end(){
+    if(inBranchDetail())return detailRange()[1];
     return host.cashDailyMode?host.selectedCashDay:host.selectedMonth+"-31";
   }
   String period(){
+    if(inBranchDetail())return detailPeriodLabel();
     return host.cashDailyMode?host.selectedCashDay:host.monthLabel(host.selectedMonth);
   }
   static String rm(long cents){
@@ -128,6 +160,7 @@ final class OwnerCashflow {
   void openArchivedBranchReport(String id){
     if(!accounts.owner())return;
     selectedBranchId=id;
+    detailPeriod=2;
     host.cashDailyMode=false;
     host.activePage=19;
     host.draw();
@@ -562,7 +595,11 @@ final class OwnerCashflow {
     host.gap(host.body,10);
     host.drawProductSalesSummary(day);
     host.action((english?"🔓  OPENING / CLOSING · ":"🔓  BUKA / TUTUP SESI · ")+
-      accounts.branchName(),()->{host.activePage=22;host.draw();});
+      accounts.branchName(),()->{
+        selectedBranchId=accounts.branchId();
+        detailPeriod=0;
+        host.activePage=17;host.draw();
+      });
     host.action(english?"🏪  VIEW BRANCHES BY DATE":"🏪  LIHAT CAWANGAN IKUT TARIKH",()->{
       host.cashDailyMode=true;host.activePage=16;host.draw();
     });
@@ -682,7 +719,6 @@ final class OwnerCashflow {
     if(!accounts.owner()){host.heading("Akses ditolak","Owner sahaja.");return;}
     ensureLoaded();
     host.heading("Pilih Branch",period()+" · Tekan nama branch untuk melihat TOTAL SALE masing-masing.");
-    host.action("‹  Kembali ke OVERALL",()->{host.activePage=3;host.draw();});
     if(!loadError.isEmpty()){dataMessage();host.action("↻  Cuba Lagi",()->refresh());return;}
     if(!ready()){dataMessage();return;}
     if(rows.isEmpty()){
@@ -704,6 +740,12 @@ final class OwnerCashflow {
     dataMessage();
   }
   void drawBranchDetail(){
+    // A branch opens its complete report directly as page two. No extra
+    // "tap TOTAL SALE" screen between Owner SALE and the actual detail.
+    drawUnifiedReport();
+  }
+  /** Kept for compatibility while the second-screen report is consolidated. */
+  private void drawLegacyBranchSummary(){
     if(!accounts.owner()){host.heading("Akses ditolak","Owner sahaja.");return;}
     ensureLoaded();
     BranchRow branch=null;
@@ -776,6 +818,84 @@ final class OwnerCashflow {
     for(BranchRow row:rows)if(row.id.equals(selectedBranchId))return row;
     return null;
   }
+  private void drawDetailPeriodControls(){
+    final boolean english=host.english();
+    LinearLayout selector=host.row();
+    String[] labels=english?new String[]{"DAILY","WEEKLY","MONTHLY"}:
+      new String[]{"HARIAN","MINGGUAN","BULANAN"};
+    for(int i=0;i<labels.length;i++){
+      final int selection=i;
+      boolean selected=detailPeriod==i;
+      TextView tab=host.chip(labels[i],selected?host.gold:host.surfaceAlt,
+        selected?host.onAccent:host.ink);
+      tab.setGravity(Gravity.CENTER);
+      LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(0,host.dp(43),1);
+      p.setMargins(host.dp(3),0,host.dp(3),0);
+      selector.addView(tab,p);
+      tab.setOnClickListener(v->{detailPeriod=selection;host.draw();});
+    }
+    host.add(host.body,selector,-1,-2);
+    host.gap(host.body,8);
+    host.action((english?"📅  SELECT DATE · ":"📅  PILIH TARIKH · ")+
+      host.selectedCashDay,()->host.pickDay(
+        english?"Choose report date":"Pilih tarikh laporan",host.selectedCashDay,value->{
+          host.selectedCashDay=value;
+          host.selectedMonth=value.substring(0,7);
+          host.draw();
+        }));
+    host.add(host.body,host.text((english?"PERIOD · ":"TEMPOH · ")+
+      detailPeriodLabel(),12,host.gold,true),-1,-2);
+    host.gap(host.body,10);
+  }
+  private int localExpenseInPeriod(String from,String to,boolean personal){
+    if(detailPeriod==0)return personal?host.personalTotal(from,true):
+      host.operatingExpenseTotal(from,true);
+    if(detailPeriod==2){
+      String month=from.substring(0,7);
+      return personal?host.personalTotal(month,false):
+        host.operatingExpenseTotal(month,false);
+    }
+    try{
+      SimpleDateFormat iso=new SimpleDateFormat("yyyy-MM-dd",Locale.US);
+      iso.setLenient(false);
+      Calendar cursor=Calendar.getInstance();cursor.setTime(iso.parse(from));
+      int total=0;
+      for(int i=0;i<7;i++){
+        String date=iso.format(cursor.getTime());
+        if(date.compareTo(to)>0)break;
+        total+=personal?host.personalTotal(date,true):
+          host.operatingExpenseTotal(date,true);
+        cursor.add(Calendar.DAY_OF_MONTH,1);
+      }
+      return total;
+    }catch(Exception ignored){
+      // A bad date must not silently turn unknown expenses into RM0 profit.
+      throw new IllegalArgumentException("Julat tarikh perbelanjaan tidak sah: "+from+" hingga "+to);
+    }
+  }
+  private void drawBranchSessionControls(BranchRow chosen){
+    host.gap(host.body,14);
+    host.add(host.body,host.text("OPENING & CLOSING · "+chosen.name,13,host.gold,true),-1,-2);
+    host.gap(host.body,8);
+    if(chosen.archived){
+      host.add(host.body,host.text("Cawangan arkib: rekod boleh disemak, sesi baharu tidak boleh dibuka.",
+        12,host.muted,false),-1,-2);
+    }else if(chosen.id.equals(accounts.branchId())){
+      host.drawPosSession();
+      host.gap(host.body,7);
+      host.add(host.body,host.text("Opening/Closing di atas ialah sesi operasi semasa. "+
+        "Tarikh laporan di atas tidak mengubah sesi aktif.",11,host.muted,false),-1,-2);
+    }else{
+      host.add(host.body,host.text("Sesi cawangan lain diurus pekerja. "+
+        "Untuk Closing tertinggal, pilih sesi cawangan yang betul daripada senarai.",
+        11,host.muted,false),-1,-2);
+      host.gap(host.body,7);
+      host.action("CLOSING TERTINGGAL · OWNER",()->host.live.showOwnerForcedClosing());
+    }
+    host.gap(host.body,9);
+    host.action("📒  REKOD CLOSING & DUIT KELUAR (CLOUD)",
+      ()->showCloudClosingHistory(chosen.id));
+  }
   void drawUnifiedReport(){
     if(!accounts.owner()){
       host.heading("Akses Ditolak","Laporan branch hanya boleh dilihat oleh Owner.");
@@ -785,24 +905,23 @@ final class OwnerCashflow {
     BranchRow branch=selectedBranch();
     if(branch==null){
       host.heading("Laporan","Pilih branch dahulu untuk lihat rekod jualan.");
-      host.action("‹  KEMBALI KE SENARAI BRANCH",()->{
-        host.activePage=16;host.draw();
-      });
       return;
     }
     final BranchRow chosen=branch;
-    host.cashDailyMode=false;
-    host.heading("LAPORAN · "+chosen.name,
-      "Semua rekod jualan lama dan Live, tunai, QR, serta kos tempatan dalam satu halaman.");
-    host.action("‹  KEMBALI KE TOTAL SALE "+chosen.name,()->{host.activePage=17;host.draw();});
-    host.action("Bulan: "+host.monthLabel(host.selectedMonth)+"  ▼",()->host.chooseMonth());
+    host.heading(chosen.name,
+      "SALE · "+chosen.status+" · Jualan, kos, graf dan sesi dalam satu halaman.");
+    drawDetailPeriodControls();
+    // Session actions must remain accessible while sales reports refresh,
+    // including when Firestore is slow or temporarily unavailable.
+    drawBranchSessionControls(chosen);
+    host.gap(host.body,12);
     if(!loadError.isEmpty()||!ready()){
       dataMessage();
       host.action("↻  SEMAK SEMULA",()->refresh());
       return;
     }
     Day total=chosen.totals();
-    host.add(host.body,host.text("RINGKASAN · "+period(),12,host.gold,true),-1,-2);
+    host.add(host.body,host.text("RINGKASAN JUALAN · "+period(),13,host.gold,true),-1,-2);
     host.gap(host.body,8);
     LinearLayout gross=host.row();
     host.metric(gross,"JUMLAH JUALAN LAMA + LIVE",rm(total.sales),host.blue,null);
@@ -824,36 +943,38 @@ final class OwnerCashflow {
     host.gap(host.body,12);
     host.add(host.body,host.text("GRAF JUALAN · "+chosen.name,13,host.gold,true),-1,-2);
     host.gap(host.body,7);
-    host.add(host.body,new OwnerSalesChart(host,chosen.combined(),host.selectedMonth),
-      -1,host.dp(218));
+    host.add(host.body,new OwnerSalesChart(host,chosen.combined(),start(),end()),
+      -1,168);
     host.gap(host.body,9);
     host.action("📊  EXPORT PDF A4 · GRAF & REKOD JUALAN",()->{
-      OwnerReportPdf.print(host,chosen,period(),chosen.id.equals(accounts.branchId()));
+      OwnerReportPdf.print(host,chosen,period(),start(),end(),
+        chosen.id.equals(accounts.branchId()));
     });
-    host.action("🧾  REKOD RESIT QR / TNG / DUITNOW",()->showQrHistory(chosen));
+    host.action("🧾  REKOD RESIT QR / TNG / DUITNOW",
+      ()->showQrHistory(chosen,start(),end()));
     host.gap(host.body,12);
     host.add(host.body,host.text("KOS & UNTUNG · REKOD TEMPATAN",13,host.gold,true),-1,-2);
     host.gap(host.body,7);
     if(chosen.id.equals(accounts.branchId())){
       // Only this branch's locally stored receipts/costs are visible.
       // Cloud sales from other phones must never be labelled local profit.
-      String first=host.selectedMonth+"-01",last=host.selectedMonth+"-31";
+      String first=start(),last=end();
       int localSales=host.saleTotalBetween(first,last);
       int cost=host.productCostBetween(first,last);
-      int operations=host.operatingExpenseTotal(host.selectedMonth,false);
-      int profit=host.businessProfit(host.selectedMonth,false);
-      int personal=host.personalTotal(host.selectedMonth,false);
+      int operations=localExpenseInPeriod(first,last,false);
+      int branchLocalProfit=localSales-cost-operations;
+      int personal=localExpenseInPeriod(first,last,true);
       LinearLayout local=host.row();
       host.metric(local,"JUALAN POS TEMPATAN",rm(localSales),host.blue,null);
       host.metric(local,"KOS PRODUK",rm(cost),host.ink,null);
       host.add(host.body,local,-1,-2);host.gap(host.body,8);
       LinearLayout expenses=host.row();
       host.metric(expenses,"BELANJA OPERASI",rm(operations),host.ink,null);
-      host.metric(expenses,"UNTUNG POS TEMPATAN",rm(profit),
-        host.profitColor(profit),null);
+      host.metric(expenses,"UNTUNG POS TEMPATAN",rm(branchLocalProfit),
+        host.profitColor(branchLocalProfit),null);
       host.add(host.body,expenses,-1,-2);host.gap(host.body,8);
-      host.add(host.body,host.text("Pengeluaran peribadi: "+rm(personal)+
-        "  ·  Baki pembekal perlu bayar: "+rm(host.supplierDue()),12,host.muted,false),-1,-2);
+      host.add(host.body,host.text("Pengeluaran peribadi tempoh ini: "+rm(personal)+
+        "  ·  Baki pembekal semasa: "+rm(host.supplierDue()),12,host.muted,false),-1,-2);
       host.gap(host.body,6);
       host.add(host.body,host.text(host.english()?
         "These costs and profits use only the active branch's local POS "+
@@ -872,7 +993,7 @@ final class OwnerCashflow {
     if(chosen.id.equals(accounts.branchId())){
       host.gap(host.body,10);
       host.add(host.body,host.text("ITEM TERJUAL · REKOD TEMPATAN",12,host.gold,true),-1,-2);
-      String localFrom=host.selectedMonth+"-01",localTo=host.selectedMonth+"-31";
+      String localFrom=start(),localTo=end();
       int[] sold=host.soldNetBetween(localFrom,localTo);
       boolean anyProduct=false;
       for(int i=0;i<Math.min(sold.length,host.names.length);i++){
@@ -900,7 +1021,7 @@ final class OwnerCashflow {
           entry.optLong("amount",0));
       }
       if(costs.isEmpty()){
-        host.add(host.body,host.text("Tiada rekod kos tunai untuk bulan ini.",
+        host.add(host.body,host.text("Tiada rekod kos tunai untuk tempoh ini.",
           12,host.muted,false),-1,-2);
       }else for(Map.Entry<String,Long> item:costs.entrySet()){
         host.add(host.body,host.text(item.getKey()+"  ·  "+rm(item.getValue()),

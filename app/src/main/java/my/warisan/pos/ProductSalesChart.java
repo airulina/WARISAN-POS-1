@@ -74,71 +74,65 @@ final class ProductSalesChart extends View {
     int grid=host.themeLight?0xffD7E2EE:host.surfaceAlt;
     int foreground=host.muted;
 
-    // Compact legend with the same colors as the daily quantity cards.
+    // Same actual seven-day skewer quantities, presented as short horizontal
+    // bars. No second chart, landscape screen, or extra report window needed.
     paint.setStyle(Paint.Style.FILL);
+    paint.setTextAlign(Paint.Align.LEFT);
     paint.setTypeface(Typeface.create(Typeface.DEFAULT,Typeface.BOLD));
     paint.setTextSize(px(10));
-    paint.setTextAlign(Paint.Align.LEFT);
-    float topLegend=px(18);
-    paint.setColor(chicken);canvas.drawCircle(px(8),topLegend-px(3),px(4),paint);
-    paint.setColor(foreground);
-    canvas.drawText(host.english()?"CHICKEN":"AYAM",px(17),topLegend,paint);
-    paint.setColor(beef);canvas.drawCircle(px(105),topLegend-px(3),px(4),paint);
-    paint.setColor(foreground);
-    canvas.drawText(host.english()?"BEEF":"DAGING",px(114),topLegend,paint);
+    float legend=px(15);
+    paint.setColor(chicken);canvas.drawCircle(px(8),legend-px(3),px(4),paint);
+    paint.setColor(foreground);canvas.drawText(host.english()?"CHICKEN":"AYAM",px(17),legend,paint);
+    paint.setColor(beef);canvas.drawCircle(px(106),legend-px(3),px(4),paint);
+    paint.setColor(foreground);canvas.drawText(host.english()?"BEEF":"DAGING",px(115),legend,paint);
     paint.setTextAlign(Paint.Align.RIGHT);
-    canvas.drawText(host.english()?"SKEWERS":"CUCUK",width-px(6),topLegend,paint);
+    canvas.drawText(host.english()?"SKEWERS":"CUCUK",width-px(6),legend,paint);
 
-    float left=px(33),right=width-px(5),top=px(45),bottom=height-px(29);
+    float left=px(45),right=width-px(16),top=px(28),bottom=height-px(15);
     if(right<=left||bottom<=top)return;
     int max=0;
     for(int product=0;product<2;product++)
       for(int day=0;day<DAYS;day++)max=Math.max(max,quantity[product][day]);
     int upper=niceCeiling(max);
-    float dayWidth=(right-left)/DAYS;
+    float rowHeight=(bottom-top)/DAYS;
+    float chartWidth=right-left;
 
-    // Mark the selected day with a subtle vertical highlight.
-    paint.setColor(host.themeLight?0xffEDF5FA:0xff294257);
-    canvas.drawRoundRect(new RectF(right-dayWidth+px(1),top-px(5),right+px(2),bottom+px(4)),
-      px(7),px(7),paint);
-
+    paint.setStrokeWidth(px(.75f));
+    for(int step=1;step<=4;step++){
+      float x=left+chartWidth*step/4;
+      paint.setColor(grid);
+      canvas.drawLine(x,top,x,bottom,paint);
+    }
     paint.setTypeface(Typeface.DEFAULT);
     paint.setTextSize(px(9));
-    for(int row=0;row<=4;row++){
-      float y=bottom-(bottom-top)*row/4f;
-      paint.setColor(grid);
-      paint.setStrokeWidth(px(0.8f));
-      canvas.drawLine(left,y,right,y,paint);
-      paint.setColor(foreground);
-      paint.setTextAlign(Paint.Align.RIGHT);
-      canvas.drawText(String.valueOf((long)upper*row/4),left-px(6),y+px(3),paint);
-    }
-
-    float barWidth=Math.max(px(3),Math.min(px(12),dayWidth*.24f));
     for(int day=0;day<DAYS;day++){
-      float center=left+dayWidth*(day+.5f);
-      for(int product=0;product<2;product++){
-        int count=quantity[product][day];
-        if(count==0)continue;
-        float tall=Math.max(px(2),(bottom-top)*count/(float)upper);
-        float x=product==0?center-barWidth-px(1):center+px(1);
-        paint.setColor(product==0?chicken:beef);
-        canvas.drawRoundRect(new RectF(x,bottom-tall,x+barWidth,bottom),
-          Math.min(px(4),barWidth/2),Math.min(px(4),barWidth/2),paint);
+      float y=top+rowHeight*day;
+      if(day==DAYS-1){
+        paint.setColor(host.themeLight?0xffEDF5FA:0xff294257);
+        canvas.drawRoundRect(new RectF(px(1),y,width-px(1),y+rowHeight),
+          px(6),px(6),paint);
       }
-      paint.setTextAlign(Paint.Align.CENTER);
+      paint.setTextAlign(Paint.Align.LEFT);
       paint.setTypeface(day==DAYS-1?Typeface.DEFAULT_BOLD:Typeface.DEFAULT);
       paint.setColor(day==DAYS-1?host.ink:foreground);
-      paint.setTextSize(px(9));
-      canvas.drawText(labels[day],center,bottom+px(17),paint);
+      canvas.drawText(labels[day],px(3),y+rowHeight*.58f,paint);
+      float barHeight=Math.max(px(3),Math.min(px(6),rowHeight*.29f));
+      for(int product=0;product<2;product++){
+        int count=quantity[product][day];
+        if(count<=0)continue;
+        float length=Math.max(px(2),chartWidth*count/(float)upper);
+        float barY=y+rowHeight*.2f+product*(barHeight+px(2));
+        paint.setColor(product==0?chicken:beef);
+        canvas.drawRoundRect(new RectF(left,barY,left+length,barY+barHeight),
+          px(3),px(3),paint);
+      }
     }
     if(max==0){
       paint.setTextAlign(Paint.Align.CENTER);
-      paint.setTypeface(Typeface.DEFAULT);
-      paint.setTextSize(px(11));
+      paint.setTextSize(px(10));
       paint.setColor(foreground);
-      canvas.drawText(host.english()?"No local skewer sales for these dates.":
-        "Belum ada jualan sate bagi tarikh ini.",(left+right)/2,(top+bottom)/2,paint);
+      canvas.drawText(host.english()?"No local skewer sales yet.":
+        "Belum ada jualan sate tempatan.",(left+right)/2,(top+bottom)/2,paint);
     }
   }
 }

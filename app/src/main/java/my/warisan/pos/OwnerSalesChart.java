@@ -19,13 +19,18 @@ final class OwnerSalesChart extends View {
   private final ArrayList<String> labels=new ArrayList<>();
   private final Paint p=new Paint(Paint.ANTI_ALIAS_FLAG);
   OwnerSalesChart(Context context,TreeMap<String,OwnerCashflow.Day> days,String month){
-    super(context);this.month=month;
+    this(context,days,month+"-01",month+"-31");
+  }
+  OwnerSalesChart(Context context,TreeMap<String,OwnerCashflow.Day> days,
+      String from,String to){
+    super(context);this.month=from.substring(0,7).equals(to.substring(0,7))?
+      from.substring(0,7):from.substring(5)+" — "+to.substring(5);
     for(Map.Entry<String,OwnerCashflow.Day> entry:days.entrySet()){
-      if(!entry.getKey().startsWith(month+"-"))continue;
-      labels.add(entry.getKey().substring(8));
+      if(entry.getKey().compareTo(from)<0||entry.getKey().compareTo(to)>0)continue;
+      labels.add(from.equals(to)?entry.getKey().substring(5):entry.getKey().substring(8));
       values.add(entry.getValue().sales);
     }
-    setMinimumHeight((int)(context.getResources().getDisplayMetrics().density*205));
+    setMinimumHeight((int)(context.getResources().getDisplayMetrics().density*152));
   }
   private String display(String text){
     Context current=getContext();
