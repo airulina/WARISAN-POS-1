@@ -681,17 +681,25 @@ selectedDay=date();selectedMonth=selectedDay.substring(0,7);rangeStart=selectedD
       add(body,text("Offline: semua tindakan tambah, edit, rosak, Edar dan stok pulang "+
         "dikunci sehingga Cloud disahkan.",12,0xffff6b6b,true),-1,-2);
     String liveDay=live.day().isEmpty()?businessDay():live.day();
+    long[] soldUnits=live.soldQuantities();
+    boolean confirmedSold=live.soldQuantitiesConfirmed();
+    boolean hasSold=confirmedSold||live.soldQuantitiesReady();
+    long totalSold=0;for(long value:soldUnits)totalSold+=value;
     add(body,text("RINGKASAN JUALAN LIVE · "+liveDay,13,gold,true),-1,-2);gap(body,6);
     LinearLayout dayOverview=row();
     metric(dayOverview,"JUMLAH JUALAN HARI INI",live.usable()?money((int)live.sales()):"—",blue,null);
-    metric(dayOverview,"JUMLAH ITEM TERJUAL",live.soldQuantitiesReady()?
-      live.soldTotalToday()+" unit":"—",themeLight?0xff087F65:0xff4ADEB9,null);
+    metric(dayOverview,"JUMLAH ITEM TERJUAL",hasSold?
+      totalSold+" unit":"—",themeLight?0xff087F65:0xff4ADEB9,null);
     add(body,dayOverview,-1,-2);gap(body,7);
-    if(!live.soldQuantitiesReady()){
-      add(body,text("Bilangan terjual sedang disahkan daripada order Cloud. "+
-        "Tanda — bermaksud belum dapat disahkan, bukan sifar jualan.",11,muted,false),-1,-2);
-      gap(body,9);
-    }
+    String soldInfo=confirmedSold?
+      "SUMBER: TRANSAKSI CLOUD · Dikemas kini sebaik bayaran diterima; " +
+        "order belum bayar, batal dan refund tidak dikira.":
+      hasSold?"SUMBER: REKOD JUALAN LIVE TELEFON INI · Angka sementara, " +
+        "mungkin belum termasuk jualan pekerja di telefon lain.":
+        "Bilangan terjual belum disahkan. Tanda — bukan bermaksud sifar jualan.";
+    add(body,text(soldInfo,11,confirmedSold?muted:0xffffb74d,false),-1,-2);gap(body,7);
+    action("↻  SEMAK SEMULA REKOD JUALAN CLOUD",()->live.refreshPaidOrders());
+    gap(body,7);
     add(body,text("Stok awal branch Live ditetapkan semasa Live diaktifkan. "+
       "Gunakan EDIT BAKI untuk pembetulan stok awal/semasa, bukan pembelian baru.",
       11,muted,false),-1,-2);gap(body,9);
@@ -705,8 +713,8 @@ selectedDay=date();selectedMonth=selectedDay.substring(0,7);rangeStart=selectedD
       add(item,text(names[id],16,ink,true),-1,-2);gap(item,8);
       String unit=id<3?" cucuk":" unit";
       LinearLayout numbers=row();
-      liveStockTile(numbers,"TERJUAL HARI INI",live.soldQuantitiesReady()?
-        live.soldToday(id)+unit:"—",false);
+      liveStockTile(numbers,"TERJUAL HARI INI",hasSold?
+        (id<soldUnits.length?soldUnits[id]:0)+unit:"—",false);
       liveStockTile(numbers,"BAKI STOK LIVE",live.usable()?
         stock(id)+unit:"—",true);
       add(item,numbers,-1,-2);gap(item,11);
@@ -772,7 +780,9 @@ selectedDay=date();selectedMonth=selectedDay.substring(0,7);rangeStart=selectedD
       message("Ringkasan Live perlukan Owner dan sambungan Cloud yang disahkan.");return;
     }
     StringBuilder report=new StringBuilder("BRANCH: "+branchAccounts.branchName()+
-      "\nSUMBER: FIRESTORE LIVE\n\n");
+      "\nBAKI STOK: FIRESTORE LIVE"+
+      "\nTERJUAL: "+(live.soldQuantitiesConfirmed()?"TRANSAKSI CLOUD DISAHKAN":
+        "REKOD LIVE TELEFON INI (SEMENTARA)")+"\n\n");
     for(int i=0;i<names.length;i++){
       if(posPrefs().getBoolean("menu_hidden_"+i,false))continue;
       if(unlimited(i)){report.append(names[i]).append(": tanpa had unit\n");continue;}
@@ -782,6 +792,7 @@ selectedDay=date();selectedMonth=selectedDay.substring(0,7);rangeStart=selectedD
         .append(i<3?" cucuk":" unit").append("\n");
     }
     report.append("\nTerjual = order Live sudah dibayar (bukan pending/refund). "+
+      "Jika Cloud belum disahkan, jumlah daripada telefon mungkin tidak lengkap. "+
       "Baki semasa disahkan melalui Cloud dan boleh termasuk stok ditempah. "+
       "Untuk sejarah pembetulan, tekan HISTORY PERUBAHAN STOK LIVE.");
     darkBuilder().setTitle("RINGKASAN STOK LIVE").setMessage(report.toString())
