@@ -68,6 +68,9 @@ jobs:
       - name: Verify staff closing ledger and archived reports
         run: node tests/staff-closing-smoke.mjs
 
+      - name: Verify Owner Home matches approved branch-card layout
+        run: node tests/owner-home-layout-smoke.mjs
+
       - name: Build APK
         run: gradle assembleDebug --no-daemon
 

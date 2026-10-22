@@ -319,7 +319,12 @@ selectedDay=date();selectedMonth=selectedDay.substring(0,7);rangeStart=selectedD
     }
     if(branchAccounts!=null&&branchAccounts.staff()
       &&activePage!=0&&activePage!=11&&activePage!=5&&activePage!=12&&activePage!=14&&activePage!=20)activePage=0;
-    if(activePage!=0){drawPage();addNavigation(screen);return;}
+    // Owner's Utama is the all-branch dashboard. The old selling Menu remains
+    // accessible from the active branch's Lihat Butiran (page 23).
+    if(branchAccounts.owner()&&activePage==0){
+      ownerCashflow.drawOwnerHome();addNavigation(screen);return;
+    }
+    if(activePage!=0&&activePage!=23){drawPage();addNavigation(screen);return;}
     LinearLayout header=row();ImageView logo=new ImageView(this);setStoreLogo(logo);makeCircle(logo);add(header,logo,49,49);
     LinearLayout heading=col();heading.setPadding(dp(10),0,0,0);add(heading,text("WARISAN POS",21,blue,true),-1,-2);LinearLayout sub=row();sub.addView(text("KIOS WARISAN  ·  SISTEM JUALAN",10,muted,true),new LinearLayout.LayoutParams(0,-2,1));TextView liveClock=text("",10,gold,true);liveClock.setGravity(Gravity.RIGHT|Gravity.CENTER_VERTICAL);add(sub,liveClock,-2,-2);add(heading,sub,-1,-2);startHeaderClock(liveClock);header.addView(heading,new LinearLayout.LayoutParams(0,-2,1));
     add(body,header,-1,-2);gap(body,9);
@@ -371,8 +376,40 @@ selectedDay=date();selectedMonth=selectedDay.substring(0,7);rangeStart=selectedD
     if(count()==0){TextView empty=text("Belum ada pesanan. Pilih menu di atas.",13,muted,false);empty.setPadding(0,dp(13),0,dp(13));add(basket,empty,-1,-2);return;}
     for(int i=0;i<qty.length;i++)if(qty[i]>0){final int id=i;LinearLayout r=row();r.addView(text(names[i]+" × "+qty[i],14,ink,true),new LinearLayout.LayoutParams(0,dp(39),1));add(r,text(money(qty[i]*prices[i]),13,blue,true),-2,-2);TextView minus=chip("−",0xffc83f46,Color.WHITE);LinearLayout.LayoutParams m=params(32,30);m.leftMargin=dp(8);r.addView(minus,m);minus.setOnClickListener(v->{qty[id]--;draw();});add(basket,r,-1,-2);}
   }
-  void addNavigation(LinearLayout screen){LinearLayout nav=row();nav.setBackgroundColor(cream);nav.setPadding(dp(7),dp(7),dp(7),dp(9));boolean worker=branchAccounts.staff();String[] labels=worker?(english()?new String[]{"MENU","ORDER","SALE","SETTINGS"}:new String[]{"MENU","ORDER","SALE","SETTING"}):(english()?new String[]{"MENU","ORDERS","STOCK","CASH","BRANCH","SETTINGS"}:new String[]{"MENU","ORDER","STOK","DUIT","BRANCH","SETTING"});int[] pages=worker?new int[]{0,11,12,5}:new int[]{0,11,1,3,15,4};
-    for(int i=0;i<labels.length;i++){final int page=pages[i];boolean selected=(activePage==page)||(worker&&page==5&&activePage==14)||(page==1&&activePage==13)||(page==3&&(activePage==2||activePage==16||activePage==17||activePage==18||activePage==19||activePage==21||activePage==22))||(page==4&&activePage>=4&&activePage<=10);int background=selected?gold:navOff,foreground=selected?onAccent:navOffText;TextView tab=text(labels[i],11,foreground,true);tab.setTextColor(WarisanTheme.readableText(foreground,background,ink));tab.setGravity(Gravity.CENTER);tab.setMaxLines(1);tab.setEllipsize(android.text.TextUtils.TruncateAt.END);tab.setBackground(shape(background,13));LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(0,dp(53),1);p.setMargins(dp(2),0,dp(2),0);nav.addView(tab,p);tab.setOnClickListener(v->{activePage=page;draw();});}add(screen,nav,-1,-2);}
+  void addNavigation(LinearLayout screen){
+    LinearLayout nav=row();nav.setBackgroundColor(cream);
+    nav.setPadding(dp(7),dp(7),dp(7),dp(9));
+    boolean worker=branchAccounts.staff();
+    String[] labels=worker?(english()?new String[]{"MENU","ORDER","SALE","SETTINGS"}:new String[]{"MENU","ORDER","SALE","SETTING"}):
+      (english()?new String[]{"HOME","MONEY","BRANCHES","SETTINGS"}:new String[]{"UTAMA","DUIT","CAWANGAN","TETAPAN"});
+    String[] symbols=worker?new String[]{"☷","▤","▥","⚙"}:
+      new String[]{"⌂","▣","▤","⚙"};
+    int[] pages=worker?new int[]{0,11,12,5}:new int[]{0,3,15,4};
+    for(int i=0;i<labels.length;i++){
+      final int page=pages[i];
+      boolean selected=(activePage==page)||
+        (worker&&page==5&&activePage==14)||
+        (!worker&&page==0&&activePage==23)||
+        (!worker&&page==3&&(activePage==2||activePage==16||activePage==17||activePage==18||activePage==19||activePage==21||activePage==22))||
+        (!worker&&page==15&&(activePage==1||activePage==13))||
+        (page==4&&activePage>=4&&activePage<=10);
+      int color=selected?gold:navOffText;
+      LinearLayout item=col();item.setGravity(Gravity.CENTER);
+      TextView symbol=text(symbols[i],24,color,true);symbol.setGravity(Gravity.CENTER);
+      TextView label=text(labels[i],10,color,true);label.setGravity(Gravity.CENTER);
+      add(item,symbol,-1,-2);add(item,label,-1,-2);
+      if(selected){
+        android.view.View indicator=new android.view.View(this);
+        indicator.setBackground(shape(gold,2));
+        LinearLayout.LayoutParams ip=new LinearLayout.LayoutParams(dp(35),dp(3));ip.topMargin=dp(3);
+        item.addView(indicator,ip);
+      }
+      LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(0,dp(64),1);
+      p.setMargins(dp(2),0,dp(2),0);nav.addView(item,p);
+      item.setOnClickListener(v->{activePage=page;draw();});
+    }
+    add(screen,nav,-1,-2);
+  }
   void heading(String title,String subtitle){
     LinearLayout brand=row();brand.setGravity(Gravity.CENTER_VERTICAL);ImageView logo=new ImageView(this);setStoreLogo(logo);makeCircle(logo);add(brand,logo,44,44);LinearLayout brandText=col();brandText.setPadding(dp(9),0,0,0);add(brandText,text("WARISAN POS",18,blue,true),-1,-2);add(brandText,text("KIOS WARISAN  ·  SISTEM JUALAN",9,muted,true),-1,-2);brand.addView(brandText,new LinearLayout.LayoutParams(0,-2,1));TextView clock=text("",9,gold,true);clock.setGravity(Gravity.RIGHT|Gravity.CENTER_VERTICAL);add(brand,clock,-2,-2);startHeaderClock(clock);add(body,brand,-1,-2);gap(body,15);
     add(body,text(title,23,ink,true),-1,-2);add(body,text(subtitle,12,muted,false),-1,-2);gap(body,16);
