@@ -248,8 +248,15 @@ try{
     open:false,closing:0,closedBy:'staff',closedByEmail:'staff@example.test',
     updatedAt:serverTimestamp()
   }));
-  await assertSucceeds(updateDoc(d(staff2,branch+'/liveSessions/'+today),{
+  // Missing expense audit fields must not be accepted as a new Closing.
+  await assertFails(updateDoc(d(staff2,branch+'/liveSessions/'+today),{
     open:false,closing:0,closedBy:'staff2',closedByEmail:'staff2@example.test',
+    updatedAt:serverTimestamp()
+  }));
+  await assertSucceeds(updateDoc(d(staff2,branch+'/liveSessions/'+today),{
+    open:false,closing:-500,closedBy:'staff2',closedByEmail:'staff2@example.test',
+    expenses:[{category:'Sewa',amount:1500},{category:'Plastik',amount:800}],
+    expenseTotal:2300,closingRemark:'Disahkan, baki tunai negatif',
     updatedAt:serverTimestamp()
   }));
   await assertFails(updateDoc(d(staff2,branch+'/liveSessions/'+today),{

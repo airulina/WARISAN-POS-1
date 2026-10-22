@@ -65,6 +65,9 @@ jobs:
       - name: Verify Live stock sold and balance display
         run: node tests/live-stock-smoke.mjs
 
+      - name: Verify staff closing ledger and archived reports
+        run: node tests/staff-closing-smoke.mjs
+
       - name: Build APK
         run: gradle assembleDebug --no-daemon
 

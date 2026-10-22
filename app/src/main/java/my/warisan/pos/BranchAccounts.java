@@ -35,6 +35,8 @@ final class BranchAccounts {
   static final String LEGACY_BRANCH="utama_legacy";
   final ArrayList<String> stockBranchIds=new ArrayList<>();
   final ArrayList<String> stockBranchNames=new ArrayList<>();
+  final ArrayList<String> archivedStockIds=new ArrayList<>();
+  final ArrayList<String> archivedStockNames=new ArrayList<>();
   boolean stockBranchesLoaded=false,stockBranchesLoading=false;
   String stockListOwner="";
   static String operatingLabel(String code) {
@@ -114,9 +116,11 @@ final class BranchAccounts {
     String uid=ownerUid();
     if(!uid.equals(stockListOwner)){
       stockBranchesLoaded=false;stockBranchIds.clear();stockBranchNames.clear();
+      archivedStockIds.clear();archivedStockNames.clear();
       stockListOwner=uid;
     }
-    host.heading("Stok Mengikut Branch","Owner sahaja · Pilih branch untuk edit atau tambah stok.");
+    host.heading("STOK · SEMUA CAWANGAN",
+      "Owner sahaja · Stok aktif, Restock dan arkib cawangan.");
     host.action("↻  Refresh Senarai Branch",()->{
       stockBranchesLoaded=false;loadStockBranches();
     });
@@ -126,20 +130,29 @@ final class BranchAccounts {
       loadStockBranches();
       return;
     }
-    if(stockBranchIds.isEmpty()){
+    if(stockBranchIds.isEmpty()&&archivedStockIds.isEmpty()){
       host.add(host.body,host.text("Belum ada branch. Daftar branch melalui Setting → Account.",13,host.muted,false),-1,-2);
       return;
     }
-    host.add(host.body,host.text("JUMLAH BRANCH: "+stockBranchIds.size(),12,host.gold,true),-1,-2);
+    host.add(host.body,host.text("CAWANGAN AKTIF · "+stockBranchIds.size(),13,host.gold,true),-1,-2);
     host.gap(host.body,8);
     for(int i=0;i<stockBranchIds.size();i++){
       final String id=stockBranchIds.get(i),name=stockBranchNames.get(i);
       boolean selected=id.equals(branchId());
-      host.action((selected?"●  ":"🏪  ")+name+(selected?" · Branch aktif":"")+"  ›",
+      host.action((selected?"●  ":"🏪  ")+name+"  ›\n      Stok awal · Terjual · Baki · Restock Admin",
         ()->openStockBranch(id,name));
     }
     host.gap(host.body,8);
-    host.add(host.body,host.text("Masuk branch dahulu sebelum ubah stok. Branch lain tidak akan terjejas.",12,host.muted,false),-1,-2);
+    if(!archivedStockIds.isEmpty()){
+      host.add(host.body,host.text("ARKIB CAWANGAN · "+archivedStockIds.size(),13,host.gold,true),-1,-2);
+      host.gap(host.body,7);
+      for(int i=0;i<archivedStockIds.size();i++){
+        final String id=archivedStockIds.get(i),name=archivedStockNames.get(i);
+        host.action("▤  "+name+" · DITUTUP / ARKIB\n      Lihat rekod bulanan sahaja",
+          ()->host.ownerCashflow.openArchivedBranchReport(id));
+      }
+    }
+    host.add(host.body,host.text("Restock hanya Owner. Cawangan arkib dibaca sebagai sejarah, tidak boleh diubah.",12,host.muted,false),-1,-2);
   }
   void loadStockBranches(){
     if(!owner()||stockBranchesLoading)return;
@@ -149,11 +162,17 @@ final class BranchAccounts {
         stockBranchesLoading=false;
         if(!owner()||!uid.equals(ownerUid()))return;
         stockBranchIds.clear();stockBranchNames.clear();
+        archivedStockIds.clear();archivedStockNames.clear();
         for(QueryDocumentSnapshot doc:result){
-          if(Boolean.TRUE.equals(doc.getBoolean("archived")))continue;
-          stockBranchIds.add(doc.getId());
           String name=doc.getString("name");
-          stockBranchNames.add(name==null||name.trim().isEmpty()?"Branch "+doc.getId():name);
+          name=name==null||name.trim().isEmpty()?"Branch "+doc.getId():name;
+          if(Boolean.TRUE.equals(doc.getBoolean("archived"))){
+            archivedStockIds.add(doc.getId());archivedStockNames.add(name);
+          }else if(isPrimaryBranch(doc)){
+            stockBranchIds.add(0,doc.getId());stockBranchNames.add(0,name);
+          }else{
+            stockBranchIds.add(doc.getId());stockBranchNames.add(name);
+          }
         }
         stockBranchesLoaded=true;
         if(host.activePage==1)host.draw();

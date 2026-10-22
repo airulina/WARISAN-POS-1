@@ -55,14 +55,15 @@ final class OwnerCashflow {
   }
   static final class BranchRow {
     final String id,name,status;
+    final boolean archived;
     final TreeMap<String,Day> remote = new TreeMap<>();
     TreeMap<String,Day> local = new TreeMap<>();
     TreeMap<String,Day> legacyOnly = new TreeMap<>();
     boolean seen=false,cache=false;
     int copiedLegacySales=0;
     boolean hasCopiedLocalData=false;
-    BranchRow(String id,String name,String status){
-      this.id=id;this.name=name;this.status=status;
+    BranchRow(String id,String name,String status,boolean archived){
+      this.id=id;this.name=name;this.status=status;this.archived=archived;
     }
     TreeMap<String,Day> combined(){
       // The old version replaced a whole local day with the cloud day.
@@ -122,6 +123,53 @@ final class OwnerCashflow {
     stop();selectedBranchId=current;
     ensureLoaded();
   }
+  void openArchivedBranchReport(String id){
+    if(!accounts.owner())return;
+    selectedBranchId=id;
+    host.cashDailyMode=false;
+    host.activePage=19;
+    host.draw();
+  }
+  /** Closing expenses are synced as audit records, not assumed to be complete profit. */
+  void showCloudClosingHistory(String id){
+    if(!accounts.owner())return;
+    final String from=start(),to=end();
+    db.collection("workspaces").document(accounts.ownerUid())
+      .collection("branches").document(id).collection("liveSessions")
+      .whereGreaterThanOrEqualTo(FieldPath.documentId(),from)
+      .whereLessThanOrEqualTo(FieldPath.documentId(),to)
+      .get(com.google.firebase.firestore.Source.SERVER)
+      .addOnSuccessListener(snapshot->{
+        StringBuilder report=new StringBuilder();int records=0;long allExpenses=0;
+        for(DocumentSnapshot doc:snapshot.getDocuments()){
+          if(Boolean.TRUE.equals(doc.getBoolean("open")))continue;
+          records++;
+          Long closing=doc.getLong("closing"),spent=doc.getLong("expenseTotal");
+          long expense=spent==null?0:spent;allExpenses+=expense;
+          report.append(doc.getId()).append("\n")
+            .append("Baki tunai: ").append(closing==null?"—":rm(closing)).append("\n")
+            .append("Duit keluar: ").append(spent==null?"Tiada rekod lama":rm(expense)).append("\n");
+          Object lines=doc.get("expenses");
+          if(lines instanceof List)for(Object line:(List<?>)lines){
+            if(!(line instanceof Map))continue;
+            Map<?,?> item=(Map<?,?>)line;
+            Object amount=item.get("amount"),category=item.get("category");
+            if(amount instanceof Number)
+              report.append("  ").append(category==null?"Belanja":category)
+                .append(": ").append(rm(((Number)amount).longValue())).append("\n");
+          }
+          String note=doc.getString("closingRemark");
+          if(note!=null&&!note.isEmpty())report.append("Remark: ").append(note).append("\n");
+          report.append("Ditutup oleh: ")
+            .append(doc.getString("closedByEmail")==null?"Owner":doc.getString("closedByEmail"))
+            .append("\n\n");
+        }
+        if(records==0)report.append("Tiada sesi Closing Cloud untuk tempoh ini.");
+        else report.append("JUMLAH DUIT KELUAR DIREKOD: ").append(rm(allExpenses));
+        host.darkBuilder().setTitle("REKOD CLOSING · "+records)
+          .setMessage(report.toString()).setPositiveButton("TUTUP",null).show();
+      }).addOnFailureListener(e->host.message("Gagal semak Closing Cloud: "+e.getMessage()));
+  }
   void ensureLoaded(){
     if(!accounts.owner())return;
     final String uid=accounts.ownerUid();
@@ -150,9 +198,9 @@ final class OwnerCashflow {
           String name=branch.getString("name");
           if(name==null||name.trim().isEmpty())name="Branch "+branch.getId();
           String status=branch.getString("operatingStatus");
+          boolean archived=Boolean.TRUE.equals(branch.getBoolean("archived"));
           BranchRow row=new BranchRow(branch.getId(),name,
-            Boolean.TRUE.equals(branch.getBoolean("archived"))?"ARKIB · REKOD LAMA":
-              BranchAccounts.operatingLabel(status));
+            archived?"ARKIB · REKOD LAMA":BranchAccounts.operatingLabel(status),archived);
           if(!BranchAccounts.LEGACY_BRANCH.equals(row.id)){
             BranchDataAudit.Result audit=BranchDataAudit.compare(
               host.getPreferences(0),
@@ -293,6 +341,7 @@ final class OwnerCashflow {
   Day overall(){
     Day all=new Day();
     for(BranchRow row:rows){
+      if(row.archived)continue; // Active dashboard excludes permanently closed branches.
       Day one=row.totals();
       all.add(one);
     }
@@ -301,6 +350,7 @@ final class OwnerCashflow {
   Day overallOn(String selectedDay){
     Day all=new Day();
     for(BranchRow row:rows){
+      if(row.archived)continue;
       Day one=row.combined().get(selectedDay);
       if(one!=null)all.add(one);
     }
@@ -370,6 +420,14 @@ final class OwnerCashflow {
     ensureLoaded();
     if(ready())duplicatedDataWarning();
     Day daily=overallOn(day);
+    int localSales=host.saleTotalBetween(day,day);
+    int localTx=host.transactionCountBetween(day,day);
+    int activeBranches=0;BranchRow singleBranch=null;
+    for(BranchRow b:rows)if(!b.archived){activeBranches++;singleBranch=b;}
+    final BranchRow verifiedSingle=singleBranch;
+    boolean overallProfitVerified=ready()&&activeBranches==1&&singleBranch!=null&&
+      singleBranch.id.equals(accounts.branchId())&&daily.sales==localSales&&
+      daily.transactions==localTx&&!singleBranch.cache;
     host.add(host.body,host.text(
       (english?(today?"TODAY":"SELECTED DAY"):(today?"HARI INI":"TARIKH DIPILIH"))+
       " · "+day,13,host.gold,true),-1,-2);
@@ -379,7 +437,45 @@ final class OwnerCashflow {
       "JUMLAH JUALAN · SEMUA CAWANGAN  ›",ready()?rm(daily.sales):"—",host.blue,()->{
         host.cashDailyMode=true;host.activePage=16;host.draw();
       });
+    int verifiedProfit=overallProfitVerified?host.businessProfit(day,true):0;
+    host.metric(sales,english?"OVERALL NET PROFIT":"UNTUNG BERSIH OVERALL",
+      overallProfitVerified?rm(verifiedProfit):"—",
+      overallProfitVerified?host.profitColor(verifiedProfit):host.muted,()->{
+        if(overallProfitVerified){host.activePage=17;selectedBranchId=verifiedSingle.id;host.draw();}
+        else host.message("Untung overall belum boleh disahkan: kos cawangan lain belum lengkap di Cloud.");
+      });
     host.add(host.body,sales,-1,-2);host.gap(host.body,8);
+    if(ready()){
+      host.add(host.body,host.text(english?"ACTIVE BRANCHES":"CAWANGAN AKTIF",13,host.gold,true),-1,-2);
+      host.gap(host.body,6);
+      for(BranchRow b:rows){
+        if(b.archived)continue;
+        Day bd=b.combined().get(day);if(bd==null)bd=new Day();
+        final BranchRow chosen=b;
+        boolean canProfit=b.id.equals(accounts.branchId())&&bd.sales==localSales&&
+          bd.transactions==localTx&&!b.cache;
+        host.add(host.body,host.text("🏪  "+b.name,14,host.gold,true),-1,-2);
+        LinearLayout branchCards=host.row();
+        host.metric(branchCards,english?"BRANCH SALES  ›":"JUALAN CAWANGAN  ›",
+          rm(bd.sales),host.blue,()->{
+            selectedBranchId=chosen.id;host.cashDailyMode=true;
+            host.activePage=17;host.draw();
+          });
+        int branchProfit=canProfit?host.businessProfit(day,true):0;
+        host.metric(branchCards,english?"NET PROFIT  ›":"UNTUNG BERSIH  ›",
+          canProfit?rm(branchProfit):"—",
+          canProfit?host.profitColor(branchProfit):host.muted,()->{
+            selectedBranchId=chosen.id;host.cashDailyMode=true;
+            host.activePage=17;host.draw();
+          });
+        host.add(host.body,branchCards,-1,-2);host.gap(host.body,10);
+      }
+      if(activeBranches==0)host.add(host.body,host.text("Tiada cawangan aktif.",12,host.muted,false),-1,-2);
+      if(!overallProfitVerified)host.add(host.body,host.text(english?
+        "Sales are shown live; net profit stays blank until all branch expenses and product costs are verified.":
+        "Jualan dipaparkan secara Live. Untung bersih ditanda — jika kos produk dan belanja semua cawangan belum disahkan.",11,host.muted,false),-1,-2);
+      host.gap(host.body,9);
+    }
     LinearLayout payment=host.row();
     host.metric(payment,english?"CASH":"TUNAI",ready()?rm(daily.cash):"—",host.ink,null);
     host.metric(payment,"QR / DUITNOW  ›",ready()?rm(daily.qr):"—",host.gold,
@@ -400,7 +496,6 @@ final class OwnerCashflow {
 
     // Profit uses ONLY active-branch local sales and costs. Cloud sales from
     // staff phones and costs of other branches have not been consolidated.
-    int localSales=host.saleTotalBetween(day,day);
     int localCost=host.productCostBetween(day,day);
     int localOperations=host.operatingExpenseTotal(day,true);
     int localProfit=host.businessProfit(day,true);
@@ -461,9 +556,11 @@ final class OwnerCashflow {
         host.cashDailyMode=false;host.activePage=21;host.draw();
       });
   }
-  TreeMap<String,Day> overallDays(){
+  TreeMap<String,Day> overallDays(){return overallDays(false);}
+  TreeMap<String,Day> overallDays(boolean includeArchived){
     TreeMap<String,Day> byDay=new TreeMap<>();
     for(BranchRow branch:rows){
+      if(!includeArchived&&branch.archived)continue;
       for(Map.Entry<String,Day> record:branch.combined().entrySet()){
         Day day=byDay.get(record.getKey());
         if(day==null){day=new Day();byDay.put(record.getKey(),day);}
@@ -508,11 +605,14 @@ final class OwnerCashflow {
       -1,host.dp(218));
     host.gap(host.body,11);
     host.action("📄  EXPORT PDF A4 · LAPORAN SEMUA BRANCH",()->{
-      OwnerOverallReportPdf.print(host,host.selectedMonth,rows,overallDays());
+      // Downloadable monthly history includes archived branches, even though
+      // active in-app charts exclude them.
+      OwnerOverallReportPdf.print(host,host.selectedMonth,rows,overallDays(true));
     });
     host.add(host.body,host.text("PECAHAN IKUT BRANCH",13,host.gold,true),-1,-2);
     host.gap(host.body,7);
     for(BranchRow branch:rows){
+      if(branch.archived)continue;
       Day figure=branch.totals();
       host.action("🏪  "+branch.name+"  ·  "+rm(figure.sales)+
         "  ·  "+figure.transactions+" transaksi",()->{
@@ -550,6 +650,7 @@ final class OwnerCashflow {
     host.add(host.body,host.text("JUMLAH SEMUA BRANCH: "+rm(overall().sales),16,host.gold,true),-1,-2);
     host.gap(host.body,12);
     for(BranchRow row:rows){
+      if(row.archived)continue;
       Day total=row.totals();
       host.action("🏪  "+row.name+"\n      "+rm(total.sales)+
         "  ·  "+total.transactions+" transaksi"+
@@ -594,6 +695,8 @@ final class OwnerCashflow {
     LinearLayout count=host.row();
     host.metric(count,"BILANGAN TRANSAKSI",String.valueOf(total.transactions),host.ink,null);
     host.add(host.body,count,-1,-2);host.gap(host.body,10);
+    host.action("📒  REKOD CLOSING & DUIT KELUAR (CLOUD)",
+      ()->showCloudClosingHistory(chosen.id));
     if(chosen.id.equals(accounts.branchId())){
       int branchLocalProfit=host.cashDailyMode?
         host.businessProfit(host.selectedCashDay,true):

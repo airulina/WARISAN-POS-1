@@ -125,7 +125,8 @@ private static final int RC_SIGN_IN = 9001;
     for(int i=0;i<incoming.length();i++){JSONObject e=incoming.optJSONObject(i);if(e==null||e.optInt("item",-1)!=id)continue;String day=entryDay(e),type=e.optString("type","restock");int value=e.optInt("qty",0);if(day.compareTo(target)<0)opening+=value;else if(day.equals(target)){if("restock".equals(type))summary[1]+=Math.max(0,value);else if("opening".equals(type)||"opening_adjustment".equals(type))opening+=value;}}
     for(int i=0;i<sales.length();i++){JSONObject e=sales.optJSONObject(i);if(e==null||"edar".equals(e.optString("source")))continue;JSONArray q=e.optJSONArray("qty");if(q==null)continue;String day=entryDay(e);int value=Math.max(0,q.optInt(id));if(day.compareTo(target)<0)opening-=value;else if(day.equals(target))summary[2]+=value;}
     for(int i=0;i<distributed.length();i++){JSONObject e=distributed.optJSONObject(i);if(e==null||e.optInt("item",-1)!=id)continue;String day=entryDay(e);int net=Math.max(0,e.optInt("qty",0)-e.optInt("returned",0));if(day.compareTo(target)<0)opening-=net;else if(day.equals(target))summary[5]+=net;}
-    for(int i=0;i<damaged.length();i++){JSONObject e=damaged.optJSONObject(i);if(e==null||e.optBoolean("stockReset",false)||e.optInt("item",-1)!=id)continue;String day=entryDay(e);int value=Math.max(0,e.optInt("qty"));boolean refund=e.optBoolean("refund",false);if(day.compareTo(target)<0){if(!refund)opening-=value;}else if(day.equals(target))summary[4]+=value;}
+    for(int i=0;i<damaged.length();i++){JSONObject e=damaged.optJSONObject(i);if(e==null||e.optBoolean("stockReset",false)||e.optInt("item",-1)!=id)continue;boolean refund=e.optBoolean("refund",false);if(refund)continue; // Refunded items were already deducted by the original sale; never deduct them twice.
+      String day=entryDay(e);int value=Math.max(0,e.optInt("qty"));if(day.compareTo(target)<0)opening-=value;else if(day.equals(target))summary[4]+=value;}
     JSONArray pending=entries("pending_orders");for(int i=0;i<pending.length();i++){JSONObject e=pending.optJSONObject(i);if(e==null||e.optBoolean("paid",false)||e.optBoolean("cancelled",false))continue;JSONArray q=e.optJSONArray("qty");if(q==null)continue;String day=entryDay(e);int value=Math.max(0,q.optInt(id));if(day.compareTo(target)<0)opening-=value;else if(day.equals(target))summary[2]+=value;}
     summary[0]=(int)Math.max(0,Math.min(Integer.MAX_VALUE,opening));summary[3]=Math.max(0,summary[0]+summary[1]-summary[2]-summary[5]-summary[4]);return summary;
   }
@@ -325,14 +326,8 @@ selectedDay=date();selectedMonth=selectedDay.substring(0,7);rangeStart=selectedD
     add(body,text("🏪  "+(branchAccounts.staff()?"BRANCH PEKERJA: ":"BRANCH AKTIF: ")+
       branchAccounts.branchName().toUpperCase(new Locale("ms","MY")),
       13,gold,true),-1,-2);
-    if(branchAccounts.owner()){
-      gap(body,8);
-      TextView session=chip("OPENING / CLOSING · "+branchAccounts.branchName(),
-        0xff203f61,gold);
-      session.setPadding(dp(12),dp(10),dp(12),dp(10));
-      session.setOnClickListener(v->{activePage=22;draw();});
-      add(body,session,-1,-2);
-    }
+    // Opening/Closing belongs to Sale (worker) or branch/session management
+    // (Owner), never to the product Menu.
     gap(body,15);
     LinearLayout title=row();title.addView(text("Pilih menu",20,ink,true),new LinearLayout.LayoutParams(0,-2,1));TextView historyButton=chip("HISTORY",0xff203f61,gold);add(title,historyButton,-2,-2);historyButton.setOnClickListener(v->{
       if(branchAccounts.staff())saleHistory(businessDay());
@@ -376,8 +371,8 @@ selectedDay=date();selectedMonth=selectedDay.substring(0,7);rangeStart=selectedD
     if(count()==0){TextView empty=text("Belum ada pesanan. Pilih menu di atas.",13,muted,false);empty.setPadding(0,dp(13),0,dp(13));add(basket,empty,-1,-2);return;}
     for(int i=0;i<qty.length;i++)if(qty[i]>0){final int id=i;LinearLayout r=row();r.addView(text(names[i]+" × "+qty[i],14,ink,true),new LinearLayout.LayoutParams(0,dp(39),1));add(r,text(money(qty[i]*prices[i]),13,blue,true),-2,-2);TextView minus=chip("−",0xffc83f46,Color.WHITE);LinearLayout.LayoutParams m=params(32,30);m.leftMargin=dp(8);r.addView(minus,m);minus.setOnClickListener(v->{qty[id]--;draw();});add(basket,r,-1,-2);}
   }
-  void addNavigation(LinearLayout screen){LinearLayout nav=row();nav.setBackgroundColor(cream);nav.setPadding(dp(7),dp(7),dp(7),dp(9));String[] labels=branchAccounts.staff()?new String[]{"MENU","ORDER","STOK","HARI INI","PRINTER","ACCOUNT"}:(english()?new String[]{"MENU","ORDERS","STOCK","CASH","BRANCH","SETTINGS"}:new String[]{"MENU","ORDER","STOK","DUIT","BRANCH","SETTING"});int[] pages=branchAccounts.staff()?new int[]{0,11,20,12,14,5}:new int[]{0,11,1,3,15,4};
-    for(int i=0;i<labels.length;i++){final int page=pages[i];boolean selected=(activePage==page)||(page==1&&activePage==13)||(page==3&&(activePage==2||activePage==16||activePage==17||activePage==18||activePage==19||activePage==21||activePage==22))||(page==4&&activePage>=4&&activePage<=10);int background=selected?gold:navOff,foreground=selected?onAccent:navOffText;TextView tab=text(labels[i],branchAccounts.staff()?10:10,foreground,true);tab.setTextColor(WarisanTheme.readableText(foreground,background,ink));tab.setGravity(Gravity.CENTER);tab.setMaxLines(1);tab.setEllipsize(android.text.TextUtils.TruncateAt.END);tab.setBackground(shape(background,13));LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(0,dp(53),1);p.setMargins(dp(2),0,dp(2),0);nav.addView(tab,p);tab.setOnClickListener(v->{activePage=page;draw();});}add(screen,nav,-1,-2);}
+  void addNavigation(LinearLayout screen){LinearLayout nav=row();nav.setBackgroundColor(cream);nav.setPadding(dp(7),dp(7),dp(7),dp(9));boolean worker=branchAccounts.staff();String[] labels=worker?(english()?new String[]{"MENU","ORDER","SALE","SETTINGS"}:new String[]{"MENU","ORDER","SALE","SETTING"}):(english()?new String[]{"MENU","ORDERS","STOCK","CASH","BRANCH","SETTINGS"}:new String[]{"MENU","ORDER","STOK","DUIT","BRANCH","SETTING"});int[] pages=worker?new int[]{0,11,12,5}:new int[]{0,11,1,3,15,4};
+    for(int i=0;i<labels.length;i++){final int page=pages[i];boolean selected=(activePage==page)||(worker&&page==5&&activePage==14)||(page==1&&activePage==13)||(page==3&&(activePage==2||activePage==16||activePage==17||activePage==18||activePage==19||activePage==21||activePage==22))||(page==4&&activePage>=4&&activePage<=10);int background=selected?gold:navOff,foreground=selected?onAccent:navOffText;TextView tab=text(labels[i],11,foreground,true);tab.setTextColor(WarisanTheme.readableText(foreground,background,ink));tab.setGravity(Gravity.CENTER);tab.setMaxLines(1);tab.setEllipsize(android.text.TextUtils.TruncateAt.END);tab.setBackground(shape(background,13));LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(0,dp(53),1);p.setMargins(dp(2),0,dp(2),0);nav.addView(tab,p);tab.setOnClickListener(v->{activePage=page;draw();});}add(screen,nav,-1,-2);}
   void heading(String title,String subtitle){
     LinearLayout brand=row();brand.setGravity(Gravity.CENTER_VERTICAL);ImageView logo=new ImageView(this);setStoreLogo(logo);makeCircle(logo);add(brand,logo,44,44);LinearLayout brandText=col();brandText.setPadding(dp(9),0,0,0);add(brandText,text("WARISAN POS",18,blue,true),-1,-2);add(brandText,text("KIOS WARISAN  ·  SISTEM JUALAN",9,muted,true),-1,-2);brand.addView(brandText,new LinearLayout.LayoutParams(0,-2,1));TextView clock=text("",9,gold,true);clock.setGravity(Gravity.RIGHT|Gravity.CENTER_VERTICAL);add(brand,clock,-2,-2);startHeaderClock(clock);add(body,brand,-1,-2);gap(body,15);
     add(body,text(title,23,ink,true),-1,-2);add(body,text(subtitle,12,muted,false),-1,-2);gap(body,16);
@@ -846,6 +841,8 @@ selectedDay=date();selectedMonth=selectedDay.substring(0,7);rangeStart=selectedD
       ()->live.showOpeningBranches());
     add(body,second,-1,-2);
     gap(body,8);
+    action("🔐  CLOSING TERTINGGAL · OWNER SAHAJA",
+      ()->live.showOwnerForcedClosing());
     action("🗂  PADAM / ARKIB BRANCH · OWNER",()->
       branchAccounts.manageBranchRemoval());
     action("🔎  SEMAK DATA TERSALIN · BRANCH UTAMA / JALAN KEBUN",
@@ -906,9 +903,9 @@ selectedDay=date();selectedMonth=selectedDay.substring(0,7);rangeStart=selectedD
         heading("Akses ditolak","Paparan ini khas untuk pekerja.");return;
       }
       String day=businessDay();
-      heading("HARI INI · "+branchAccounts.branchName(),
+      heading((branchAccounts.staff()?"SALE · ":"HARI INI · ")+branchAccounts.branchName(),
         branchAccounts.owner()?"Sesi Owner · Opening / Closing dan jualan Branch aktif.":
-          "Sesi pekerja · Opening / Closing dan jualan hari ini.");
+          "Jualan hari ini · Opening dan Closing untuk cawangan ini.");
       add(body,text("OPENING / CLOSING",14,gold,true),-1,-2);gap(body,8);
       drawPosSession();
       gap(body,12);
@@ -920,7 +917,15 @@ selectedDay=date();selectedMonth=selectedDay.substring(0,7);rangeStart=selectedD
       LinearLayout pay=row();
       metric(pay,"TUNAI",money(live.enabled()?(int)live.cash():sessionCash(day)),0xff46c979,null);
       metric(pay,"QR",money(live.enabled()?(int)live.qr():sessionQr(day)),blue,null);
-      add(body,pay,-1,-2);gap(body,12);
+      add(body,pay,-1,-2);gap(body,9);
+      if(branchAccounts.staff()){
+        LinearLayout pending=row();
+        metric(pending,"ORDER BELUM BAYAR · TELEFON INI",String.valueOf(outstandingCount()),gold,
+          ()->{activePage=11;draw();});
+        add(body,pending,-1,-2);gap(body,9);
+        drawProductSalesSummary(day);
+      }
+      gap(body,12);
       action("Cetak laporan harian",()->print(staffDailyReceipt(day)));
       action("Transaksi hari ini / Refund",()->saleHistory(day));
       if(branchAccounts.staff())
@@ -1075,6 +1080,7 @@ selectedDay=date();selectedMonth=selectedDay.substring(0,7);rangeStart=selectedD
         action("⚠  Reset Data · Pilihan Lanjutan",()->{activePage=9;draw();});
       }
     }else if(activePage==5){
+      if(branchAccounts.staff()){drawStaffSettings();return;}
       heading("Account",branchAccounts.staff()?
         "Akaun pekerja, branch aktif dan tetapan printer telefon.":"Akaun Owner, backup cloud dan salinan pada telefon.");
       action(branchAccounts.staff()?"‹  Kembali ke HARI INI":"‹  Kembali ke Setting",()->{activePage=branchAccounts.staff()?12:4;draw();});
@@ -1255,13 +1261,39 @@ selectedDay=date();selectedMonth=selectedDay.substring(0,7);rangeStart=selectedD
 
   String businessDay(){return posSessionOpen()?posSessionDay():date();}
   int outstandingCount(){int n=0;JSONArray p=entries("pending_orders");for(int i=0;i<p.length();i++){JSONObject e=p.optJSONObject(i);if(e!=null&&!e.optBoolean("paid",false)&&!e.optBoolean("cancelled",false))n++;}JSONArray d=entries("stock_distribution");for(int i=0;i<d.length();i++){JSONObject e=d.optJSONObject(i);if(e!=null&&!e.optBoolean("paid",false)&&Math.max(0,e.optInt("qty")-e.optInt("returned"))>0)n++;}return n;}
-  int sessionSales(String day){return saleTotalBetween(day,day);}
-  int sessionCash(String day){return paymentTotalBetween(day,day,"Tunai");}
-  int sessionQr(String day){return paymentTotalBetween(day,day,"QR");}
+  boolean sessionCloudReady(String day){return live!=null&&live.usable()&&day.equals(live.day());}
+  int checkedCloudCents(long cents){if(cents<0||cents>Integer.MAX_VALUE)throw new ArithmeticException("Jumlah Cloud di luar julat");return (int)cents;}
+  int sessionSales(String day){return sessionCloudReady(day)?checkedCloudCents(live.sales()):saleTotalBetween(day,day);}
+  int sessionCash(String day){return sessionCloudReady(day)?checkedCloudCents(live.cash()):paymentTotalBetween(day,day,"Tunai");}
+  int sessionQr(String day){return sessionCloudReady(day)?checkedCloudCents(live.qr()):paymentTotalBetween(day,day,"QR");}
+  int sessionTransactions(String day){return sessionCloudReady(day)?checkedCloudCents(live.transactions()):transactionCountBetween(day,day);}
   JSONObject closingForDay(String day){JSONArray list=entries("pos_closings");JSONObject found=null;for(int i=0;i<list.length();i++){JSONObject e=list.optJSONObject(i);if(e!=null&&day.equals(entryDay(e)))found=e;}return found;}
   int legacyBalanceThrough(String day){long total=0;android.content.SharedPreferences p=posPrefs();for(String key:p.getAll().keySet()){if(!key.matches("sales_\\d{4}-\\d{2}-\\d{2}"))continue;String d=key.substring(6);if(d.compareTo(day)<=0)total+=p.getInt(key,0);}JSONArray list=entries("cash_entries");for(int i=0;i<list.length();i++){JSONObject e=list.optJSONObject(i);if(e==null||legacySupplierRestock(e))continue;String d=entryDay(e);if(!d.isEmpty()&&d.compareTo(day)<=0)total+=e.optInt("amount");}return (int)Math.max(Integer.MIN_VALUE,Math.min(Integer.MAX_VALUE,total));}
   void drawHistoricalPos(String day){JSONObject c=closingForDay(day);int sales=saleTotalBetween(day,day),cash=paymentTotalBetween(day,day,"Tunai"),qr=paymentTotalBetween(day,day,"QR");int opening=0,balance;if(c!=null){opening=c.optInt("opening",0);sales=c.optInt("sales",sales);cash=c.optInt("cash",cash);qr=c.optInt("qr",qr);balance=c.has("closingBalance")?c.optInt("closingBalance",0):Math.max(0,opening+cash);}else balance=Math.max(0,legacyBalanceThrough(day));LinearLayout a=row();metric(a,"OPENING BALANCE",money(opening),gold,null);metric(a,"JUALAN HARI",money(sales),blue,null);add(body,a,-1,-2);gap(body,7);LinearLayout b=row();metric(b,c!=null?"BAKI CLOSING":"BAKI DUIT AKHIR HARI",money(balance),0xff46c979,null);add(body,b,-1,-2);gap(body,6);add(body,text("Tunai "+money(cash)+"   ·   QR "+money(qr)+(c==null?"\nRekod lama: baki dikira daripada rekod jualan + aliran duit sehingga tarikh ini.":""),11,muted,false),-1,-2);}
   void drawPosSession(){boolean open=posSessionOpen();String day=posSessionDay();int opening=open?posOpening():0,cash=open?sessionCash(day):0,qr=open?sessionQr(day):0;LinearLayout a=row();metric(a,"OPENING",money(opening),gold,null);metric(a,"TUNAI",money(cash),0xff46c979,null);metric(a,"QR",money(qr),blue,null);add(body,a,-1,-2);gap(body,8);if(open){action("OPENING DIKUNCI · "+day,()->message("Selagi sesi "+day+" belum Closing, Opening baru tidak boleh dibuat."));gap(body,6);action("CLOSING POS · "+day,()->requireClosingExpenses());}else{action("BUKA POS / OPENING BALANCE",()->openPosSession());}}
+  /** Staff have four main tabs; printer is a settings detail, never a fifth tab. */
+  void drawStaffSettings(){
+    heading(english()?"SETTINGS":"SETTING",
+      english()?"Employee app preferences":"Tetapan aplikasi pekerja sahaja.");
+    add(body,text("PEKERJA · "+branchAccounts.branchName(),13,gold,true),-1,-2);
+    gap(body,12);
+    action("🖨  "+(english()?"Receipt printer / test print":"Printer resit / Uji cetak"),
+      ()->{activePage=14;draw();});
+    action("◉  "+(english()?"Choose theme":"Pilih tema"),
+      ()->WarisanTheme.choose(this));
+    action("🌐  "+(english()?"Language: English":"Bahasa: Melayu (Malaysia)"),
+      ()->chooseLanguage());
+    action("↪  "+(english()?"Log out":"Log Keluar"),()->{
+      darkBuilder().setTitle(english()?"Log out?":"Log keluar?")
+        .setMessage(english()?"You will leave the employee session.":
+          "Anda akan keluar daripada akaun pekerja. Rekod jualan tidak dipadam.")
+        .setPositiveButton(english()?"LOG OUT":"LOG KELUAR",(d,w)->{
+          if(live!=null)live.stop();
+          firebaseAuth.signOut();
+          googleSignInClient.signOut().addOnCompleteListener(task->{activePage=0;draw();});
+        }).setNegativeButton(english()?"CANCEL":"BATAL",null).show();
+    });
+  }
   int lastClosingBalance(){JSONArray list=entries("pos_closings");JSONObject latest=null;String latestDay="";for(int i=0;i<list.length();i++){JSONObject e=list.optJSONObject(i);if(e==null)continue;String d=entryDay(e);if(latest==null||d.compareTo(latestDay)>=0){latest=e;latestDay=d;}}if(latest==null)return Math.max(0,totalMoneyBalance());if(latest.has("closingBalance"))return Math.max(0,latest.optInt("closingBalance",0));int legacy=latest.optInt("opening",0)+latest.optInt("cash",0);return Math.max(0,legacy);}
   void startPosSession(String day,int amount){
     int max=lastClosingBalance();
@@ -1289,7 +1321,7 @@ selectedDay=date();selectedMonth=selectedDay.substring(0,7);rangeStart=selectedD
       selectedCashDay=day;draw();
     }else message("Opening gagal disimpan dalam telefon. Minta Owner semak sesi Live.");
   }
-  void openPosSession(){if(posSessionOpen()){message("Closing sesi semasa dahulu sebelum Opening baru.");return;}String last=posPrefs().getString("pos_last_closed_day","");String proposed=date();final String day=proposed;final int lastBalance=lastClosingBalance();LinearLayout box=col();box.setPadding(dp(16),dp(10),dp(16),dp(8));box.setBackgroundColor(cream);add(box,text("OPENING POS · "+day,18,blue,true),-1,-2);gap(box,8);add(box,text("Baki Closing Terakhir  "+money(lastBalance),14,gold,true),-1,-2);if(!last.isEmpty())add(box,text("Closing terakhir · "+last,11,muted,false),-1,-2);gap(box,8);EditText amount=priceField("Opening RM",String.format(Locale.US,"%.2f",lastBalance/100.0));add(box,text("Opening boleh RM0.00 hingga maksimum "+money(lastBalance)+".",12,muted,false),-1,-2);gap(box,5);add(box,amount,-1,-2);AlertDialog dlg=darkBuilder().setView(box).setPositiveButton("SIMPAN OPENING",null).setNeutralButton("MULA RM0.00",null).setNegativeButton("BATAL",null).create();dlg.setOnShowListener(v->{styleDarkDialogNow(dlg);dlg.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(x->{try{int value=parseCents(amount);if(value<0||value>lastBalance){message("Opening tak boleh lebih daripada Baki Closing Terakhir "+money(lastBalance)+".");return;}startPosSession(day,value);dlg.dismiss();}catch(Exception e){message("Masukkan jumlah Opening yang betul.");}});dlg.getButton(AlertDialog.BUTTON_NEUTRAL).setOnClickListener(x->{startPosSession(day,0);dlg.dismiss();});});dlg.show();}
+  void openPosSession(){if(posSessionOpen()){message("Closing sesi semasa dahulu sebelum Opening baru.");return;}String last=posPrefs().getString("pos_last_closed_day","");String proposed=date();final String day=proposed;final int lastBalance=lastClosingBalance();LinearLayout box=col();box.setPadding(dp(16),dp(10),dp(16),dp(8));box.setBackgroundColor(cream);add(box,text("OPENING POS · "+day,18,blue,true),-1,-2);gap(box,8);add(box,text("Baki Closing Terakhir  "+money(lastBalance),14,gold,true),-1,-2);if(!last.isEmpty())add(box,text("Closing terakhir · "+last,11,muted,false),-1,-2);gap(box,8);EditText amount=priceField("Opening RM","0.00");add(box,text("Opening RM0.00 dibenarkan. Masukkan hanya tunai yang benar-benar ada; maksimum "+money(lastBalance)+".",12,muted,false),-1,-2);gap(box,5);add(box,amount,-1,-2);AlertDialog dlg=darkBuilder().setView(box).setPositiveButton("SIMPAN OPENING",null).setNeutralButton("MULA RM0.00",null).setNegativeButton("BATAL",null).create();dlg.setOnShowListener(v->{styleDarkDialogNow(dlg);dlg.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(x->{try{int value=parseCents(amount);if(value<0||value>lastBalance){message("Opening tak boleh lebih daripada Baki Closing Terakhir "+money(lastBalance)+".");return;}startPosSession(day,value);dlg.dismiss();}catch(Exception e){message("Masukkan jumlah Opening yang betul.");}});dlg.getButton(AlertDialog.BUTTON_NEUTRAL).setOnClickListener(x->{startPosSession(day,0);dlg.dismiss();});});dlg.show();}
   int closingOil(String day){return cashCategoryTotal(day,true,"Minyak kereta","Minyak Kereta","Minyak");}
   int closingRent(String day){return cashCategoryTotal(day,true,"Sewa");}
   int[][] closingItemPayments(String day){
@@ -1313,10 +1345,36 @@ selectedDay=date();selectedMonth=selectedDay.substring(0,7);rangeStart=selectedD
     for(int j=0;j<vals.length;j++){TextView v=text(vals[j],9,blue,true);v.setGravity(j==0?Gravity.LEFT:Gravity.RIGHT);totalRow.addView(v,new LinearLayout.LayoutParams(0,dp(36),wt[j]));}add(box,totalRow,-1,36);
   }
   String posClosingReceipt(String day,int opening,int sales,int cash,int qr,int tx,int outstanding,int balance,int supplierPaid,int supplierOutstanding,int oil,int rent){
-    sales=saleTotalBetween(day,day);cash=paymentTotalBetween(day,day,"Tunai");qr=paymentTotalBetween(day,day,"QR");int edar=edarPaidTotal(day);int unknown=paymentUnknownBetween(day,day);
+    return posClosingReceipt(day,opening,sales,cash,qr,tx,outstanding,balance,
+      supplierPaid,supplierOutstanding,oil,rent,new JSONArray(),"");
+  }
+  String posClosingReceipt(String day,int opening,int sales,int cash,int qr,int tx,int outstanding,int balance,int supplierPaid,int supplierOutstanding,int oil,int rent,JSONArray expenses,String remark){
+    // Do NOT replace the session snapshot with this phone's subset of sales.
+    // A worker's Cloud session includes orders paid on other staff devices.
+    int edar=edarPaidTotal(day);int unknown=paymentUnknownBetween(day,day);
     StringBuilder b=new StringBuilder();String shop=posPrefs().getString("shop_name","WARISAN FROZEN");b.append(centerReceipt(shop));String phone=posPrefs().getString("receipt_phone","");if(!phone.isEmpty())b.append(centerReceipt("Tel: "+phone));
-    b.append("--------------------------------\n").append(centerReceipt("RESIT PENUTUPAN POS")).append(receiptPair("Branch",branchAccounts.branchName())).append(receiptPair("Tarikh sesi",day)).append(receiptPair("Baki permulaan",money(opening))).append("--------------------------------\nJUALAN\n").append(soldClosingText(day)).append("--------------------------------\n").append(receiptPair("JUMLAH JUALAN",money(sales))).append(receiptPair("Tunai",money(cash))).append(receiptPair("QR",money(qr)));if(edar>0)b.append(receiptPair("EDAR dibayar",money(edar)));
-    b.append("--------------------------------\nPERBELANJAAN OPERASI\n").append(receiptPair("Minyak",money(oil))).append(receiptPair("Sewa",money(rent))).append("--------------------------------\nPEMBEKAL\n").append(receiptPair("Dibayar hari ini",money(supplierPaid))).append(receiptPair("Belum dibayar",money(supplierOutstanding))).append("--------------------------------\n").append(receiptPair("Pesanan belum bayar",String.valueOf(outstanding))).append(receiptPair("BAKI TUNAI POS",money(balance))).append("================================\n").append(centerReceipt("PENUTUPAN DISAHKAN")).append(ownerReceipt()).append("\n");return b.toString();
+    b.append("--------------------------------\n").append(centerReceipt("RESIT PENUTUPAN POS")).append(receiptPair("Branch",branchAccounts.branchName())).append(receiptPair("Tarikh sesi",day)).append(receiptPair("Baki permulaan",money(opening))).append("--------------------------------\nITEM · REKOD TELEFON INI\n").append(soldClosingText(day)).append("--------------------------------\n").append(receiptPair("JUMLAH JUALAN SESI",money(sales))).append(receiptPair("Tunai",money(cash))).append(receiptPair("QR",money(qr)));if(edar>0)b.append(receiptPair("EDAR tempatan",money(edar)));
+    b.append("--------------------------------\nDUIT KELUAR SEMASA CLOSING\n");
+    if(expenses.length()>0){
+      for(int i=0;i<expenses.length();i++){
+        JSONObject e=expenses.optJSONObject(i);if(e!=null)
+          b.append(receiptPair(e.optString("category","Belanja"),money(e.optInt("amount",0))));
+      }
+      b.append(receiptPair("Jumlah duit keluar",money(closingExpenseTotal(expenses))));
+    }else if(oil>0||rent>0){
+      // Historical closings without an itemized expense array.
+      b.append(receiptPair("Minyak",money(oil))).append(receiptPair("Sewa",money(rent)));
+    }else b.append(receiptPair("Duit keluar",money(0)));
+    if(remark!=null&&!remark.isEmpty())b.append("Remark: ").append(remark).append("\n");
+    b.append("--------------------------------\nPEMBEKAL\n")
+      .append(receiptPair("Dibayar hari ini",money(supplierPaid)))
+      .append(receiptPair("Belum dibayar",money(supplierOutstanding)))
+      .append("--------------------------------\n")
+      .append(receiptPair("Belum bayar tempatan",String.valueOf(outstanding)))
+      .append(receiptPair("BAKI TUNAI POS",money(balance)))
+      .append("================================\n")
+      .append(centerReceipt("PENUTUPAN DISAHKAN")).append(ownerReceipt()).append("\n");
+    return b.toString();
   }
   void confirmResetToday(){
     final String day=date();
@@ -1352,35 +1410,123 @@ selectedDay=date();selectedMonth=selectedDay.substring(0,7);rangeStart=selectedD
   void requireClosingExpenses(){
     if(!posSessionOpen()){message("Tiada sesi POS dibuka.");return;}
     final String day=posSessionDay();
+    ScrollView scroll=new ScrollView(this);
     LinearLayout form=col();form.setPadding(dp(18),dp(12),dp(18),dp(8));
-    add(form,text("Wajib isi kedua-dua jumlah. Isi 0 jika tiada kos.",13,ink,true),-1,-2);
-    EditText oil=priceField("Minyak kereta (RM)",""),rent=priceField("Sewa (RM)","");
-    add(form,text("MINYAK KERETA",12,muted,true),-1,-2);add(form,oil,-1,-2);
-    add(form,text("SEWA",12,muted,true),-1,-2);add(form,rent,-1,-2);
-    AlertDialog dlg=darkBuilder().setTitle("Kos sebelum Closing").setView(form).setPositiveButton("TERUSKAN",null).setNegativeButton("BATAL",null).create();
+    scroll.addView(form);add(form,text("Rekod duit keluar daripada tunai POS. Jika tiada, biarkan kosong.",13,ink,true),-1,-2);gap(form,10);
+    LinearLayout expenseRows=col();add(form,expenseRows,-1,-2);
+    ArrayList<EditText> categories=new ArrayList<>(),amounts=new ArrayList<>();
+    addClosingExpenseRow(expenseRows,categories,amounts);
+    TextView addMore=chip("+ Tambah Duit Keluar",0xff203f61,gold);
+    addMore.setGravity(Gravity.CENTER);add(form,addMore,-1,dp(46));
+    addMore.setOnClickListener(v->{if(categories.size()<20)addClosingExpenseRow(expenseRows,categories,amounts);else message("Maksimum 20 perbelanjaan satu sesi.");});
+    gap(form,12);add(form,text("REMARK CLOSING (PILIHAN)",12,muted,true),-1,-2);
+    EditText remark=new EditText(this);remark.setHint(ui("Contoh: Bayar sewa dan beli plastik"));
+    remark.setSingleLine(false);remark.setMinLines(2);styleInput(remark);add(form,remark,-1,-2);
+    AlertDialog dlg=darkBuilder().setTitle("Closing · Rekod Duit Keluar")
+      .setView(scroll).setPositiveButton("SEMAK CLOSING",null).setNegativeButton("BATAL",null).create();
     dlg.setOnShowListener(v->{styleDarkDialogNow(dlg);dlg.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(x->{
       try{
-        if(oil.getText().toString().trim().isEmpty()||rent.getText().toString().trim().isEmpty()){message("Minyak dan sewa wajib diisi. Isi 0 jika tiada.");return;}
-        int o=parseCents(oil),r=parseCents(rent);if(o<0||r<0)throw new Exception();
-        dlg.dismiss();previewPosClosingWithExpenses(day,o,r);
-      }catch(Exception ex){message("Masukkan jumlah minyak dan sewa yang sah.");}
+        JSONArray rows=new JSONArray();long totalOut=0;
+        for(int i=0;i<categories.size();i++){
+          String category=categories.get(i).getText().toString().trim();
+          String amount=amounts.get(i).getText().toString().trim();
+          if(category.isEmpty()&&amount.isEmpty())continue;
+          if(category.isEmpty()||amount.isEmpty())throw new IllegalArgumentException("Isi tujuan dan jumlah untuk setiap duit keluar.");
+          int cents=parseCents(amounts.get(i));
+          if(cents<=0||cents>100000000)throw new IllegalArgumentException("Jumlah mesti lebih daripada RM0.00.");
+          if(category.length()>70)throw new IllegalArgumentException("Nama perbelanjaan terlalu panjang.");
+          totalOut+=cents;if(totalOut>100000000)throw new IllegalArgumentException("Jumlah duit keluar terlalu besar.");
+          JSONObject item=new JSONObject();item.put("category",category);item.put("amount",cents);rows.put(item);
+        }
+        String note=remark.getText().toString().trim();
+        if(note.length()>500)throw new IllegalArgumentException("Remark maksimum 500 aksara.");
+        if(!posSessionOpen()||!day.equals(posSessionDay())){message("Sesi telah berubah. Cuba semula.");return;}
+        pendingClosingExpenses=rows;pendingClosingRemark=note;
+        dlg.dismiss();previewPosClosing();
+      }catch(Exception ex){message(ex.getMessage()==null?"Semak duit keluar dan cuba lagi.":ex.getMessage());}
     });});dlg.show();
   }
-  void previewPosClosingWithExpenses(String day,int oilInput,int rentInput){
-    if(!posSessionOpen()||!day.equals(posSessionDay())){message("Sesi POS telah berubah.");return;}
-    pendingClosingOil=oilInput;pendingClosingRent=rentInput;
-    previewPosClosing();
+  void addClosingExpenseRow(LinearLayout parent,ArrayList<EditText> categories,ArrayList<EditText> amounts){
+    LinearLayout line=row();line.setGravity(Gravity.CENTER_VERTICAL);
+    EditText category=new EditText(this);category.setHint(ui("Tujuan · Sewa / Plastik"));
+    category.setSingleLine(true);styleInput(category);
+    EditText amount=priceField("RM"," ");amount.setText("");
+    line.addView(category,new LinearLayout.LayoutParams(0,dp(52),2));
+    LinearLayout.LayoutParams ap=new LinearLayout.LayoutParams(0,dp(52),1);ap.leftMargin=dp(6);line.addView(amount,ap);
+    TextView remove=chip("×",0xff412c3c,0xffff727B);
+    remove.setGravity(Gravity.CENTER);LinearLayout.LayoutParams rp=params(38,45);rp.leftMargin=dp(5);line.addView(remove,rp);
+    categories.add(category);amounts.add(amount);add(parent,line,-1,-2);gap(parent,7);
+    remove.setOnClickListener(v->{int i=categories.indexOf(category);if(i>=0){categories.remove(i);amounts.remove(i);}parent.removeView(line);});
   }
-  int pendingClosingOil=-1,pendingClosingRent=-1;
-  void saveClosingExpense(JSONArray cash,String day,String category,int cents)throws Exception{
+  JSONArray pendingClosingExpenses=new JSONArray();
+  String pendingClosingRemark="";
+  int closingExpenseTotal(JSONArray expenses){
+    long total=0;
+    for(int i=0;i<expenses.length();i++){
+      JSONObject e=expenses.optJSONObject(i);if(e==null)continue;
+      total+=Math.max(0,e.optInt("amount",0));
+    }
+    if(total>Integer.MAX_VALUE)throw new ArithmeticException("Belanja terlalu besar");
+    return (int)total;
+  }
+  void saveClosingExpense(JSONArray cash,String day,String category,int cents,String remark)throws Exception{
     if(cents==0)return;
-    JSONObject e=new JSONObject();e.put("time",timestamp());e.put("businessDay",day);e.put("month",day.substring(0,7));e.put("amount",-cents);e.put("category",category);e.put("note","Closing POS");cash.put(e);
+    JSONObject e=new JSONObject();e.put("time",timestamp());e.put("businessDay",day);
+    e.put("month",day.substring(0,7));e.put("amount",-cents);
+    e.put("category",category);e.put("note",remark);e.put("source","pos_closing");cash.put(e);
   }
-  void previewPosClosing(){if(!posSessionOpen()){message("Tiada sesi POS yang sedang dibuka.");return;}String day=posSessionDay();int opening=posOpening(),sales=sessionSales(day),cash=sessionCash(day),qr=sessionQr(day),tx=transactionCountBetween(day,day),out=outstandingCount(),supplierPaid=supplierPaidTotal(day,true),supplierOutstanding=supplierDue(),oil=closingOil(day)+Math.max(0,pendingClosingOil),rent=closingRent(day)+Math.max(0,pendingClosingRent),balance=Math.max(0,opening+cash);LinearLayout box=col();box.setPadding(dp(18),dp(14),dp(18),dp(10));box.setBackgroundColor(Color.WHITE);int dark=0xff26384c;TextView brand=text(posPrefs().getString("shop_name","WARISAN FROZEN"),17,blue,true);brand.setGravity(Gravity.CENTER);add(box,brand,-1,-2);TextView ttl=text("PENUTUPAN POS",14,dark,true);ttl.setGravity(Gravity.CENTER);add(box,ttl,-1,-2);gap(box,7);receiptRowLight(box,"Tarikh sesi",day,false);receiptRowLight(box,"Baki permulaan",money(opening),false);receiptRule(box);TextView soldTitle=text("JUALAN",11,0xff66788a,true);add(box,soldTitle,-1,-2);gap(box,4);addClosingSoldRows(box,day);receiptRule(box);receiptRowLight(box,"JUMLAH JUALAN",money(sales),true);receiptRule(box);TextView op=text("PERBELANJAAN OPERASI",11,0xff66788a,true);add(box,op,-1,-2);receiptRowLight(box,"Minyak",money(oil),false);receiptRowLight(box,"Sewa",money(rent),false);receiptRule(box);TextView sp=text("PEMBEKAL",11,0xff66788a,true);add(box,sp,-1,-2);receiptRowLight(box,"Dibayar hari ini",money(supplierPaid),false);receiptRowLight(box,"Belum dibayar",money(supplierOutstanding),true);receiptRowLight(box,"Pesanan belum bayar",""+out,false);receiptRule(box);receiptRowLight(box,"BAKI TUNAI POS",money(balance),true);if(cash+qr!=sales){gap(box,7);add(box,text("Nota: Jumlah Tunai + QR tidak sama dengan jualan. Semak transaksi lama sebelum penutupan.",11,0xffc83f46,true),-1,-2);}AlertDialog dlg=darkBuilder().setView(box).setPositiveButton("SAHKAN PENUTUPAN",null).setNegativeButton("BATAL",null).create();dlg.setOnShowListener(v->{styleDarkDialogNow(dlg);dlg.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(x->{confirmPosClosing(day,opening,sales,cash,qr,tx,out,balance,supplierPaid,supplierOutstanding,oil,rent);dlg.dismiss();});});dlg.show();}
+  void previewPosClosing(){
+    if(!posSessionOpen()){message("Tiada sesi POS yang sedang dibuka.");return;}
+    String day=posSessionDay();int opening=posOpening(),sales=sessionSales(day),cash=sessionCash(day),qr=sessionQr(day);
+    if(branchAccounts.staff()&&!sessionCloudReady(day)){
+      message("Closing perlukan jumlah jualan Cloud disahkan untuk tarikh sesi.");return;
+    }
+    int tx=sessionTransactions(day),out=outstandingCount(),supplierPaid=supplierPaidTotal(day,true);
+    int supplierOutstanding=supplierDue(),oil=closingOil(day),rent=closingRent(day);
+    int expenses=closingExpenseTotal(pendingClosingExpenses);
+    final int balance=ClosingMath.expectedCash(opening,cash,expenses);
+    LinearLayout box=col();box.setPadding(dp(18),dp(14),dp(18),dp(10));box.setBackgroundColor(Color.WHITE);
+    int dark=0xff26384c;
+    TextView brand=text(posPrefs().getString("shop_name","WARISAN FROZEN"),17,blue,true);
+    brand.setGravity(Gravity.CENTER);add(box,brand,-1,-2);
+    TextView ttl=text("PENUTUPAN POS",14,dark,true);ttl.setGravity(Gravity.CENTER);add(box,ttl,-1,-2);gap(box,7);
+    receiptRowLight(box,"Tarikh sesi",day,false);
+    receiptRowLight(box,"Baki permulaan",money(opening),false);receiptRule(box);
+    add(box,text("ITEM TERJUAL · REKOD TELEFON INI",11,0xff66788a,true),-1,-2);
+    addClosingSoldRows(box,day);receiptRule(box);
+    receiptRowLight(box,"JUMLAH JUALAN",money(sales),true);
+    receiptRowLight(box,"Tunai",money(cash),false);receiptRowLight(box,"QR",money(qr),false);
+    receiptRule(box);
+    for(int i=0;i<pendingClosingExpenses.length();i++){
+      JSONObject e=pendingClosingExpenses.optJSONObject(i);if(e!=null)
+        receiptRowLight(box,e.optString("category"),money(e.optInt("amount")),false);
+    }
+    receiptRowLight(box,"JUMLAH DUIT KELUAR",money(expenses),true);
+    receiptRowLight(box,"BAKI TUNAI DIJANGKA",money(balance),true);
+    receiptRowLight(box,"Belum bayar (telefon ini)",String.valueOf(out),false);
+    if(!pendingClosingRemark.isEmpty())receiptRowLight(box,"Remark",pendingClosingRemark,false);
+    if(cash+qr!=sales){gap(box,7);add(box,text("Semak bayaran: Tunai + QR tidak sama dengan jumlah jualan.",11,0xffc83f46,true),-1,-2);}
+    if(balance<0){gap(box,7);add(box,text("BAKI NEGATIF: Semak duit keluar dan nyatakan sebab sebelum sahkan.",12,0xffc83f46,true),-1,-2);}
+    ScrollView sc=new ScrollView(this);sc.addView(box);
+    AlertDialog dlg=darkBuilder().setView(sc).setPositiveButton("SAHKAN CLOSING",null).setNegativeButton("BATAL",null).create();
+    dlg.setOnShowListener(v->{styleDarkDialogNow(dlg);dlg.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(x->{
+      if(balance<0&&pendingClosingRemark.isEmpty()){message("Baki negatif perlu remark untuk audit.");return;}
+      confirmPosClosing(day,opening,sales,cash,qr,tx,out,balance,supplierPaid,supplierOutstanding,oil,rent);
+      dlg.dismiss();
+    });});dlg.show();
+  }
   void confirmPosClosing(String day,int opening,int sales,int cash,int qr,int tx,
       int outstanding,int balance,int supplierPaid,int supplierOutstanding,int oil,int rent){
     if(!posSessionOpen()||!day.equals(posSessionDay())){
       message("Sesi Opening telah berubah. Closing tidak disimpan.");return;
+    }
+    final JSONArray expenses;
+    try{expenses=new JSONArray(pendingClosingExpenses.toString());}catch(Exception e){message("Rekod belanja tidak sah.");return;}
+    final String remark=pendingClosingRemark;
+    if(posOpening()!=opening||sessionSales(day)!=sales||sessionCash(day)!=cash||
+      sessionQr(day)!=qr||sessionTransactions(day)!=tx||
+      ClosingMath.expectedCash(opening,cash,closingExpenseTotal(expenses))!=balance){
+      message("Jualan atau baki berubah. Semak semula Closing sebelum sahkan.");return;
     }
     if(branchAccounts.staff()){
       if(!branchAccounts.staffBranchVerified||live==null||!live.usable()){
@@ -1389,22 +1535,22 @@ selectedDay=date();selectedMonth=selectedDay.substring(0,7);rangeStart=selectedD
       }
       // Cloud validates staff, branch, and the existing opened session first.
       // Do not close the local POS when Firestore rejects this operation.
-      live.sessionConfirmed(false,day,balance,()->
+      live.sessionConfirmed(false,day,balance,expenses,remark,()->
         persistPosClosing(day,opening,sales,cash,qr,tx,outstanding,balance,
-          supplierPaid,supplierOutstanding,oil,rent,true));
+          supplierPaid,supplierOutstanding,oil,rent,expenses,remark,true));
       return;
     }
     persistPosClosing(day,opening,sales,cash,qr,tx,outstanding,balance,
-      supplierPaid,supplierOutstanding,oil,rent,false);
+      supplierPaid,supplierOutstanding,oil,rent,expenses,remark,false);
   }
   void persistPosClosing(String day,int opening,int sales,int cash,int qr,int tx,
       int outstanding,int balance,int supplierPaid,int supplierOutstanding,
-      int oil,int rent,boolean cloudConfirmed){
+      int oil,int rent,JSONArray expenses,String remark,boolean cloudConfirmed){
     if(!posSessionOpen()||!day.equals(posSessionDay()))return;
     try{
       String closedAt=timestamp();
       String receipt=posClosingReceipt(day,opening,sales,cash,qr,tx,outstanding,
-        balance,supplierPaid,supplierOutstanding,oil,rent);
+        balance,supplierPaid,supplierOutstanding,oil,rent,expenses,remark);
       JSONObject c=new JSONObject();
       c.put("time",closedAt);c.put("businessDay",day);
       c.put("opening",opening);c.put("sales",sales);c.put("cash",cash);
@@ -1413,19 +1559,25 @@ selectedDay=date();selectedMonth=selectedDay.substring(0,7);rangeStart=selectedD
       c.put("supplierPaid",supplierPaid);
       c.put("supplierOutstanding",supplierOutstanding);
       c.put("oil",oil);c.put("rent",rent);
+      c.put("expenses",expenses);c.put("expenseTotal",closingExpenseTotal(expenses));
+      c.put("remark",remark);
       c.put("closingBalance",balance);c.put("receipt",receipt);
       JSONArray list=entries("pos_closings");list.put(c);
       JSONArray closingCash=entries("cash_entries");
-      saveClosingExpense(closingCash,day,"Minyak kereta",Math.max(0,pendingClosingOil));
-      saveClosingExpense(closingCash,day,"Sewa",Math.max(0,pendingClosingRent));
+      for(int i=0;i<expenses.length();i++){
+        JSONObject e=expenses.optJSONObject(i);if(e!=null)
+          saveClosingExpense(closingCash,day,e.optString("category","Belanja"),
+            e.optInt("amount",0),remark);
+      }
       if(!posPrefs().edit().putString("cash_entries",closingCash.toString())
         .putString("pos_closings",list.toString())
         .putBoolean("pos_session_open",false)
         .putString("pos_last_closed_day",day).putInt("pos_opening",0).commit())
         throw new Exception("Simpanan tempatan gagal");
       // Worker Cloud was already confirmed above. Owner's existing sync stays.
-      if(!cloudConfirmed&&live!=null&&live.enabled())live.session(false,day,balance);
-      pendingClosingOil=-1;pendingClosingRent=-1;
+      if(!cloudConfirmed&&live!=null&&live.enabled())
+        live.session(false,day,balance,expenses,remark);
+      pendingClosingExpenses=new JSONArray();pendingClosingRemark="";
       draw();showConfirmedClosingReport(day,receipt);
     }catch(Exception e){
       message(cloudConfirmed?
@@ -1444,7 +1596,7 @@ selectedDay=date();selectedMonth=selectedDay.substring(0,7);rangeStart=selectedD
     applyDarkReportDialog(dlg);
   }
 
-  void closingHistory(){JSONArray list=entries("pos_closings");if(list.length()==0){message("Belum ada History Closing.");return;}ArrayList<JSONObject> rows=new ArrayList<>();for(int i=list.length()-1;i>=0;i--){JSONObject e=list.optJSONObject(i);if(e!=null)rows.add(e);}String[] labels=new String[rows.size()];for(int i=0;i<rows.size();i++){JSONObject e=rows.get(i);labels[i]=entryDay(e)+"   ·   "+money(e.optInt("closingBalance",0));}darkBuilder().setTitle("History Closing").setItems(labels,(d,pos)->{JSONObject e=rows.get(pos);String day=entryDay(e);int opening=e.optInt("opening"),sales=e.optInt("sales"),cash=e.optInt("cash"),qr=e.optInt("qr"),tx=e.optInt("transactions"),out=e.optInt("outstandingCarryForward"),balance=e.optInt("closingBalance"),supplierPaid=e.optInt("supplierPaid",supplierPaidTotal(day,true)),supplierOutstanding=e.optInt("supplierOutstanding",supplierDue()),oil=e.optInt("oil",closingOil(day)),rent=e.optInt("rent",closingRent(day));sales=saleTotalBetween(day,day);cash=paymentTotalBetween(day,day,"Tunai");qr=paymentTotalBetween(day,day,"QR");String receipt=posClosingReceipt(day,opening,sales,cash,qr,tx,out,balance,supplierPaid,supplierOutstanding,oil,rent);showConfirmedClosingReport(day,receipt);}).setNegativeButton("Tutup",null).show();}
+  void closingHistory(){JSONArray list=entries("pos_closings");if(list.length()==0){message("Belum ada History Closing.");return;}ArrayList<JSONObject> rows=new ArrayList<>();for(int i=list.length()-1;i>=0;i--){JSONObject e=list.optJSONObject(i);if(e!=null)rows.add(e);}String[] labels=new String[rows.size()];for(int i=0;i<rows.size();i++){JSONObject e=rows.get(i);labels[i]=entryDay(e)+"   ·   "+money(e.optInt("closingBalance",0));}darkBuilder().setTitle("History Closing").setItems(labels,(d,pos)->{JSONObject e=rows.get(pos);String day=entryDay(e);String receipt=e.optString("receipt","");if(receipt.isEmpty()){int opening=e.optInt("opening"),sales=e.optInt("sales"),cash=e.optInt("cash"),qr=e.optInt("qr"),tx=e.optInt("transactions"),out=e.optInt("outstandingCarryForward"),balance=e.optInt("closingBalance"),supplierPaid=e.optInt("supplierPaid",0),supplierOutstanding=e.optInt("supplierOutstanding",0),oil=e.optInt("oil",0),rent=e.optInt("rent",0);receipt=posClosingReceipt(day,opening,sales,cash,qr,tx,out,balance,supplierPaid,supplierOutstanding,oil,rent,e.optJSONArray("expenses")==null?new JSONArray():e.optJSONArray("expenses"),e.optString("remark",""));}showConfirmedClosingReport(day,receipt);}).setNegativeButton("Tutup",null).show();}
   void distributeStockLive(int id){
     if(!branchAccounts.owner()||live==null||!live.usable()){
       message("Edar Live perlukan Owner dan sambungan Cloud.");return;
