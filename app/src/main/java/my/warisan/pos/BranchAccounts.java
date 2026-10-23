@@ -2,23 +2,32 @@ package my.warisan.pos;
 
 import android.content.Context;
 import android.content.SharedPreferences;
+import android.content.res.ColorStateList;
+import android.graphics.drawable.GradientDrawable;
+import android.view.Gravity;
 import android.widget.EditText;
 import android.widget.LinearLayout;
+import android.widget.ProgressBar;
 import android.widget.TextView;
 import android.view.View;
 import com.google.android.gms.tasks.Tasks;
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.auth.FirebaseUser;
 import com.google.firebase.firestore.DocumentReference;
+import com.google.firebase.firestore.DocumentSnapshot;
 import com.google.firebase.firestore.FirebaseFirestore;
 import com.google.firebase.firestore.QueryDocumentSnapshot;
+import com.google.firebase.firestore.Source;
 import com.google.firebase.firestore.WriteBatch;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import org.json.JSONArray;
+import org.json.JSONObject;
 
 /**
  * One-app Owner / Staff identity and branch selector.
@@ -37,6 +46,18 @@ final class BranchAccounts {
   final ArrayList<String> stockBranchNames=new ArrayList<>();
   final ArrayList<String> archivedStockIds=new ArrayList<>();
   final ArrayList<String> archivedStockNames=new ArrayList<>();
+  // Display cache only. Inventory and stock updates remain in LiveBranchStore.
+  final Map<String,StockPreview> stockPreviews=new HashMap<>();
+  static final int PREVIEW_LOW_STOCK=20;
+  static final String[] DEFAULT_STOCK_NAMES={"Sate Ayam","Sate Daging",
+    "Sate Kambing","Nasi Impit","Extra Kuah Kacang","Laksa Utara","Kuih Siput"};
+  static final class StockPreview {
+    boolean ready,live,error;
+    long loadedAt;
+    final ArrayList<Long> quantity=new ArrayList<>();
+    final ArrayList<Boolean> hidden=new ArrayList<>();
+    final ArrayList<String> names=new ArrayList<>();
+  }
   boolean stockBranchesLoaded=false,stockBranchesLoading=false;
   String stockListOwner="";
   static String operatingLabel(String code) {
@@ -117,13 +138,13 @@ final class BranchAccounts {
     if(!uid.equals(stockListOwner)){
       stockBranchesLoaded=false;stockBranchIds.clear();stockBranchNames.clear();
       archivedStockIds.clear();archivedStockNames.clear();
+      stockPreviews.clear();
       stockListOwner=uid;
     }
-    host.heading("STOK · SEMUA CAWANGAN",
-      "Owner sahaja · Stok aktif, Restock dan arkib cawangan.");
-    host.action("↻  Refresh Senarai Branch",()->{
-      stockBranchesLoaded=false;loadStockBranches();
-    });
+    host.heading("Stok","Cawangan Aktif");
+    host.add(host.body,host.text("Cawangan yang diaktifkan akan dipaparkan di sini secara automatik.",
+      12,host.muted,false),-1,-2);
+    host.gap(host.body,9);
     if(!stockBranchesLoaded){
       host.add(host.body,host.text(stockBranchesLoading?
         "Sedang mendapatkan senarai branch...":"Memuatkan senarai branch...",12,host.muted,false),-1,-2);
@@ -134,25 +155,211 @@ final class BranchAccounts {
       host.add(host.body,host.text("Belum ada branch. Daftar branch melalui Setting → Account.",13,host.muted,false),-1,-2);
       return;
     }
-    host.add(host.body,host.text("CAWANGAN AKTIF · "+stockBranchIds.size(),13,host.gold,true),-1,-2);
-    host.gap(host.body,8);
+    for(String id:stockBranchIds)loadStockPreview(id);
     for(int i=0;i<stockBranchIds.size();i++){
       final String id=stockBranchIds.get(i),name=stockBranchNames.get(i);
-      boolean selected=id.equals(branchId());
-      host.action((selected?"●  ":"🏪  ")+name+"  ›\n      Stok awal · Terjual · Baki · Restock Admin",
-        ()->openStockBranch(id,name));
+      drawStockBranchCard(id,name,stockPrimaryIds.contains(id));
     }
-    host.gap(host.body,8);
     if(!archivedStockIds.isEmpty()){
-      host.add(host.body,host.text("ARKIB CAWANGAN · "+archivedStockIds.size(),13,host.gold,true),-1,-2);
-      host.gap(host.body,7);
+      LinearLayout archive=host.col();archive.setPadding(host.dp(13),host.dp(12),host.dp(13),host.dp(12));
+      archive.setBackground(stockOutline(host.surfaceAlt,host.muted,12,1));
+      TextView heading=host.text("▣  Arkib Cawangan ("+archivedStockIds.size()+")",16,host.ink,true);
+      host.add(archive,heading,-1,-2);
+      host.add(archive,host.text("Cawangan yang ditutup kekal disimpan di sini.",11,host.muted,false),-1,-2);
+      host.gap(archive,9);
       for(int i=0;i<archivedStockIds.size();i++){
         final String id=archivedStockIds.get(i),name=archivedStockNames.get(i);
-        host.action("▤  "+name+" · DITUTUP / ARKIB\n      Lihat rekod bulanan sahaja",
-          ()->host.ownerCashflow.openArchivedBranchReport(id));
+        LinearLayout line=host.row();line.setPadding(host.dp(10),host.dp(10),host.dp(10),host.dp(10));
+        line.setBackground(host.shape(host.surface,10));
+        LinearLayout detail=host.col();
+        host.add(detail,host.text("▣  "+name,14,host.ink,true),-1,-2);
+        host.add(detail,host.text("DITUTUP KEKAL · Rekod disimpan",10,host.muted,false),-1,-2);
+        line.addView(detail,new LinearLayout.LayoutParams(0,-2,1));
+        TextView records=host.chip("Lihat Rekod",host.surfaceAlt,host.ink);
+        host.add(line,records,-2,38);
+        line.setOnClickListener(v->host.ownerCashflow.openArchivedBranchReport(id));
+        records.setOnClickListener(v->host.ownerCashflow.openArchivedBranchReport(id));
+        host.add(archive,line,-1,-2);host.gap(archive,5);
       }
+      host.add(host.body,archive,-1,-2);host.gap(host.body,12);
     }
-    host.add(host.body,host.text("Restock hanya Owner. Cawangan arkib dibaca sebagai sejarah, tidak boleh diubah.",12,host.muted,false),-1,-2);
+    if(!stockBranchIds.isEmpty()){
+      stockGoldButton(host.body,"▣  Restock Cawangan (Admin Sahaja)",()->chooseStockRestock());
+      host.gap(host.body,10);
+    }
+    TextView refresh=host.text("↻  Segarkan paparan stok",12,host.muted,true);
+    refresh.setGravity(Gravity.CENTER);
+    host.add(host.body,refresh,-1,44);
+    refresh.setOnClickListener(v->{stockPreviews.clear();stockBranchesLoaded=false;loadStockBranches();host.draw();});
+  }
+  // The summary reads existing stock documents, without adjusting stock, sales, or permissions.
+  final ArrayList<String> stockPrimaryIds=new ArrayList<>();
+  void loadStockPreview(String id){
+    if(!owner()||stockPreviews.containsKey(id))return;
+    final String uid=ownerUid();
+    StockPreview preview=new StockPreview();stockPreviews.put(id,preview);
+    db.collection(ROOT).document(uid).collection("branches").document(id)
+      .collection("live").document("current").get(Source.SERVER)
+      .addOnSuccessListener(doc->{
+        if(!owner()||!uid.equals(ownerUid())||stockPreviews.get(id)!=preview)return;
+        preview.ready=true;preview.live=doc.exists();preview.loadedAt=System.currentTimeMillis();
+        if(doc.exists())readStockPreview(doc,preview);
+        if(host.activePage==1)host.draw();
+      }).addOnFailureListener(error->{
+        if(!owner()||!uid.equals(ownerUid())||stockPreviews.get(id)!=preview)return;
+        preview.ready=true;preview.error=true;
+        if(host.activePage==1)host.draw();
+      });
+  }
+  void readStockPreview(DocumentSnapshot doc,StockPreview preview){
+    Object raw=doc.get("stock");
+    if(!(raw instanceof List)){preview.error=true;return;}
+    for(Object n:(List<?>)raw){
+      if(!(n instanceof Number)){preview.error=true;return;}
+      preview.quantity.add(Math.max(0,((Number)n).longValue()));
+    }
+    Object flags=doc.get("menuHidden");
+    if(flags instanceof List)for(Object f:(List<?>)flags)
+      preview.hidden.add(Boolean.TRUE.equals(f));
+    for(String name:DEFAULT_STOCK_NAMES)preview.names.add(name);
+    try{
+      JSONArray extra=new JSONArray(doc.getString("customMenu")==null?"[]":doc.getString("customMenu"));
+      for(int i=0;i<extra.length();i++){
+        JSONObject item=extra.optJSONObject(i);
+        preview.names.add(item==null?"Menu":item.optString("name","Menu"));
+      }
+    }catch(Exception ignored){}
+  }
+  StockPreview shownStockPreview(String id){
+    StockPreview cloud=stockPreviews.get(id);
+    if(cloud!=null&&cloud.live)return cloud;
+    if(!id.equals(branchId()))return cloud;
+    if(cloud==null||!cloud.ready||cloud.error||host.live!=null&&host.live.enabled())
+      return cloud;
+    // Only the selected branch may fall back to its actual on-device stock.
+    // Never present another branch's local balance as that branch's balance.
+    StockPreview local=new StockPreview();local.ready=true;
+    for(int i=0;i<host.names.length;i++){
+      local.names.add(host.names[i]);
+      local.hidden.add(host.posPrefs().getBoolean("menu_hidden_"+i,false));
+      local.quantity.add((long)(host.unlimited(i)?0:host.stock(i)));
+    }
+    return local;
+  }
+  boolean previewVisible(StockPreview p,int index){
+    return index>=0&&index<p.quantity.size()&&
+      (index>=p.hidden.size()||!p.hidden.get(index));
+  }
+  boolean unitUnlimited(int index){return index==4;}
+  GradientDrawable stockOutline(int background,int stroke,int radius,int thickness){
+    GradientDrawable shape=host.shape(background,radius);
+    shape.setStroke(host.dp(thickness),host.themeColor(stroke));return shape;
+  }
+  void stockGoldButton(LinearLayout container,String label,Runnable open){
+    TextView button=host.text(label,15,host.onAccent,true);button.setGravity(Gravity.CENTER);
+    button.setPadding(host.dp(8),host.dp(12),host.dp(8),host.dp(12));
+    GradientDrawable bg=new GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,
+      new int[]{host.themeColor(0xffffd67b),host.themeColor(host.gold)});
+    bg.setCornerRadius(host.dp(11));button.setBackground(bg);
+    host.add(container,button,-1,51);button.setOnClickListener(v->open.run());
+  }
+  void stockMetric(LinearLayout container,String symbol,String label,String value,int color){
+    LinearLayout tile=host.col();tile.setPadding(host.dp(8),host.dp(8),host.dp(5),host.dp(8));
+    tile.setBackground(stockOutline(host.surfaceAlt,host.muted,11,1));
+    host.add(tile,host.text(symbol+"  "+label,10,host.muted,false),-1,-2);
+    TextView amount=host.text(value,21,color,true);amount.setGravity(Gravity.CENTER);
+    host.add(tile,amount,-1,-2);
+    LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(0,host.dp(74),1);
+    lp.setMargins(host.dp(2),0,host.dp(2),0);container.addView(tile,lp);
+  }
+  void stockBar(LinearLayout panel,String label,long amount,long maximum){
+    LinearLayout line=host.row();
+    TextView title=host.text(label,12,host.ink,true);title.setSingleLine(true);
+    title.setEllipsize(android.text.TextUtils.TruncateAt.END);
+    line.addView(title,new LinearLayout.LayoutParams(0,host.dp(30),1.2f));
+    ProgressBar progress=new ProgressBar(host,null,android.R.attr.progressBarStyleHorizontal);
+    progress.setMax(1000);
+    progress.setProgress((int)Math.min(1000,(amount*1000L)/Math.max(1,maximum)));
+    progress.setProgressTintList(ColorStateList.valueOf(0xff22c66d));
+    progress.setProgressBackgroundTintList(ColorStateList.valueOf(host.themeColor(host.surfaceAlt)));
+    LinearLayout.LayoutParams bar=new LinearLayout.LayoutParams(0,host.dp(13),2.4f);
+    bar.setMargins(host.dp(7),0,host.dp(7),0);line.addView(progress,bar);
+    TextView value=host.text(String.valueOf(amount),13,host.ink,true);
+    value.setGravity(Gravity.RIGHT|Gravity.CENTER_VERTICAL);
+    line.addView(value,new LinearLayout.LayoutParams(0,host.dp(30),.55f));
+    host.add(panel,line,-1,-2);
+  }
+  void drawStockBranchCard(String id,String name,boolean primary){
+    StockPreview p=shownStockPreview(id);
+    LinearLayout card=host.col();card.setPadding(host.dp(13),host.dp(13),host.dp(13),host.dp(13));
+    card.setBackground(stockOutline(host.surface,host.gold,15,2));
+    LinearLayout head=host.row();
+    host.add(head,host.text("▣",26,host.gold,true),30,45);
+    LinearLayout info=host.col();info.setPadding(host.dp(9),0,0,0);
+    host.add(info,host.text(name+(primary?"  🔒":""),18,host.ink,true),-1,-2);
+    host.add(info,host.text(primary?"Cawangan utama sistem · Tidak boleh diarkibkan":
+      "Cawangan aktif",11,host.muted,false),-1,-2);
+    head.addView(info,new LinearLayout.LayoutParams(0,-2,1));
+    TextView status=host.chip(primary?"KEKAL AKTIF":"● AKTIF",
+      primary?host.gold:0xff134f37,primary?host.onAccent:0xff55e99a);
+    status.setTextSize(10);host.add(head,status,-2,34);
+    host.add(card,head,-1,-2);host.gap(card,10);
+    LinearLayout stats=host.row();
+    if(p==null||!p.ready||p.error||(!p.live&&!id.equals(branchId()))){
+      stockMetric(stats,"◇","Item Aktif","—",host.ink);
+      stockMetric(stats,"▲","Stok Rendah","—",host.gold);
+    }else{
+      int active=0,low=0;
+      for(int i=0;i<p.quantity.size();i++)if(previewVisible(p,i)){
+        active++;if(!unitUnlimited(i)&&p.quantity.get(i)<PREVIEW_LOW_STOCK)low++;
+      }
+      stockMetric(stats,"◇","Item Aktif",""+active,0xff35cf7b);
+      stockMetric(stats,"▲","Stok Rendah",""+low,0xffffc452);
+    }
+    // Damage is stored in branch-local history; other branches cannot be given an invented zero.
+    String damage="—";
+    if(id.equals(branchId())){
+      int count=0;
+      JSONArray events=host.entries("stock_damage");
+      for(int i=0;i<events.length();i++){
+        JSONObject event=events.optJSONObject(i);
+        if(event!=null&&!event.optBoolean("stockReset",false)&&
+          host.businessDay().equals(host.entryDay(event)))
+          count+=Math.max(0,event.optInt("qty"));
+      }
+      damage=""+count;
+    }
+    stockMetric(stats,"!","Rosak Hari Ini",damage,0xffff6868);
+    host.add(card,stats,-1,-2);host.gap(card,10);
+    if(p==null||!p.ready){
+      host.add(card,host.text("Sedang memuatkan inventori cawangan...",11,host.muted,false),-1,-2);
+    }else if(p.error){
+      host.add(card,host.text("Ringkasan stok belum dapat disahkan. Tekan Lihat Stok untuk semakan.",11,host.muted,false),-1,-2);
+    }else if(!p.live&&!id.equals(branchId())){
+      host.add(card,host.text("Stok Live belum aktif. Buka cawangan untuk melihat rekod setempat.",11,host.muted,false),-1,-2);
+    }else{
+      host.add(card,host.text("Inventori "+name,12,host.muted,true),-1,-2);
+      long maximum=1;int shown=0;
+      for(int i=0;i<p.quantity.size();i++)if(previewVisible(p,i)&&!unitUnlimited(i)){
+        maximum=Math.max(maximum,p.quantity.get(i));
+      }
+      for(int i=0;i<p.quantity.size()&&shown<2;i++)if(previewVisible(p,i)&&!unitUnlimited(i)){
+        stockBar(card,i<p.names.size()?p.names.get(i):"Item "+(i+1),p.quantity.get(i),maximum);
+        shown++;
+      }
+      if(shown==0)host.add(card,host.text("Tiada item stok untuk dipaparkan.",11,host.muted,false),-1,-2);
+    }
+    host.gap(card,12);
+    stockGoldButton(card,"☷  Lihat Stok   ›",()->openStockBranch(id,name));
+    host.add(host.body,card,-1,-2);host.gap(host.body,12);
+  }
+  void chooseStockRestock(){
+    if(!owner()||stockBranchIds.isEmpty())return;
+    if(stockBranchIds.size()==1){openStockBranch(stockBranchIds.get(0),stockBranchNames.get(0));return;}
+    host.darkBuilder().setTitle("Restock · Pilih Cawangan")
+      .setItems(stockBranchNames.toArray(new String[0]),(d,which)->
+        openStockBranch(stockBranchIds.get(which),stockBranchNames.get(which)))
+      .setNegativeButton("BATAL",null).show();
   }
   void loadStockBranches(){
     if(!owner()||stockBranchesLoading)return;
@@ -163,6 +370,7 @@ final class BranchAccounts {
         if(!owner()||!uid.equals(ownerUid()))return;
         stockBranchIds.clear();stockBranchNames.clear();
         archivedStockIds.clear();archivedStockNames.clear();
+        stockPrimaryIds.clear();
         for(QueryDocumentSnapshot doc:result){
           String name=doc.getString("name");
           name=name==null||name.trim().isEmpty()?"Branch "+doc.getId():name;
@@ -170,11 +378,13 @@ final class BranchAccounts {
             archivedStockIds.add(doc.getId());archivedStockNames.add(name);
           }else if(isPrimaryBranch(doc)){
             stockBranchIds.add(0,doc.getId());stockBranchNames.add(0,name);
+            stockPrimaryIds.add(doc.getId());
           }else{
             stockBranchIds.add(doc.getId());stockBranchNames.add(name);
           }
         }
         stockBranchesLoaded=true;
+        for(String id:stockBranchIds)loadStockPreview(id);
         if(host.activePage==1)host.draw();
       }).addOnFailureListener(error->{
         stockBranchesLoading=false;
@@ -184,6 +394,8 @@ final class BranchAccounts {
   void openStockBranch(String id,String name){
     if(!owner()||user()==null){host.message("Sesi Owner diperlukan.");return;}
     if(!stockBranchIds.contains(id)){host.message("Branch belum disahkan.");return;}
+    // Fetch a fresh visual summary after returning from the existing stock page.
+    stockPreviews.remove(id);
     // Branch selection reuses the Owner's saved login without registering or
     // clearing any previous branch or legacy sales/stock data.
     if(!id.equals(branchId())){
