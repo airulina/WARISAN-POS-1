@@ -1103,6 +1103,45 @@ final class WarisanLanguage {
     alias("TUKAR TARIKH", "TUKAR TARIKH", "CHANGE DATE");
     alias("JUMLAH BAYARAN", "JUMLAH BAYARAN", "PAYMENT TOTAL");
     exact("Stok Mengikut Branch", "Stok Mengikut Cawangan", "Stock by Branch");
+    // v3.46 Stock overview: display strings only, never database keys.
+    exact("Cawangan Aktif", "Cawangan Aktif", "Active Branches");
+    exact("Cawangan yang diaktifkan akan dipaparkan di sini secara automatik.",
+      "Cawangan yang diaktifkan akan dipaparkan di sini secara automatik.",
+      "Enabled branches appear here automatically.");
+    prefix("▣  Arkib Cawangan (", "▣  Arkib Cawangan (", "▣  Archived Branches (");
+    exact("Cawangan yang ditutup kekal disimpan di sini.",
+      "Cawangan yang ditutup kekal disimpan di sini.",
+      "Permanently closed branches remain stored here.");
+    exact("DITUTUP KEKAL · Rekod disimpan", "DITUTUP KEKAL · Rekod disimpan",
+      "PERMANENTLY CLOSED · Records retained");
+    exact("Lihat Rekod", "Lihat Rekod", "View Records");
+    exact("▣  Restock Cawangan (Admin Sahaja)",
+      "▣  Tambah Stok Cawangan (Pentadbir Sahaja)",
+      "▣  Restock Branches (Admin Only)");
+    exact("↻  Segarkan paparan stok", "↻  Segarkan paparan stok", "↻  Refresh stock overview");
+    exact("Item Aktif", "Item Aktif", "Active Items");
+    exact("Stok Rendah", "Stok Rendah", "Low Stock");
+    exact("Rosak Hari Ini", "Rosak Hari Ini", "Damaged Today");
+    exact("Sedang memuatkan inventori cawangan...",
+      "Sedang memuatkan inventori cawangan...", "Loading branch inventory...");
+    exact("Ringkasan stok belum dapat disahkan. Tekan Lihat Stok untuk semakan.",
+      "Ringkasan stok belum dapat disahkan. Tekan Lihat Stok untuk semakan.",
+      "Stock summary could not be verified. Open View Stock to check.");
+    exact("Stok Live belum aktif. Buka cawangan untuk melihat rekod setempat.",
+      "Stok masa nyata belum diaktifkan. Buka cawangan untuk melihat rekod setempat.",
+      "Live Stock is not enabled. Open the branch to view local records.");
+    prefix("Inventori ", "Inventori ", "Inventory · ");
+    exact("Tiada item stok untuk dipaparkan.", "Tiada item stok untuk dipaparkan.",
+      "No stock items to display.");
+    exact("☷  Lihat Stok   ›", "☷  Lihat Stok   ›", "☷  View Stock   ›");
+    exact("Restock · Pilih Cawangan", "Tambah Stok · Pilih Cawangan",
+      "Restock · Select Branch");
+    exact("Cawangan utama sistem · Tidak boleh diarkibkan",
+      "Cawangan utama sistem · Tidak boleh diarkibkan",
+      "System main branch · Cannot be archived");
+    exact("Cawangan aktif", "Cawangan aktif", "Active branch");
+    exact("KEKAL AKTIF", "KEKAL AKTIF", "ALWAYS ACTIVE");
+    exact("● AKTIF", "● AKTIF", "● ACTIVE");
     exact("Owner sahaja · Pilih branch untuk edit atau tambah stok.", "Pemilik sahaja · Pilih cawangan untuk mengubah atau menambah stok.", "Owner only · Select a branch to edit or add stock.");
     exact("↻  Refresh Senarai Branch", "↻  Segar Semula Senarai Cawangan", "↻  Refresh Branch List");
     exact("Refresh Senarai Branch", "Segar Semula Senarai Cawangan", "Refresh Branch List");
