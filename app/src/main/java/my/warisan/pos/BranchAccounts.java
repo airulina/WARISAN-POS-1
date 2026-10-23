@@ -3,9 +3,11 @@ package my.warisan.pos;
 import android.content.Context;
 import android.content.SharedPreferences;
 import android.content.res.ColorStateList;
+import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.view.Gravity;
 import android.widget.EditText;
+import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ProgressBar;
 import android.widget.TextView;
@@ -141,7 +143,7 @@ final class BranchAccounts {
       stockPreviews.clear();
       stockListOwner=uid;
     }
-    host.heading("Stok","Cawangan Aktif");
+    drawStockHeader();
     host.add(host.body,host.text("Cawangan yang diaktifkan akan dipaparkan di sini secara automatik.",
       12,host.muted,false),-1,-2);
     host.gap(host.body,9);
@@ -194,6 +196,22 @@ final class BranchAccounts {
   }
   // The summary reads existing stock documents, without adjusting stock, sales, or permissions.
   final ArrayList<String> stockPrimaryIds=new ArrayList<>();
+  void drawStockHeader(){
+    LinearLayout masthead=host.row();
+    ImageView logo=new ImageView(host);host.setStoreLogo(logo);host.makeCircle(logo);
+    host.add(masthead,logo,54,54);
+    TextView brand=host.text("WARISAN POS-1",20,host.gold,true);
+    brand.setTypeface(Typeface.SERIF,Typeface.BOLD);brand.setSingleLine(true);
+    brand.setEllipsize(android.text.TextUtils.TruncateAt.END);
+    LinearLayout.LayoutParams title=new LinearLayout.LayoutParams(0,-2,1);
+    title.leftMargin=host.dp(9);masthead.addView(brand,title);
+    TextView admin=host.chip("● ADMIN",0xff134f37,0xff56ec96);
+    admin.setTextSize(10);host.add(masthead,admin,-2,34);
+    host.add(host.body,masthead,-1,-2);host.gap(host.body,18);
+    host.add(host.body,host.text("Stok",30,host.ink,true),-1,-2);
+    host.gap(host.body,12);
+    host.add(host.body,host.text("Cawangan Aktif",20,host.ink,true),-1,-2);
+  }
   void loadStockPreview(String id){
     if(!owner()||stockPreviews.containsKey(id))return;
     final String uid=ownerUid();

@@ -10,6 +10,8 @@ const stockOverview = branch.slice(branch.indexOf('  void showStockBranches(){')
 
 // The reference image is a dashboard, not a replacement for operational stock.
 assert.match(stockOverview,/drawStockBranchCard\(id,name,stockPrimaryIds\.contains\(id\)\)/);
+assert.match(stockOverview,/drawStockHeader\(\)/);
+assert.match(stockOverview,/"WARISAN POS-1"/);
 assert.match(stockOverview,/stockMetric\(stats,"◇","Item Aktif"/);
 assert.match(stockOverview,/stockMetric\(stats,"▲","Stok Rendah"/);
 assert.match(stockOverview,/stockMetric\(stats,"!","Rosak Hari Ini"/);
