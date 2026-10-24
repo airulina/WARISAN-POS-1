@@ -128,7 +128,7 @@ final class WarisanTheme {
     list.setPadding(host.dp(14),host.dp(10),host.dp(14),host.dp(10));
     list.setBackgroundColor(host.surface);
     scroll.addView(list);
-    AlertDialog dialog=host.darkBuilder().setTitle("TEMA WARISAN POS-1")
+    AlertDialog dialog=host.darkBuilder().setTitle("TEMA WARISAN POS")
       .setView(scroll).setNegativeButton("TUTUP",null).create();
     for(Palette p:THEMES){
       LinearLayout tile=host.row();

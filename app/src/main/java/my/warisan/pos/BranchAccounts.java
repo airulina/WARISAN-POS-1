@@ -200,7 +200,7 @@ final class BranchAccounts {
     LinearLayout masthead=host.row();
     ImageView logo=new ImageView(host);host.setStoreLogo(logo);host.makeCircle(logo);
     host.add(masthead,logo,54,54);
-    TextView brand=host.text("WARISAN POS-1",20,host.gold,true);
+    TextView brand=host.text("WARISAN POS",20,host.gold,true);
     brand.setTypeface(Typeface.SERIF,Typeface.BOLD);brand.setSingleLine(true);
     brand.setEllipsize(android.text.TextUtils.TruncateAt.END);
     LinearLayout.LayoutParams title=new LinearLayout.LayoutParams(0,-2,1);
@@ -282,13 +282,15 @@ final class BranchAccounts {
     host.add(container,button,-1,51);button.setOnClickListener(v->open.run());
   }
   void stockMetric(LinearLayout container,String symbol,String label,String value,int color){
-    LinearLayout tile=host.col();tile.setPadding(host.dp(8),host.dp(8),host.dp(5),host.dp(8));
-    tile.setBackground(stockOutline(host.surfaceAlt,host.muted,11,1));
-    host.add(tile,host.text(symbol+"  "+label,10,host.muted,false),-1,-2);
-    TextView amount=host.text(value,21,color,true);amount.setGravity(Gravity.CENTER);
-    host.add(tile,amount,-1,-2);
-    LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(0,host.dp(74),1);
-    lp.setMargins(host.dp(2),0,host.dp(2),0);container.addView(tile,lp);
+    // Keep the figures, but display them as plain inventory rows without tiles.
+    LinearLayout line=host.row();line.setGravity(Gravity.CENTER_VERTICAL);
+    TextView title=host.text(symbol+"  "+label,12,host.ink,true);
+    title.setSingleLine(true);
+    line.addView(title,new LinearLayout.LayoutParams(0,host.dp(31),1));
+    TextView amount=host.text(value,18,color,true);
+    amount.setGravity(Gravity.RIGHT|Gravity.CENTER_VERTICAL);
+    line.addView(amount,new LinearLayout.LayoutParams(host.dp(55),host.dp(31)));
+    host.add(container,line,-1,-2);
   }
   void stockBar(LinearLayout panel,String label,long amount,long maximum){
     LinearLayout line=host.row();
@@ -322,7 +324,7 @@ final class BranchAccounts {
       primary?host.gold:0xff134f37,primary?host.onAccent:0xff55e99a);
     status.setTextSize(10);host.add(head,status,-2,34);
     host.add(card,head,-1,-2);host.gap(card,10);
-    LinearLayout stats=host.row();
+    LinearLayout stats=host.col();
     if(p==null||!p.ready||p.error||(!p.live&&!id.equals(branchId()))){
       stockMetric(stats,"◇","Item Aktif","—",host.ink);
       stockMetric(stats,"▲","Stok Rendah","—",host.gold);
