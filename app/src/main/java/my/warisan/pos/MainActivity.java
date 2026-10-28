@@ -320,6 +320,7 @@ selectedDay=date();selectedMonth=selectedDay.substring(0,7);rangeStart=selectedD
         add(body,text("Belum ada akaun? Sign Up untuk pengguna baru sahaja.",12,muted,false),-1,-2);
         action("SIGN UP · DAFTAR AKAUN BAHARU",()->showNewUserSignup());
       }else{
+        showSignedInEmail();
         if(branchAccounts.staff()){
           add(body,text("Menyemak status branch pekerja di Firebase. "+
             "Akses hanya dibuka apabila branch berstatus BUKA.",13,gold,true),-1,-2);
@@ -346,6 +347,7 @@ selectedDay=date();selectedMonth=selectedDay.substring(0,7);rangeStart=selectedD
     add(body,text("🏪  "+(branchAccounts.staff()?"BRANCH PEKERJA: ":"BRANCH AKTIF: ")+
       branchAccounts.branchName().toUpperCase(new Locale("ms","MY")),
       13,gold,true),-1,-2);
+    showSignedInEmail();
     // Opening/Closing belongs to Sale (worker) or branch/session management
     // (Owner), never to the product Menu.
     gap(body,15);
@@ -397,6 +399,25 @@ selectedDay=date();selectedMonth=selectedDay.substring(0,7);rangeStart=selectedD
     LinearLayout brand=row();brand.setGravity(Gravity.CENTER_VERTICAL);ImageView logo=new ImageView(this);setStoreLogo(logo);makeCircle(logo);add(brand,logo,44,44);LinearLayout brandText=col();brandText.setPadding(dp(9),0,0,0);add(brandText,text("WARISAN POS",18,gold,true),-1,-2);add(brandText,text("KIOS WARISAN  ·  SISTEM JUALAN",9,muted,true),-1,-2);brand.addView(brandText,new LinearLayout.LayoutParams(0,-2,1));TextView clock=text("",9,gold,true);clock.setGravity(Gravity.RIGHT|Gravity.CENTER_VERTICAL);add(brand,clock,-2,-2);startHeaderClock(clock);add(body,brand,-1,-2);gap(body,12);
     View rule=new View(this);rule.setBackgroundColor(surfaceAlt);add(body,rule,-1,1);gap(body,13);
     add(body,text(title,23,ink,true),-1,-2);gap(body,3);add(body,text(subtitle,12,muted,false),-1,-2);gap(body,15);
+    if(branchAccounts!=null&&branchAccounts.active())showSignedInEmail();
+  }
+  // Account email comes from the currently authenticated Firebase user, never
+  // from a saved local role or a shop's transaction preferences.
+  void showSignedInEmail(){
+    FirebaseUser signed=firebaseAuth==null?null:firebaseAuth.getCurrentUser();
+    if(signed==null)return;
+    String email=signed.getEmail();
+    String account=branchAccounts!=null&&branchAccounts.active()
+      ?(branchAccounts.staff()?"PEKERJA":"OWNER"):"AKAUN";
+    LinearLayout panel=col();panel.setPadding(dp(13),dp(10),dp(13),dp(10));
+    panel.setBackground(cardShape(12));
+    add(panel,text("✓  LOG IN · "+account,11,gold,true),-1,-2);gap(panel,3);
+    TextView address=text(email==null||email.trim().isEmpty()
+      ?"Email akaun tidak tersedia":email.trim(),13,ink,true);
+    address.setMaxLines(2);
+    address.setEllipsize(android.text.TextUtils.TruncateAt.END);
+    add(panel,address,-1,-2);
+    add(body,panel,-1,-2);gap(body,12);
   }
   void action(String label,Runnable callback){TextView button=text(ui(label)+"   ›",14,ink,true);button.setMinHeight(dp(49));button.setPadding(dp(16),dp(12),dp(14),dp(12));button.setLineSpacing(dp(2),1f);button.setBackground(cardShape(14));add(body,button,-1,-2);gap(body,8);button.setOnClickListener(v->callback.run());}
   void metric(LinearLayout row,String title,String value,int highlight,Runnable tap){LinearLayout card=col();card.setGravity(Gravity.CENTER_VERTICAL);card.setPadding(dp(12),dp(10),dp(9),dp(10));card.setBackground(cardShape(14));TextView name=text(title,11,muted,true);name.setMaxLines(2);add(card,name,-1,-2);gap(card,8);TextView figure=text(value,value.startsWith("RM")?16:20,highlight,true);figure.setMaxLines(2);add(card,figure,-1,-2);LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(0,dp(106),1);p.setMargins(dp(3),0,dp(3),0);row.addView(card,p);if(tap!=null)card.setOnClickListener(v->tap.run());}
