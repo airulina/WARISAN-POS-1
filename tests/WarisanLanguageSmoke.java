@@ -44,6 +44,12 @@ public final class WarisanLanguageSmoke {
       "Stok Mengikut Cawangan");
     assertEqual("Stock screenshot title EN","Stok Mengikut Branch",true,
       "Stock by Branch");
+    assertEqual("Stock cards heading EN","Cawangan Aktif",true,"Active Branches");
+    assertEqual("Stock cards metric EN","Stok Rendah",true,"Low Stock");
+    assertEqual("Stock cards damaged EN","Rosak Hari Ini",true,"Damaged Today");
+    assertEqual("Stock cards action EN","☷  Lihat Stok   ›",true,"☷  View Stock   ›");
+    assertEqual("Stock cards admin button BM","▣  Restock Cawangan (Admin Sahaja)",false,
+      "▣  Tambah Stok Cawangan (Pentadbir Sahaja)");
     assertEqual("Stock screenshot subtitle BM",
       "Owner sahaja · Pilih branch untuk edit atau tambah stok.",false,
       "Pemilik sahaja · Pilih cawangan untuk mengubah atau menambah stok.");

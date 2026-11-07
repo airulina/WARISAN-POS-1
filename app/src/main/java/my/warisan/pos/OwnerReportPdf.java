@@ -10,6 +10,8 @@ import java.io.OutputStream;
 import java.util.Map;
 import java.util.TreeMap;
 import java.util.Locale;
+import java.util.Calendar;
+import java.text.SimpleDateFormat;
 
 /** A4 visual report for a single owner-selected branch. Never merges another branch's costs. */
 final class OwnerReportPdf {
@@ -27,21 +29,50 @@ final class OwnerReportPdf {
   private OwnerReportPdf(){}
 
   static void print(MainActivity host,OwnerCashflow.BranchRow row,String period,boolean local){
+    String month=host.selectedMonth;
+    print(host,row,period,month+"-01",month+"-31",local);
+  }
+  private static int localExpense(MainActivity host,String from,String to){
+    if(from.equals(to))return host.operatingExpenseTotal(from,true);
+    if(from.substring(0,7).equals(to.substring(0,7))&&
+      from.endsWith("-01")&&to.endsWith("-31"))
+      return host.operatingExpenseTotal(from.substring(0,7),false);
+    int total=0;
+    try{
+      SimpleDateFormat iso=new SimpleDateFormat("yyyy-MM-dd",Locale.US);
+      iso.setLenient(false);
+      Calendar cursor=Calendar.getInstance();cursor.setTime(iso.parse(from));
+      for(int i=0;i<35;i++){
+        String day=iso.format(cursor.getTime());
+        if(day.compareTo(to)>0)break;
+        total+=host.operatingExpenseTotal(day,true);
+        cursor.add(Calendar.DAY_OF_MONTH,1);
+      }
+    }catch(Exception ignored){}
+    return total;
+  }
+  static void print(MainActivity host,OwnerCashflow.BranchRow row,String period,
+      String from,String to,boolean local){
     // Snapshot everything before entering Android's asynchronous print callbacks.
-    final String name=row.name,month=host.selectedMonth,monthTitle=period;
-    final TreeMap<String,OwnerCashflow.Day> days=row.combined();
-    final OwnerCashflow.Day total=row.totals();
+    final String name=row.name,monthTitle=period;
+    final TreeMap<String,OwnerCashflow.Day> days=new TreeMap<>();
+    final OwnerCashflow.Day total=new OwnerCashflow.Day();
+    for(Map.Entry<String,OwnerCashflow.Day> entry:row.combined().entrySet()){
+      if(entry.getKey().compareTo(from)<0||entry.getKey().compareTo(to)>0)continue;
+      days.put(entry.getKey(),entry.getValue());
+      total.add(entry.getValue());
+    }
     final int sale,cost,operating,profit;
     final int[] sold;
     if(local){
-      sale=host.saleTotalBetween(month+"-01",month+"-31");
-      cost=host.productCostBetween(month+"-01",month+"-31");
-      operating=host.operatingExpenseTotal(month,false);
-      profit=host.businessProfit(month,false);
-      sold=host.soldNetBetween(month+"-01",month+"-31");
+      sale=host.saleTotalBetween(from,to);
+      cost=host.productCostBetween(from,to);
+      operating=localExpense(host,from,to);
+      profit=sale-cost-operating;
+      sold=host.soldNetBetween(from,to);
     }else{sale=0;cost=0;operating=0;profit=0;sold=new int[0];}
     final String[] names=host.names.clone();
-    WarisanPrinting.print(host,"WARISAN POS · "+name+" · "+month, out->{
+    WarisanPrinting.print(host,"WARISAN POS · "+name+" · "+period, out->{
       PDF_ENGLISH.set(host.english());
       PdfDocument pdf=new PdfDocument();
       try{
@@ -54,7 +85,7 @@ final class OwnerReportPdf {
         card(c,p,40,222,248,79,"TUNAI",money(total.cash),NAVY);
         card(c,p,306,222,248,79,"QR / DUITNOW",money(total.qr),GOLD);
         title(c,p,"GRAF JUALAN MENGIKUT HARI",40,333,14,NAVY);
-        drawSalesChart(c,p,days,month,40,352,515,214);
+        drawSalesChart(c,p,days,period,40,352,515,214);
         if(local){
           title(c,p,"KOS & UNTUNG POS TEMPATAN",40,607,14,NAVY);
           card(c,p,40,623,248,66,"KOS PRODUK",money(cost),NAVY);
@@ -139,13 +170,13 @@ final class OwnerReportPdf {
     label(c,p,text,x,y,8.5f,GRAY);
   }
   private static void drawSalesChart(Canvas c,Paint p,TreeMap<String,OwnerCashflow.Day> rows,
-      String month,int left,int top,int width,int height){
+      String period,int left,int top,int width,int height){
     long max=0;int length=0;
     for(Map.Entry<String,OwnerCashflow.Day> e:rows.entrySet()){
-      if(e.getKey().startsWith(month+"-")){max=Math.max(max,e.getValue().sales);length++;}
+      max=Math.max(max,e.getValue().sales);length++;
     }
     p.setColor(PALE);c.drawRoundRect(new RectF(left,top,left+width,top+height),10,10,p);
-    if(max<=0||length==0){label(c,p,"Tiada jualan direkodkan bagi bulan ini.",left+20,top+105,11,GRAY);return;}
+    if(max<=0||length==0){label(c,p,"Tiada jualan direkodkan bagi tempoh ini.",left+20,top+105,11,GRAY);return;}
     float graphLeft=left+49,graphTop=top+18,graphBottom=top+height-36;
     for(int i=0;i<=3;i++){
       float yy=graphBottom-i*(graphBottom-graphTop)/3f;
@@ -154,7 +185,6 @@ final class OwnerReportPdf {
     }
     int d=0;float step=(width-75f)/Math.max(1,length);
     for(Map.Entry<String,OwnerCashflow.Day> e:rows.entrySet()){
-      if(!e.getKey().startsWith(month+"-"))continue;
       float x=graphLeft+d*step+step*.17f;
       float bh=(graphBottom-graphTop)*e.getValue().sales/max;
       p.setColor(BLUE);
@@ -163,7 +193,7 @@ final class OwnerReportPdf {
         label(c,p,e.getKey().substring(8),x,graphBottom+15,8,GRAY);
       d++;
     }
-    label(c,p,"RM · Jualan harian ("+month+")",graphLeft,top+height-8,9,GRAY);
+    label(c,p,"RM · Jualan dalam tempoh dipilih",graphLeft,top+height-8,9,GRAY);
   }
   private static void tableHeading(Canvas c,Paint p,int y){
     p.setColor(NAVY);c.drawRoundRect(new RectF(39,y-16,555,y+8),5,5,p);
