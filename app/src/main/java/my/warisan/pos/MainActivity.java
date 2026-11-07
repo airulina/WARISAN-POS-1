@@ -1437,9 +1437,17 @@ selectedDay=date();selectedMonth=selectedDay.substring(0,7);rangeStart=selectedD
   void showConfirmedClosingReport(String day,String receipt){
     LinearLayout frame=col();frame.setPadding(dp(12),dp(6),dp(12),dp(8));frame.setBackgroundColor(cream);
     ScrollView scroll=new ScrollView(this);scroll.setVerticalScrollBarEnabled(false);scroll.setFillViewport(true);frame.addView(scroll,new LinearLayout.LayoutParams(-1,-2));
-    LinearLayout sheet=col();sheet.setPadding(dp(18),dp(16),dp(18),dp(18));sheet.setBackground(shape(Color.WHITE,10));scroll.addView(sheet);
+    // Keep the full sheet available for SHARE, even when it exceeds the screen width.
+    HorizontalScrollView receiptScroll=new HorizontalScrollView(this);receiptScroll.setFillViewport(true);
+    scroll.addView(receiptScroll);
+    LinearLayout sheet=col();sheet.setPadding(dp(18),dp(16),dp(18),dp(18));sheet.setBackground(shape(Color.WHITE,10));
+    receiptScroll.addView(sheet,new FrameLayout.LayoutParams(-2,-2));
     TextView title=text("PENUTUPAN DISAHKAN",15,blue,true);title.setGravity(Gravity.CENTER);add(sheet,title,-1,-2);gap(sheet,8);
-    TextView content=text(receipt,12,0xff26384c,false);content.setTypeface(Typeface.MONOSPACE);content.setTextIsSelectable(true);add(sheet,content,-1,-2);
+    TextView content=text(receipt,12,0xff26384c,false);content.setTypeface(Typeface.MONOSPACE);content.setTextIsSelectable(true);
+    // Center the block, not each line: receipt columns must remain left-aligned.
+    content.setGravity(Gravity.LEFT|Gravity.TOP);content.setHorizontallyScrolling(true);
+    LinearLayout.LayoutParams receiptParams=new LinearLayout.LayoutParams(-2,-2);
+    receiptParams.gravity=Gravity.CENTER_HORIZONTAL;sheet.addView(content,receiptParams);
     AlertDialog dlg=darkBuilder().setTitle("REPORT CLOSING · "+day).setView(frame).setPositiveButton("PRINT",(d,w)->print(receipt)).setNeutralButton("SHARE",(d,w)->shareReceiptImage(sheet,"report-closing-"+day)).setNegativeButton("TUTUP",null).create();
     applyDarkReportDialog(dlg);
   }
