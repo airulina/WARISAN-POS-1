@@ -472,20 +472,12 @@ final class OwnerCashflow {
     host.add(overallCard,host.text(
       (english?(today?"TODAY":"SELECTED DAY"):(today?"HARI INI":"TARIKH DIPILIH"))+
       " · "+day,11,host.muted,false),-1,-2);
-    host.gap(overallCard,10);
-    LinearLayout sales=host.row();
-    host.metric(sales,english?"TOTAL SALES · ALL BRANCHES  ›":
-      "JUMLAH JUALAN · SEMUA CAWANGAN  ›",ready()?rm(daily.sales):"—",host.gold,()->{
+    host.gap(overallCard,12);
+    host.salesSummary(overallCard,"TOTAL SALE",ready()?rm(daily.sales):"—",
+      ready()?rm(daily.cash):"—",ready()?rm(daily.qr):"—",
+      english?"Sales received · tap for details":"Jualan diterima · tekan untuk butiran",()->{
         host.cashDailyMode=true;host.activePage=16;host.draw();
       });
-    int verifiedProfit=overallProfitVerified?host.businessProfit(day,true):0;
-    host.metric(sales,english?"OVERALL NET PROFIT":"UNTUNG BERSIH OVERALL",
-      overallProfitVerified?rm(verifiedProfit):"—",
-      overallProfitVerified?host.profitColor(verifiedProfit):host.muted,()->{
-        if(overallProfitVerified){host.activePage=17;selectedBranchId=verifiedSingle.id;host.draw();}
-        else host.message("Untung overall belum boleh disahkan: kos cawangan lain belum lengkap di Cloud.");
-      });
-    host.add(overallCard,sales,-1,-2);
     host.add(host.body,overallCard,-1,-2);host.gap(host.body,20);
     if(ready()){
       host.add(host.body,host.text(english?"ACTIVE BRANCHES":"CAWANGAN AKTIF",21,host.ink,true),-1,-2);

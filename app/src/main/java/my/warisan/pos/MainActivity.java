@@ -177,7 +177,8 @@ private static final int RC_SIGN_IN = 9001;
     TextView t=new TextView(this);
     t.setText(ui(s));t.setTextSize(size);
     t.setTextColor(WarisanTheme.readableText(color,surface,ink));
-    if(bold)t.setTypeface(null,Typeface.BOLD);
+    t.setTypeface(Typeface.create("sans-serif",bold?Typeface.BOLD:Typeface.NORMAL));
+    t.setIncludeFontPadding(false);
     t.setGravity(Gravity.CENTER_VERTICAL);
     return t;
   }
@@ -196,7 +197,7 @@ private static final int RC_SIGN_IN = 9001;
     int background=themeColor(back);
     TextView t=text(ui(s),13,contrast,true);
     t.setTextColor(WarisanTheme.readableText(contrast,background,ink));
-    t.setGravity(Gravity.CENTER);t.setBackground(shape(back,11));
+    t.setGravity(Gravity.CENTER);t.setBackground(shape(back,12));
     t.setPadding(dp(8),dp(5),dp(8),dp(5));return t;
   }
   void loadMenu(){JSONArray custom=entries("custom_menu");int size=7+custom.length();names=Arrays.copyOf(new String[]{"Sate Ayam","Sate Daging","Sate Kambing","Nasi Impit","Extra Kuah Kacang","Laksa Utara","Kuih Siput"},size);icons=Arrays.copyOf(new String[]{"🍢","🥩","🍢","🍚","🥣","🍜","🥨"},size);prices=Arrays.copyOf(new int[]{160,180,200,60,100,700,500},size);qty=new int[size];
@@ -289,7 +290,7 @@ selectedDay=date();selectedMonth=selectedDay.substring(0,7);rangeStart=selectedD
     }
     setContentView(screen);
     ScrollView scroll=new ScrollView(this);scroll.setVerticalScrollBarEnabled(false);screen.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
-    body=col();body.setPadding(dp(17),dp(15),dp(17),dp(25));scroll.addView(body);
+    body=col();body.setPadding(dp(18),dp(20),dp(18),dp(28));scroll.addView(body);
     if(branchAccounts!=null&&branchAccounts.blocked()){
       heading("WARISAN POS","Log In · Email / Password atau Google");
       action(english()?"🌐 Language: English":"🌐 Bahasa: Bahasa Melayu (Malaysia)",
@@ -342,20 +343,35 @@ selectedDay=date();selectedMonth=selectedDay.substring(0,7);rangeStart=selectedD
       &&activePage!=0&&activePage!=11&&activePage!=5&&activePage!=12&&activePage!=14&&activePage!=20)activePage=0;
     if(activePage!=0){drawPage();addNavigation(screen);return;}
     LinearLayout header=row();ImageView logo=new ImageView(this);setStoreLogo(logo);makeCircle(logo);add(header,logo,49,49);
-    LinearLayout heading=col();heading.setPadding(dp(10),0,0,0);add(heading,text("WARISAN POS",21,gold,true),-1,-2);LinearLayout sub=row();sub.addView(text("KIOS WARISAN  ·  SISTEM JUALAN",10,muted,true),new LinearLayout.LayoutParams(0,-2,1));TextView liveClock=text("",10,gold,true);liveClock.setGravity(Gravity.RIGHT|Gravity.CENTER_VERTICAL);add(sub,liveClock,-2,-2);add(heading,sub,-1,-2);startHeaderClock(liveClock);header.addView(heading,new LinearLayout.LayoutParams(0,-2,1));
+    LinearLayout heading=col();heading.setPadding(dp(10),0,0,0);add(heading,text("WARISAN POS",21,ink,true),-1,-2);LinearLayout sub=row();sub.addView(text("KIOS WARISAN  ·  SISTEM JUALAN",10,muted,true),new LinearLayout.LayoutParams(0,-2,1));TextView liveClock=text("",10,gold,true);liveClock.setGravity(Gravity.RIGHT|Gravity.CENTER_VERTICAL);add(sub,liveClock,-2,-2);add(heading,sub,-1,-2);startHeaderClock(liveClock);header.addView(heading,new LinearLayout.LayoutParams(0,-2,1));
     add(body,header,-1,-2);gap(body,9);
     add(body,text("🏪  "+(branchAccounts.staff()?"BRANCH PEKERJA: ":"BRANCH AKTIF: ")+
       branchAccounts.branchName().toUpperCase(new Locale("ms","MY")),
       13,gold,true),-1,-2);
     showSignedInEmail();
+    gap(body,16);
+    String summaryDay=businessDay();
+    salesSummary(body,"TOTAL SALE · CAWANGAN INI",money(sessionSales(summaryDay)),
+      money(sessionCash(summaryDay)),money(sessionQr(summaryDay)),
+      summaryDay+" · "+(sessionCloudReady(summaryDay)?"Live + rekod tempatan":"Rekod telefon ini"),
+      ()->{activePage=branchAccounts.staff()?12:3;draw();});
     // Opening/Closing belongs to Sale (worker) or branch/session management
     // (Owner), never to the product Menu.
     gap(body,15);
     LinearLayout title=row();title.addView(text("Pilih menu",20,ink,true),new LinearLayout.LayoutParams(0,-2,1));TextView historyButton=chip("HISTORY",0xff203f61,gold);add(title,historyButton,-2,-2);historyButton.setOnClickListener(v->{
       if(branchAccounts.staff())saleHistory(businessDay());
       else saleHistoryChooseDate();
-    });LinearLayout.LayoutParams hp=(LinearLayout.LayoutParams)historyButton.getLayoutParams();if(!branchAccounts.staff()){TextView addMenuButton=chip("URUS MENU",blue,Color.WHITE);LinearLayout.LayoutParams amp=params(-2,-2);amp.leftMargin=dp(6);title.addView(addMenuButton,amp);addMenuButton.setOnClickListener(v->{activePage=6;draw();});}items=chip("0 item",0xff203f61,gold);LinearLayout.LayoutParams itemLp=params(-2,-2);itemLp.leftMargin=dp(7);title.addView(items,itemLp);add(body,title,-1,-2);
-    add(body,text("Tekan + untuk tambah pesanan",12,muted,false),-1,-2);gap(body,13);
+     });
+    add(body,title,-1,-2);gap(body,8);
+    LinearLayout menuTools=row();
+    menuTools.addView(text("Tekan + untuk tambah pesanan",11,muted,false),new LinearLayout.LayoutParams(0,-2,1));
+    if(!branchAccounts.staff()){
+      TextView manage=chip("URUS MENU",surfaceAlt,ink);add(menuTools,manage,-2,-2);
+      manage.setOnClickListener(v->{activePage=6;draw();});
+    }
+    items=chip("0 item",surfaceAlt,gold);LinearLayout.LayoutParams itemLp=params(-2,-2);
+    itemLp.leftMargin=dp(7);menuTools.addView(items,itemLp);
+    add(body,menuTools,-1,-2);gap(body,14);
     ArrayList<Integer> visibleMenu=new ArrayList<>();for(int i=0;i<names.length;i++){boolean manuallyHidden=posPrefs().getBoolean("menu_hidden_"+i,false);boolean hasStock=unlimited(i)||stock(i)>0;if(!manuallyHidden&&hasStock)visibleMenu.add(i);}for(int id:visibleMenu){LinearLayout line=row();product(line,id);add(body,line,-1,-2);gap(body,9);}
     // "Pesanan semasa" removed from MENU because confirmed orders are managed in ORDER.
     // Keep an off-screen basket container so the existing cart refresh logic remains unchanged.
@@ -375,8 +391,8 @@ selectedDay=date();selectedMonth=selectedDay.substring(0,7);rangeStart=selectedD
     int available=unlimited(id)?Integer.MAX_VALUE:stock(id);
     String shownStock=unlimited(id)?"Stok: Tanpa had":(live!=null&&live.enabled()&&!live.usable()?"Baki terakhir (offline): ":"Baki stok: ")+available+(available==0?" · HABIS":"")+" "+(id<3?"cucuk":"unit");
     TextView stockLabel=text(shownStock,11,available==0?0xffff4d4d:blue,true);add(info,stockLabel,-1,-2);card.addView(info,new LinearLayout.LayoutParams(0,-2,1));
-    LinearLayout controls=row();controls.setGravity(Gravity.CENTER_VERTICAL);TextView minus=chip("−",0xffc83f46,Color.WHITE),number=text(""+qty[id],16,ink,true),plus=chip("+",blue,Color.WHITE);minus.setGravity(Gravity.CENTER);number.setGravity(Gravity.CENTER);plus.setGravity(Gravity.CENTER);
-    add(controls,minus,39,43);add(controls,number,34,43);add(controls,plus,39,43);add(card,controls,-2,-2);
+    LinearLayout controls=row();controls.setGravity(Gravity.CENTER_VERTICAL);TextView minus=chip("−",surfaceAlt,ink),number=text(""+qty[id],16,ink,true),plus=chip("+",blue,onPrimary);minus.setGravity(Gravity.CENTER);number.setGravity(Gravity.CENTER);plus.setGravity(Gravity.CENTER);
+    add(controls,minus,36,44);add(controls,number,30,44);add(controls,plus,36,44);add(card,controls,-2,-2);
     number.setClickable(true);number.setOnClickListener(v->editOrderQuantity(id));
     minus.setOnClickListener(v->{qty[id]=Math.max(0,qty[id]-1);draw();});
     plus.setAlpha(available<=qty[id]?.35f:1f);plus.setEnabled(available>qty[id]);plus.setOnClickListener(v->stockLimit(id,1));
@@ -394,9 +410,9 @@ selectedDay=date();selectedMonth=selectedDay.substring(0,7);rangeStart=selectedD
     for(int i=0;i<qty.length;i++)if(qty[i]>0){final int id=i;LinearLayout r=row();r.addView(text(names[i]+" × "+qty[i],14,ink,true),new LinearLayout.LayoutParams(0,dp(39),1));add(r,text(money(qty[i]*prices[i]),13,blue,true),-2,-2);TextView minus=chip("−",0xffc83f46,Color.WHITE);LinearLayout.LayoutParams m=params(32,30);m.leftMargin=dp(8);r.addView(minus,m);minus.setOnClickListener(v->{qty[id]--;draw();});add(basket,r,-1,-2);}
   }
   void addNavigation(LinearLayout screen){LinearLayout nav=row();nav.setBackgroundColor(cream);nav.setPadding(dp(7),dp(9),dp(7),dp(11));boolean worker=branchAccounts.staff();String[] labels=worker?new String[]{"MENU","ORDER","SALE","SETTING"}:new String[]{"MENU","ORDER","STOCK","SALE","BRANCH","SETTING"};int[] pages=worker?new int[]{0,11,12,5}:new int[]{0,11,1,3,15,4};
-    for(int i=0;i<labels.length;i++){final int page=pages[i];boolean selected=(activePage==page)||(worker&&page==5&&activePage==14)||(page==1&&activePage==13)||(page==3&&(activePage==2||activePage==16||activePage==17||activePage==18||activePage==19||activePage==21||activePage==22))||(page==4&&activePage>=4&&activePage<=10);int background=selected?surfaceAlt:navOff,foreground=selected?gold:navOffText;TextView tab=text(labels[i],worker?12:10,foreground,true);tab.setTextColor(WarisanTheme.readableText(foreground,background,ink));tab.setGravity(Gravity.CENTER);tab.setMaxLines(1);tab.setEllipsize(android.text.TextUtils.TruncateAt.END);GradientDrawable tabShape=shape(background,12);if(selected)tabShape.setStroke(dp(2),gold);tab.setBackground(tabShape);LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(0,dp(52),1);p.setMargins(dp(2),0,dp(2),0);nav.addView(tab,p);tab.setOnClickListener(v->{activePage=page;draw();});}add(screen,nav,-1,-2);}
+    for(int i=0;i<labels.length;i++){final int page=pages[i];boolean selected=(activePage==page)||(worker&&page==5&&activePage==14)||(page==1&&activePage==13)||(page==3&&(activePage==2||activePage==16||activePage==17||activePage==18||activePage==19||activePage==21||activePage==22))||(page==4&&activePage>=4&&activePage<=10);int background=selected?blue:cream,foreground=selected?onPrimary:muted;TextView tab=text(labels[i],worker?12:10,foreground,true);tab.setTextColor(WarisanTheme.readableText(foreground,background,ink));tab.setGravity(Gravity.CENTER);tab.setMaxLines(1);tab.setEllipsize(android.text.TextUtils.TruncateAt.END);GradientDrawable tabShape=shape(background,12);if(!selected)tabShape.setStroke(dp(1),surfaceAlt);tab.setBackground(tabShape);LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(0,dp(52),1);p.setMargins(dp(2),0,dp(2),0);nav.addView(tab,p);tab.setOnClickListener(v->{activePage=page;draw();});}add(screen,nav,-1,-2);}
   void heading(String title,String subtitle){
-    LinearLayout brand=row();brand.setGravity(Gravity.CENTER_VERTICAL);ImageView logo=new ImageView(this);setStoreLogo(logo);makeCircle(logo);add(brand,logo,44,44);LinearLayout brandText=col();brandText.setPadding(dp(9),0,0,0);add(brandText,text("WARISAN POS",18,gold,true),-1,-2);add(brandText,text("KIOS WARISAN  ·  SISTEM JUALAN",9,muted,true),-1,-2);brand.addView(brandText,new LinearLayout.LayoutParams(0,-2,1));TextView clock=text("",9,gold,true);clock.setGravity(Gravity.RIGHT|Gravity.CENTER_VERTICAL);add(brand,clock,-2,-2);startHeaderClock(clock);add(body,brand,-1,-2);gap(body,12);
+    LinearLayout brand=row();brand.setGravity(Gravity.CENTER_VERTICAL);ImageView logo=new ImageView(this);setStoreLogo(logo);makeCircle(logo);add(brand,logo,44,44);LinearLayout brandText=col();brandText.setPadding(dp(9),0,0,0);add(brandText,text("WARISAN POS",18,ink,true),-1,-2);add(brandText,text("KIOS WARISAN  ·  SISTEM JUALAN",9,muted,true),-1,-2);brand.addView(brandText,new LinearLayout.LayoutParams(0,-2,1));TextView clock=text("",9,gold,true);clock.setGravity(Gravity.RIGHT|Gravity.CENTER_VERTICAL);add(brand,clock,-2,-2);startHeaderClock(clock);add(body,brand,-1,-2);gap(body,12);
     View rule=new View(this);rule.setBackgroundColor(surfaceAlt);add(body,rule,-1,1);gap(body,13);
     add(body,text(title,23,ink,true),-1,-2);gap(body,3);add(body,text(subtitle,12,muted,false),-1,-2);gap(body,15);
     if(branchAccounts!=null&&branchAccounts.active())showSignedInEmail();
@@ -420,6 +436,22 @@ selectedDay=date();selectedMonth=selectedDay.substring(0,7);rangeStart=selectedD
     add(body,panel,-1,-2);gap(body,12);
   }
   void action(String label,Runnable callback){TextView button=text(ui(label)+"   ›",14,ink,true);button.setMinHeight(dp(49));button.setPadding(dp(16),dp(12),dp(14),dp(12));button.setLineSpacing(dp(2),1f);button.setBackground(cardShape(14));add(body,button,-1,-2);gap(body,8);button.setOnClickListener(v->callback.run());}
+  void salesSummary(LinearLayout parent,String title,String value,String cash,String qr,String subtitle,Runnable tap){
+    LinearLayout card=col();card.setPadding(dp(20),dp(18),dp(20),dp(18));
+    card.setBackground(borderedCard(true,22));
+    add(card,text(title,11,muted,true),-1,-2);gap(card,10);
+    TextView figure=text(value,32,gold,true);figure.setMaxLines(2);add(card,figure,-1,-2);
+    gap(card,6);add(card,text(subtitle,11,muted,false),-1,-2);gap(card,16);
+    View divider=new View(this);divider.setBackgroundColor(surfaceAlt);add(card,divider,-1,1);gap(card,12);
+    LinearLayout payments=row();
+    for(String[] item:new String[][]{{"CASH",cash},{"QR",qr}}){
+      LinearLayout part=col();add(part,text(item[0],10,muted,true),-1,-2);gap(part,5);
+      add(part,text(item[1],16,ink,true),-1,-2);
+      payments.addView(part,new LinearLayout.LayoutParams(0,-2,1));
+    }
+    add(card,payments,-1,-2);add(parent,card,-1,-2);
+    if(tap!=null)card.setOnClickListener(v->tap.run());
+  }
   void metric(LinearLayout row,String title,String value,int highlight,Runnable tap){LinearLayout card=col();card.setGravity(Gravity.CENTER_VERTICAL);card.setPadding(dp(12),dp(10),dp(9),dp(10));card.setBackground(cardShape(14));TextView name=text(title,11,muted,true);name.setMaxLines(2);add(card,name,-1,-2);gap(card,8);TextView figure=text(value,value.startsWith("RM")?16:20,highlight,true);figure.setMaxLines(2);add(card,figure,-1,-2);LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(0,dp(106),1);p.setMargins(dp(3),0,dp(3),0);row.addView(card,p);if(tap!=null)card.setOnClickListener(v->tap.run());}
   /** Green means earned profit, red means a loss, grey means break-even. */
   int profitColor(int cents){
@@ -556,7 +588,7 @@ selectedDay=date();selectedMonth=selectedDay.substring(0,7);rangeStart=selectedD
   int saleCountBetween(String start,String end){int total=0;JSONArray list=entries("stock_sales");for(int i=0;i<list.length();i++){JSONObject e=list.optJSONObject(i);if(e==null||e.optBoolean("refunded",false))continue;String d=entryDay(e);if(d.compareTo(start)>=0&&d.compareTo(end)<=0){JSONArray q=e.optJSONArray("qty");if(q!=null)for(int n=0;n<q.length();n++)total+=Math.max(0,q.optInt(n));}}return total;}
   int transactionCountBetween(String start,String end){int total=0;JSONArray list=entries("stock_sales");for(int i=0;i<list.length();i++){JSONObject e=list.optJSONObject(i);if(e==null||e.optBoolean("refunded",false))continue;String d=entryDay(e);if(d.compareTo(start)>=0&&d.compareTo(end)<=0)total++;}return total;}
   int[] soldNetBetween(String start,String end){int[] sold=new int[names.length];JSONArray list=entries("stock_sales");for(int i=0;i<list.length();i++){JSONObject e=list.optJSONObject(i);if(e==null||e.optBoolean("refunded",false))continue;String d=entryDay(e);if(d.compareTo(start)<0||d.compareTo(end)>0)continue;JSONArray q=e.optJSONArray("qty");if(q!=null)for(int n=0;n<Math.min(q.length(),sold.length);n++)sold[n]+=Math.max(0,q.optInt(n));}return sold;}
-  int paymentKind(JSONObject e){String m=e==null?"":e.optString("method",e.optString("paymentMethod","")).trim().toLowerCase(Locale.US);if(m.contains("tunai")||m.equals("cash"))return 1;if(m.contains("qr")||m.contains("touch")||m.contains("tng")||m.contains("duitnow")||m.contains("online")||m.contains("bank"))return 2;return 0;}
+  int paymentKind(JSONObject e){String m=e==null?"":e.optString("method",e.optString("paymentMethod","")).trim().toLowerCase(Locale.US);if(m.contains("tunai")||m.equals("cash")||m.equals("edar"))return 1;if(m.contains("qr")||m.contains("touch")||m.contains("tng")||m.contains("duitnow")||m.contains("online")||m.contains("bank"))return 2;return 0;}
   int paymentTotalBetween(String start,String end,String methodPart){int wanted=methodPart.toLowerCase(Locale.US).contains("tunai")?1:2,total=0;JSONArray list=entries("stock_sales");for(int i=0;i<list.length();i++){JSONObject e=list.optJSONObject(i);if(e==null||e.optBoolean("refunded",false))continue;String d=entryDay(e);if(d.compareTo(start)<0||d.compareTo(end)>0)continue;if(paymentKind(e)==wanted)total+=saleTotal(e);}return total;}
   int paymentUnknownBetween(String start,String end){int total=0;JSONArray list=entries("stock_sales");for(int i=0;i<list.length();i++){JSONObject e=list.optJSONObject(i);if(e==null||e.optBoolean("refunded",false))continue;String d=entryDay(e);if(d.compareTo(start)<0||d.compareTo(end)>0)continue;if(paymentKind(e)==0)total+=saleTotal(e);}return total;}
   void chooseSalesReportRange(){pickDay("Tarikh mula",salesReportStart.isEmpty()?selectedDay:salesReportStart,start->{salesReportStart=start;pickDay("Tarikh akhir",salesReportEnd.isEmpty()?selectedDay:salesReportEnd,end->{if(end.compareTo(start)<0){message("Tarikh akhir mesti selepas tarikh mula.");return;}salesReportEnd=end;salesReportMode=2;draw();});});}
@@ -659,10 +691,10 @@ selectedDay=date();selectedMonth=selectedDay.substring(0,7);rangeStart=selectedD
       .append(receiptPair("Tarikh",day))
       .append(receiptPair("Branch",branchAccounts.branchName()))
       .append("--------------------------------\n")
-      .append(receiptPair("Jualan",money(live.enabled()?(int)live.sales():saleTotalBetween(day,day))))
-      .append(receiptPair("Tunai",money(live.enabled()?(int)live.cash():sessionCash(day))))
-      .append(receiptPair("QR",money(live.enabled()?(int)live.qr():sessionQr(day))))
-      .append(receiptPair("Transaksi",String.valueOf(live.enabled()?live.transactions():transactionCountBetween(day,day))))
+      .append(receiptPair("Jualan",money(sessionSales(day))))
+      .append(receiptPair("Tunai",money(sessionCash(day))))
+      .append(receiptPair("QR",money(sessionQr(day))))
+      .append(receiptPair("Transaksi",String.valueOf(sessionTransactions(day))))
       .append("--------------------------------\n")
       .append(centerReceipt("WARISAN POS")).append("\n");
     return report.toString();
@@ -952,16 +984,14 @@ selectedDay=date();selectedMonth=selectedDay.substring(0,7);rangeStart=selectedD
           "Jualan hari ini · Opening dan Closing untuk cawangan ini.");
       add(body,text("OPENING / CLOSING",14,gold,true),-1,-2);gap(body,8);
       drawPosSession();
+      if(localEdarSupplement(day,0,true)>0){gap(body,8);add(body,text(
+        "Termasuk Edar berbayar dalam rekod telefon ini. Edar tempatan tidak diselaraskan antara telefon.",
+        11,muted,false),-1,-2);}
       gap(body,12);
       add(body,text("RINGKASAN JUALAN HARI INI",12,gold,true),-1,-2);gap(body,7);
-      LinearLayout overview=row();
-      metric(overview,"JUALAN HARI INI",money(live.enabled()?(int)live.sales():saleTotalBetween(day,day)),blue,null);
-      metric(overview,"TRANSAKSI HARI INI",String.valueOf(live.enabled()?live.transactions():transactionCountBetween(day,day)),gold,null);
-      add(body,overview,-1,-2);gap(body,8);
-      LinearLayout pay=row();
-      metric(pay,"TUNAI",money(live.enabled()?(int)live.cash():sessionCash(day)),0xff46c979,null);
-      metric(pay,"QR",money(live.enabled()?(int)live.qr():sessionQr(day)),blue,null);
-      add(body,pay,-1,-2);gap(body,9);
+      salesSummary(body,"TOTAL SALE",money(sessionSales(day)),money(sessionCash(day)),
+        money(sessionQr(day)),sessionTransactions(day)+" transaksi · "+day,null);
+      gap(body,12);
       if(branchAccounts.staff()){
         LinearLayout pending=row();
         metric(pending,"ORDER BELUM BAYAR · TELEFON INI",String.valueOf(outstandingCount()),gold,
@@ -1173,7 +1203,7 @@ selectedDay=date();selectedMonth=selectedDay.substring(0,7);rangeStart=selectedD
       action("+ Tambah menu & harga",()->addMenu());
       action("Edit harga jualan & harga mentah",()->chooseMenuPrice());
       action("Edit harga edar",()->chooseDistributionPrice());
-      action("Pilih sumber menu · Pembekal / Sendiri",()->chooseMenuSource());
+      // Source selection is hidden by request; existing supplier/self flags remain unchanged.
       action("Upload / tukar gambar menu",()->pickMenuImage());
       action("− Padam menu",()->deleteMenu());
     }else if(activePage==7){
@@ -1307,10 +1337,21 @@ selectedDay=date();selectedMonth=selectedDay.substring(0,7);rangeStart=selectedD
   int outstandingCount(){int n=0;JSONArray p=entries("pending_orders");for(int i=0;i<p.length();i++){JSONObject e=p.optJSONObject(i);if(e!=null&&!e.optBoolean("paid",false)&&!e.optBoolean("cancelled",false))n++;}JSONArray d=entries("stock_distribution");for(int i=0;i<d.length();i++){JSONObject e=d.optJSONObject(i);if(e!=null&&!e.optBoolean("paid",false)&&Math.max(0,e.optInt("qty")-e.optInt("returned"))>0)n++;}return n;}
   boolean sessionCloudReady(String day){return live!=null&&live.usable()&&day.equals(live.day());}
   int checkedCloudCents(long cents){if(cents<0||cents>Integer.MAX_VALUE)throw new ArithmeticException("Jumlah Cloud di luar julat");return (int)cents;}
-  int sessionSales(String day){return sessionCloudReady(day)?checkedCloudCents(live.sales()):saleTotalBetween(day,day);}
-  int sessionCash(String day){return sessionCloudReady(day)?checkedCloudCents(live.cash()):paymentTotalBetween(day,day,"Tunai");}
-  int sessionQr(String day){return sessionCloudReady(day)?checkedCloudCents(live.qr()):paymentTotalBetween(day,day,"QR");}
-  int sessionTransactions(String day){return sessionCloudReady(day)?checkedCloudCents(live.transactions()):transactionCountBetween(day,day);}
+  long localEdarSupplement(String day,int kind,boolean count){
+    long total=0;JSONArray list=entries("stock_sales");
+    for(int i=0;i<list.length();i++){
+      JSONObject e=list.optJSONObject(i);
+      if(e==null||e.optBoolean("refunded",false)||!day.equals(entryDay(e))||
+        !"edar".equals(e.optString("source",""))||!e.optString("liveOrderId","").isEmpty()||
+        (kind!=0&&paymentKind(e)!=kind))continue;
+      total+=count?1:saleTotal(e);
+    }
+    return total;
+  }
+  int sessionSales(String day){return sessionCloudReady(day)?checkedCloudCents(live.sales()+localEdarSupplement(day,0,false)):saleTotalBetween(day,day);}
+  int sessionCash(String day){return sessionCloudReady(day)?checkedCloudCents(live.cash()+localEdarSupplement(day,1,false)):paymentTotalBetween(day,day,"Tunai");}
+  int sessionQr(String day){return sessionCloudReady(day)?checkedCloudCents(live.qr()+localEdarSupplement(day,2,false)):paymentTotalBetween(day,day,"QR");}
+  int sessionTransactions(String day){return sessionCloudReady(day)?checkedCloudCents(live.transactions()+localEdarSupplement(day,0,true)):transactionCountBetween(day,day);}
   JSONObject closingForDay(String day){JSONArray list=entries("pos_closings");JSONObject found=null;for(int i=0;i<list.length();i++){JSONObject e=list.optJSONObject(i);if(e!=null&&day.equals(entryDay(e)))found=e;}return found;}
   int legacyBalanceThrough(String day){long total=0;android.content.SharedPreferences p=posPrefs();for(String key:p.getAll().keySet()){if(!key.matches("sales_\\d{4}-\\d{2}-\\d{2}"))continue;String d=key.substring(6);if(d.compareTo(day)<=0)total+=p.getInt(key,0);}JSONArray list=entries("cash_entries");for(int i=0;i<list.length();i++){JSONObject e=list.optJSONObject(i);if(e==null||legacySupplierRestock(e))continue;String d=entryDay(e);if(!d.isEmpty()&&d.compareTo(day)<=0)total+=e.optInt("amount");}return (int)Math.max(Integer.MIN_VALUE,Math.min(Integer.MAX_VALUE,total));}
   void drawHistoricalPos(String day){JSONObject c=closingForDay(day);int sales=saleTotalBetween(day,day),cash=paymentTotalBetween(day,day,"Tunai"),qr=paymentTotalBetween(day,day,"QR");int opening=0,balance;if(c!=null){opening=c.optInt("opening",0);sales=c.optInt("sales",sales);cash=c.optInt("cash",cash);qr=c.optInt("qr",qr);balance=c.has("closingBalance")?c.optInt("closingBalance",0):Math.max(0,opening+cash);}else balance=Math.max(0,legacyBalanceThrough(day));LinearLayout a=row();metric(a,"OPENING BALANCE",money(opening),gold,null);metric(a,"JUALAN HARI",money(sales),blue,null);add(body,a,-1,-2);gap(body,7);LinearLayout b=row();metric(b,c!=null?"BAKI CLOSING":"BAKI DUIT AKHIR HARI",money(balance),0xff46c979,null);add(body,b,-1,-2);gap(body,6);add(body,text("Tunai "+money(cash)+"   ·   QR "+money(qr)+(c==null?"\nRekod lama: baki dikira daripada rekod jualan + aliran duit sehingga tarikh ini.":""),11,muted,false),-1,-2);}
@@ -1961,7 +2002,7 @@ JSONArray list=entries("stock_distribution");JSONObject e=list.optJSONObject(ind
     darkBuilder().setTitle("Edit harga · "+names[id]).setView(form).setPositiveButton("Simpan",(d,w)->{try{int sell=parseCents(selling),buy=parseCents(cost),units=Integer.parseInt(pack.getText().toString().trim());if(sell<=0||sell>10000000||buy<0||buy>1000000||units<=0||units>100000)throw new Exception();if(!posPrefs().edit().putInt("price_"+id,sell).putInt("cost_"+id,buy).putInt("cost_pack_"+id,units).commit())throw new Exception();prices[id]=sell;draw();message("Harga disimpan. Restock berikutnya akan guna harga mentah baru.");}catch(Exception e){message("Semak harga RM dan bilangan unit.");}}).setNegativeButton("Batal",null).show();}
   void editEmail(){EditText input=new EditText(this);input.setSingleLine(true);input.setInputType(android.text.InputType.TYPE_CLASS_TEXT|android.text.InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS);input.setText(posPrefs().getString("receipt_email",""));input.setHint(ui("nama@gmail.com"));styleInput(input);
     darkBuilder().setTitle("Alamat e-mel pada resit").setView(input).setPositiveButton("Simpan",(d,w)->{String value=input.getText().toString().trim();if(!value.isEmpty()&&!android.util.Patterns.EMAIL_ADDRESS.matcher(value).matches()){message("Alamat e-mel tidak sah");return;}posPrefs().edit().putString("receipt_email",value).apply();message("E-mel disimpan");}).setNegativeButton("Batal",null).show();}
-  void addMenu(){LinearLayout form=col();form.setPadding(dp(18),dp(5),dp(18),0);EditText name=new EditText(this),price=new EditText(this);name.setSingleLine(true);name.setHint(ui("Nama menu"));price.setInputType(android.text.InputType.TYPE_CLASS_NUMBER|android.text.InputType.TYPE_NUMBER_FLAG_DECIMAL);price.setHint(ui("Harga RM, contoh 7.00"));styleInput(name);styleInput(price);Spinner source=new Spinner(this);source.setAdapter(new ArrayAdapter<String>(this,android.R.layout.simple_spinner_dropdown_item,new String[]{"Pembekal","Sendiri"}));add(form,name,-1,-2);add(form,price,-1,-2);add(form,text("Sumber stok",12,muted,true),-1,-2);add(form,source,-1,-2);
+  void addMenu(){LinearLayout form=col();form.setPadding(dp(18),dp(5),dp(18),0);EditText name=new EditText(this),price=new EditText(this);name.setSingleLine(true);name.setHint(ui("Nama menu"));price.setInputType(android.text.InputType.TYPE_CLASS_NUMBER|android.text.InputType.TYPE_NUMBER_FLAG_DECIMAL);price.setHint(ui("Harga RM, contoh 7.00"));styleInput(name);styleInput(price);Spinner source=new Spinner(this);source.setAdapter(new ArrayAdapter<String>(this,android.R.layout.simple_spinner_dropdown_item,new String[]{"Pembekal","Sendiri"}));add(form,name,-1,-2);add(form,price,-1,-2);source.setVisibility(View.GONE); // Keep the existing default/source persistence without showing the selector.
     darkBuilder().setTitle("+ Tambah menu").setView(form).setPositiveButton("Simpan",(d,w)->{try{String title=name.getText().toString().trim();if(title.isEmpty()||title.length()>35)throw new Exception();int cents=new java.math.BigDecimal(price.getText().toString().trim()).movePointRight(2).intValueExact();if(cents<=0||cents>10000000)throw new Exception();JSONObject item=new JSONObject();item.put("name",title);item.put("price",cents);appendEntry("custom_menu",item);names=Arrays.copyOf(names,names.length+1);names[names.length-1]=title;icons=Arrays.copyOf(icons,icons.length+1);icons[icons.length-1]="🍽";prices=Arrays.copyOf(prices,prices.length+1);prices[prices.length-1]=cents;qty=Arrays.copyOf(qty,qty.length+1);posPrefs().edit().putBoolean("menu_supplier_"+(names.length-1),source.getSelectedItemPosition()==0).apply();draw();message("Menu baru disimpan. Masukkan stok sebelum jual.");}catch(Exception e){message("Semak nama dan harga menu");}}).setNegativeButton("Batal",null).show();}
   void deleteMenu(){
     ArrayList<Integer> ids=new ArrayList<>();ArrayList<String> labels=new ArrayList<>();

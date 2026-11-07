@@ -6,7 +6,7 @@ const mainSource = readFileSync('app/src/main/java/my/warisan/pos/MainActivity.j
 const themeMatches = [...themeSource.matchAll(
   /new Palette\("([^"]+)","[^"]+","[^"]+",([\s\S]*?),(?:true|false)\)/g
 )];
-assert.equal(themeMatches.length, 5, 'All five selectable themes must remain available');
+assert.equal(themeMatches.length, 6, 'All six selectable themes must remain available');
 
 function luminance(hex) {
   const rgb = [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16) / 255);
@@ -44,4 +44,4 @@ assert.match(mainSource, /WarisanTheme\.readableText\(color,surface,ink\)/,
   'Legacy labels need automatic contrast protection');
 assert.match(mainSource, /SYSTEM_UI_FLAG_LIGHT_STATUS_BAR/,
   'Light themes need dark system-bar icons');
-console.log('PASS: all five palettes and cross-theme readability safeguards');
+console.log('PASS: all six palettes and cross-theme readability safeguards');

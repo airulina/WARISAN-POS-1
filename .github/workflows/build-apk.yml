@@ -56,7 +56,7 @@ jobs:
             exit 1
           fi
 
-      - name: Verify five themes and readable text contrast
+      - name: Verify six themes and readable text contrast
         run: node tests/theme-contrast-smoke.mjs
 
       - name: Verify Owner profit and product charts
@@ -79,6 +79,9 @@ jobs:
 
       - name: Verify login and signed-in email display
         run: node tests/login-email-smoke.mjs
+
+      - name: Verify dark design and paid EDAR cash totals
+        run: node tests/dark-edar-smoke.mjs
 
       - name: Build APK
         run: gradle assembleDebug --no-daemon

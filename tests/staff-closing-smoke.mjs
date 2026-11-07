@@ -32,8 +32,8 @@ assert.match(main, /String receipt=e\.optString\("receipt",""\)/);
 assert.match(main, /saveClosingExpense\(closingCash,day,/);
 
 // A worker must close using server-visible sales from every device in the branch.
-assert.match(main, /sessionCloudReady\(day\)\?checkedCloudCents\(live\.sales\(\)\)/);
-assert.match(main, /sessionCloudReady\(day\)\?checkedCloudCents\(live\.cash\(\)\)/);
+assert.match(main, /sessionCloudReady\(day\)\?checkedCloudCents\(live\.sales\(\)\+localEdarSupplement\(day,0,false\)\)/);
+assert.match(main, /sessionCloudReady\(day\)\?checkedCloudCents\(live\.cash\(\)\+localEdarSupplement\(day,1,false\)\)/);
 assert.match(main, /live\.sessionConfirmed\(false,day,balance,expenses,remark,/);
 assert.match(cloud, /state\.put\("expenseTotal",spent\)/);
 assert.match(cloud, /state\.put\("closingRemark",remark==null\?"":remark\)/);
