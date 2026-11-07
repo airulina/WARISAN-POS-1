@@ -13,14 +13,14 @@ import android.widget.ScrollView;
 import android.widget.TextView;
 
 /**
- * Five display-only themes. A single device preference is used regardless of
+ * Six display-only themes. A single device preference is used regardless of
  * Owner/Staff/branch; this never touches POS stock, sales, Firestore, receipts,
  * payments, or any branch-scoped preferences.
  */
 final class WarisanTheme {
   private static final String PREFS = "warisan_theme";
   private static final String KEY = "selected_theme";
-  static final String DEFAULT = "classic";
+  static final String DEFAULT = "orange";
 
   static final class Palette {
     final String id,name,description;
@@ -48,6 +48,9 @@ final class WarisanTheme {
   }
 
   private static final Palette[] THEMES = new Palette[]{
+    new Palette("orange","Warisan Dark","Hitam arang + oren moden",
+      "#111111","#1C1C1E","#303033","#F5F5F7","#B7B7C0",
+      "#FF8A4C","#FF8A4C","#19120E","#19120E","#1C1C1E","#B7B7C0",false),
     new Palette("classic","Warisan Classic","Biru gelap + emas",
       "#071422","#122840","#203F61","#EEF4FC","#A6B7CC",
       "#DAA630","#356BBC","#FFFFFF","#131822","#143A65","#FFFFFF",false),
@@ -70,8 +73,14 @@ final class WarisanTheme {
     return THEMES[0];
   }
   static Palette current(Context context){
-    return byId(context.getSharedPreferences(PREFS,Context.MODE_PRIVATE)
-      .getString(KEY,DEFAULT));
+    SharedPreferences settings=context.getSharedPreferences(PREFS,Context.MODE_PRIVATE);
+    // Display preference only: activate the approved redesign once on upgrade.
+    // All previous palettes remain selectable. No branch or transaction data is touched.
+    if(!settings.getBoolean("dark_orange_v3466",false)){
+      settings.edit().putString("previous_theme",settings.getString(KEY,"classic"))
+        .putString(KEY,DEFAULT).putBoolean("dark_orange_v3466",true).commit();
+    }
+    return byId(settings.getString(KEY,DEFAULT));
   }
   private static double linear(int component){
     double v=component/255.0;

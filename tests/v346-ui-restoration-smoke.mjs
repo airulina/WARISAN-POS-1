@@ -30,13 +30,13 @@ assert.match(branches, /void openStockBranch\(String id,String name\)/);
 assert.match(owner, /if\(b\.archived\)continue;/);
 assert.match(owner, /new OwnerSalesChart\(host,b\.combined\(\),host\.selectedMonth\)/);
 assert.match(owner, /details\.setOnClickListener\(v->\{/);
-assert.match(owner, /overallProfitVerified\?rm\(verifiedProfit\):"—"/);
+assert.match(owner, /host\.salesSummary\(overallCard,"TOTAL SALE",ready\(\)\?rm\(daily\.sales\):"—"/);
 assert.match(owner, /canProfit\?rm\(branchProfit\):"—"/);
 
 // Android may have a v3.47 preview installed. The build must update it
 // without changing the v3.46 functional baseline or the package identity.
 assert.match(gradle, /applicationId 'my\.warisan\.pos'/);
-assert.match(gradle, /versionCode 56/);
-assert.match(gradle, /versionName '3\.46\.5'/);
+assert.match(gradle, /versionCode 57/);
+assert.match(gradle, /versionName '3\.46\.6'/);
 
 console.log('PASS: v3.46 Owner/Staff tabs, all critical access routes and UI-only branch display');

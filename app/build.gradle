@@ -11,10 +11,10 @@ android {
         applicationId 'my.warisan.pos'
         minSdk 23
         targetSdk 35
-        // v3.46 behavior and data model preserved; closing receipt layout update.
-        // Higher code allows installation over v3.46.4 (code 55).
-        versionCode 56
-        versionName '3.46.5'
+        // Dark/orange display update; historical records and package identity preserved.
+        // Higher code allows installation over v3.46.5 (code 56).
+        versionCode 57
+        versionName '3.46.6'
     }
 
     signingConfigs {
