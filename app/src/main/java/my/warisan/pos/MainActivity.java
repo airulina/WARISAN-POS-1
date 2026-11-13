@@ -200,7 +200,7 @@ private static final int RC_SIGN_IN = 9001;
     t.setGravity(Gravity.CENTER);t.setBackground(shape(back,12));
     t.setPadding(dp(8),dp(5),dp(8),dp(5));return t;
   }
-  void loadMenu(){JSONArray custom=entries("custom_menu");int size=7+custom.length();names=Arrays.copyOf(new String[]{"Sate Ayam","Sate Daging","Sate Kambing","Nasi Impit","Extra Kuah Kacang","Laksa Utara","Kuih Siput"},size);icons=Arrays.copyOf(new String[]{"🍢","🥩","🍢","🍚","🥣","🍜","🥨"},size);prices=Arrays.copyOf(new int[]{160,180,200,60,100,700,500},size);qty=new int[size];
+  void loadMenu(){JSONArray custom=entries("custom_menu");int size=7+custom.length();names=Arrays.copyOf(new String[]{"Sate Ayam","Sate Daging","Sate Kambing","Nasi Impit","Extra Kuah Kacang","Laksa Utara","Kuih Siput"},size);icons=Arrays.copyOf(new String[]{"🍢","🥩","🍢","🍚","🥣","🍜","🥨"},size);prices=Arrays.copyOf(new int[]{160,180,200,60,100,700,500},size);int[] previousQty=qty;qty=new int[size];if(previousQty!=null)for(int i=0;i<Math.min(size,previousQty.length);i++)qty[i]=posPrefs().getBoolean("menu_hidden_"+i,false)?0:Math.max(0,previousQty[i]);
     for(int i=7;i<size;i++){JSONObject item=custom.optJSONObject(i-7);names[i]=item==null?"Menu":item.optString("name","Menu");icons[i]="🍽";prices[i]=item==null?0:item.optInt("price");}for(int i=0;i<size;i++)prices[i]=posPrefs().getInt("price_"+i,prices[i]);}
   void clearCurrentNasiDamageOnce(){
     android.content.SharedPreferences p=posPrefs();if(p.getBoolean("fix_nasi_damage_20260926",false))return;try{JSONArray old=entries("stock_damage"),keep=new JSONArray();String today=date();for(int i=0;i<old.length();i++){JSONObject e=old.optJSONObject(i);if(e==null)continue;boolean remove=e.optInt("item",-1)==3&&today.equals(entryDay(e));if(!remove)keep.put(e);}p.edit().putString("stock_damage",keep.toString()).putBoolean("fix_nasi_damage_20260926",true).commit();}catch(Exception ignored){}
@@ -350,11 +350,8 @@ selectedDay=date();selectedMonth=selectedDay.substring(0,7);rangeStart=selectedD
       13,gold,true),-1,-2);
     showSignedInEmail();
     gap(body,16);
-    String summaryDay=businessDay();
-    salesSummary(body,"TOTAL SALE · CAWANGAN INI",money(sessionSales(summaryDay)),
-      money(sessionCash(summaryDay)),money(sessionQr(summaryDay)),
-      summaryDay+" · "+(sessionCloudReady(summaryDay)?"Live + rekod tempatan":"Rekod telefon ini"),
-      ()->{activePage=branchAccounts.staff()?12:3;draw();});
+    // v3.46.7: MENU page shows products only. The sales total card stays on SALE / DUIT
+    // pages and reports; no sales record is changed by hiding it here.
     // Opening/Closing belongs to Sale (worker) or branch/session management
     // (Owner), never to the product Menu.
     gap(body,15);
@@ -1999,11 +1996,34 @@ JSONArray list=entries("stock_distribution");JSONObject e=list.optJSONObject(ind
   void editMenuPrice(int id){LinearLayout form=col();form.setPadding(dp(18),dp(3),dp(18),0);
     EditText selling=priceField("Harga jualan RM",String.format(Locale.US,"%.2f",prices[id]/100.0));EditText cost=priceField("Harga mentah RM",String.format(Locale.US,"%.2f",costUnit(id)/100.0));EditText pack=new EditText(this);pack.setSingleLine(true);pack.setInputType(android.text.InputType.TYPE_CLASS_NUMBER);pack.setHint(ui("Bilangan unit bagi harga mentah"));pack.setText(""+costPack(id));styleInput(pack);
     add(form,text("Harga jualan (RM)",13,ink,true),-1,-2);add(form,selling,-1,-2);add(form,text("Harga mentah / belian (RM)",13,ink,true),-1,-2);add(form,cost,-1,-2);add(form,text("Bilangan unit bagi harga mentah (nasi: 30)",12,muted,false),-1,-2);add(form,pack,-1,-2);
-    darkBuilder().setTitle("Edit harga · "+names[id]).setView(form).setPositiveButton("Simpan",(d,w)->{try{int sell=parseCents(selling),buy=parseCents(cost),units=Integer.parseInt(pack.getText().toString().trim());if(sell<=0||sell>10000000||buy<0||buy>1000000||units<=0||units>100000)throw new Exception();if(!posPrefs().edit().putInt("price_"+id,sell).putInt("cost_"+id,buy).putInt("cost_pack_"+id,units).commit())throw new Exception();prices[id]=sell;draw();message("Harga disimpan. Restock berikutnya akan guna harga mentah baru.");}catch(Exception e){message("Semak harga RM dan bilangan unit.");}}).setNegativeButton("Batal",null).show();}
+    darkBuilder().setTitle("Edit harga · "+names[id]).setView(form).setPositiveButton("Simpan",(d,w)->{try{int sell=parseCents(selling),buy=parseCents(cost),units=Integer.parseInt(pack.getText().toString().trim());if(sell<=0||sell>10000000||buy<0||buy>1000000||units<=0||units>100000)throw new Exception();if(!posPrefs().edit().putInt("price_"+id,sell).putInt("cost_"+id,buy).putInt("cost_pack_"+id,units).commit())throw new Exception();prices[id]=sell;draw();publishMenuIfLive();message("Harga disimpan. Restock berikutnya akan guna harga mentah baru.");}catch(Exception e){message("Semak harga RM dan bilangan unit.");}}).setNegativeButton("Batal",null).show();}
   void editEmail(){EditText input=new EditText(this);input.setSingleLine(true);input.setInputType(android.text.InputType.TYPE_CLASS_TEXT|android.text.InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS);input.setText(posPrefs().getString("receipt_email",""));input.setHint(ui("nama@gmail.com"));styleInput(input);
     darkBuilder().setTitle("Alamat e-mel pada resit").setView(input).setPositiveButton("Simpan",(d,w)->{String value=input.getText().toString().trim();if(!value.isEmpty()&&!android.util.Patterns.EMAIL_ADDRESS.matcher(value).matches()){message("Alamat e-mel tidak sah");return;}posPrefs().edit().putString("receipt_email",value).apply();message("E-mel disimpan");}).setNegativeButton("Batal",null).show();}
+  static int parseMenuCents(String raw){return MenuRules.parseMenuCents(raw);}
+  static String menuNameError(String title,String[] names,boolean[] hidden,int slots){return MenuRules.menuNameError(title,names,hidden,slots);}
+  boolean[] hiddenMenuFlags(){boolean[] hidden=new boolean[names.length];for(int i=0;i<names.length;i++)hidden[i]=posPrefs().getBoolean("menu_hidden_"+i,false);return hidden;}
+  // Owner menu changes are published to the Live branch so worker phones use
+  // the same names, prices and stock slots.
+  void publishMenuIfLive(){if(live!=null&&branchAccounts!=null&&branchAccounts.owner()&&live.enabled()&&live.usable())live.publishMenu();}
   void addMenu(){LinearLayout form=col();form.setPadding(dp(18),dp(5),dp(18),0);EditText name=new EditText(this),price=new EditText(this);name.setSingleLine(true);name.setHint(ui("Nama menu"));price.setInputType(android.text.InputType.TYPE_CLASS_NUMBER|android.text.InputType.TYPE_NUMBER_FLAG_DECIMAL);price.setHint(ui("Harga RM, contoh 7.00"));styleInput(name);styleInput(price);Spinner source=new Spinner(this);source.setAdapter(new ArrayAdapter<String>(this,android.R.layout.simple_spinner_dropdown_item,new String[]{"Pembekal","Sendiri"}));add(form,name,-1,-2);add(form,price,-1,-2);source.setVisibility(View.GONE); // Keep the existing default/source persistence without showing the selector.
-    darkBuilder().setTitle("+ Tambah menu").setView(form).setPositiveButton("Simpan",(d,w)->{try{String title=name.getText().toString().trim();if(title.isEmpty()||title.length()>35)throw new Exception();int cents=new java.math.BigDecimal(price.getText().toString().trim()).movePointRight(2).intValueExact();if(cents<=0||cents>10000000)throw new Exception();JSONObject item=new JSONObject();item.put("name",title);item.put("price",cents);appendEntry("custom_menu",item);names=Arrays.copyOf(names,names.length+1);names[names.length-1]=title;icons=Arrays.copyOf(icons,icons.length+1);icons[icons.length-1]="🍽";prices=Arrays.copyOf(prices,prices.length+1);prices[prices.length-1]=cents;qty=Arrays.copyOf(qty,qty.length+1);posPrefs().edit().putBoolean("menu_supplier_"+(names.length-1),source.getSelectedItemPosition()==0).apply();draw();message("Menu baru disimpan. Masukkan stok sebelum jual.");}catch(Exception e){message("Semak nama dan harga menu");}}).setNegativeButton("Batal",null).show();}
+    AlertDialog dialog=darkBuilder().setTitle("+ Tambah menu").setView(form).setPositiveButton("Simpan",null).setNegativeButton("Batal",null).create();
+    dialog.setOnShowListener(v->{styleDarkDialogNow(dialog);dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(x->{
+      // Validation errors keep the dialog open so typed name/price are not lost.
+      String title=name.getText().toString().trim().replaceAll("\\s+"," ");
+      String error=menuNameError(title,names,hiddenMenuFlags(),names.length);
+      if(error!=null){message(error);return;}
+      int cents;try{cents=parseMenuCents(price.getText().toString());}catch(Exception e){message("Harga tidak sah. Contoh: 7.00");return;}
+      if(cents<=0||cents>10000000){message("Harga mesti antara RM 0.01 dan RM 100000.00");return;}
+      try{JSONObject item=new JSONObject();item.put("name",title);item.put("price",cents);
+        JSONArray list=entries("custom_menu");list.put(item);int id=names.length;
+        // Commit menu + its fresh per-item flags together; stale flags from an
+        // older slot must not hide or reprice the new menu.
+        if(!posPrefs().edit().putString("custom_menu",list.toString()).remove("menu_hidden_"+id).putInt("price_"+id,cents).putBoolean("menu_supplier_"+id,source.getSelectedItemPosition()==0).commit())throw new Exception();
+        names=Arrays.copyOf(names,names.length+1);names[id]=title;icons=Arrays.copyOf(icons,icons.length+1);icons[id]="🍽";prices=Arrays.copyOf(prices,prices.length+1);prices[id]=cents;qty=Arrays.copyOf(qty,qty.length+1);cachedStock=null;
+        dialog.dismiss();draw();publishMenuIfLive();message("Menu baru disimpan. Masukkan stok sebelum jual.");
+      }catch(Exception e){message("Menu tidak dapat disimpan. Cuba lagi.");}
+    });});
+    dialog.show();}
   void deleteMenu(){
     ArrayList<Integer> ids=new ArrayList<>();ArrayList<String> labels=new ArrayList<>();
     for(int i=0;i<names.length;i++)if(!posPrefs().getBoolean("menu_hidden_"+i,false)){ids.add(i);labels.add(names[i]);}
@@ -2011,7 +2031,7 @@ JSONArray list=entries("stock_distribution");JSONObject e=list.optJSONObject(ind
     darkBuilder().setTitle("Padam menu").setItems(labels.toArray(new String[0]),(d,which)->{
       int id=ids.get(which);darkBuilder().setTitle("Padam "+names[id]+"?")
       .setMessage("Menu ini akan dibuang daripada paparan jualan dan stok. Rekod jualan lama dikekalkan supaya laporan tidak rosak.")
-      .setPositiveButton("PADAM",(x,w)->{posPrefs().edit().putBoolean("menu_hidden_"+id,true).remove("menu_image_"+id).remove("price_"+id).remove("cost_"+id).remove("cost_pack_"+id).remove("distribution_price_"+id).remove("menu_supplier_"+id).commit();qty[id]=0;cachedStock=null;draw();message("Menu dipadam dan tetapan aktifnya dibersihkan. Rekod jualan lama kekal.");})
+      .setPositiveButton("PADAM",(x,w)->{posPrefs().edit().putBoolean("menu_hidden_"+id,true).remove("menu_image_"+id).remove("distribution_price_"+id).remove("menu_supplier_"+id).commit();qty[id]=0;cachedStock=null;draw();publishMenuIfLive();message("Menu dipadam dan tetapan aktifnya dibersihkan. Rekod jualan lama kekal.");})
       .setNegativeButton("Batal",null).show();
     }).setNegativeButton("Batal",null).show();
   }

@@ -401,9 +401,21 @@ final class LiveBranchStore {
     update.put("menuPrices",prices);update.put("customMenu",custom);
     update.put("menuHidden",hidden);
     update.put("menuVersion",UUID.randomUUID().toString());
-    inventory().update(update).addOnSuccessListener(v->host.message("Menu Live dikemas kini."))
+    final int slots=host.names.length;
+    DocumentReference ref=inventory();
+    db.runTransaction(tx->{
+      // Existing balances are kept; only missing slots for new menus get 0.
+      ArrayList<Long> stock=readStock(tx.get(ref));
+      if(stock.size()<slots)update.put("stock",padStockSlots(stock,slots));
+      update.put("updatedAt",FieldValue.serverTimestamp());
+      tx.update(ref,update);return null;
+    }).addOnSuccessListener(v->host.message("Menu Live dikemas kini."))
       .addOnFailureListener(e->host.message("Menu Live gagal: "+e.getMessage()));
   }
+  // A menu added after Live was activated has no Cloud stock slot yet; see
+  // MenuRules for the zero-slot padding that keeps existing balances.
+  static ArrayList<Long> padStockSlots(ArrayList<Long> values,int slots){return MenuRules.padStockSlots(values,slots);}
+  static ArrayList<Long> fitOrderSlots(ArrayList<Long> quantities,int cloudSlots){return MenuRules.fitOrderSlots(quantities,cloudSlots);}
   private ArrayList<Long> readStock(DocumentSnapshot s){
     Object raw=s.get("stock");if(!(raw instanceof List))throw new IllegalStateException("Stok cloud tidak sah");
     ArrayList<Long> out=new ArrayList<>();
@@ -432,14 +444,14 @@ final class LiveBranchStore {
       DocumentSnapshot stockDoc=tx.get(inv);
       if(!stockDoc.exists())throw new IllegalStateException("Stok Live belum diaktifkan");
       ArrayList<Long> remaining=readStock(stockDoc);
-      if(remaining.size()<quantities.size())
-        throw new IllegalStateException("Menu pekerja lebih panjang daripada stok Cloud. Minta Owner Terbit Menu dan semak senarai stok.");
       if(remaining.size()>30)
         throw new IllegalStateException("Terlalu banyak slot stok Cloud; Owner perlu semak menu.");
       // Older WARISAN databases may retain stock slots for hidden/deleted
       // items. The Rules require stock.size() == order.qty.size(); pad with
       // ZERO quantities to preserve those legacy slots without altering stock.
-      while(quantities.size()<remaining.size())quantities.add(0L);
+      // Trailing zero slots for a newly added menu (no Cloud slot yet) are dropped.
+      ArrayList<Long> fitted=fitOrderSlots(quantities,remaining.size());
+      quantities.clear();quantities.addAll(fitted);
       for(int i=0;i<quantities.size();i++){
         long quantity=quantities.get(i);
         if(quantity<0)throw new IllegalStateException("Kuantiti tidak sah");
@@ -612,8 +624,7 @@ final class LiveBranchStore {
     DocumentReference audit=branch().collection("stockAdjustments").document();
     db.runTransaction(tx->{
       DocumentSnapshot snap=tx.get(ref);
-      ArrayList<Long> remain=readStock(snap);
-      if(item>=remain.size())throw new IllegalStateException("Menu tak sepadan");
+      ArrayList<Long> remain=padStockSlots(readStock(snap),item+1);
       long previous=remain.get(item),next=previous+count;
       if(next>1000000)throw new IllegalStateException("Maksimum stok Live 1,000,000");
       remain.set(item,next);
@@ -666,8 +677,7 @@ final class LiveBranchStore {
     busy=true;
     db.runTransaction(tx->{
       DocumentSnapshot snapshot=tx.get(ref);
-      ArrayList<Long> values=readStock(snapshot);
-      if(item>=values.size())throw new IllegalStateException("Menu Cloud tidak sepadan");
+      ArrayList<Long> values=padStockSlots(readStock(snapshot),item+1);
       long previous=values.get(item),next=previous+delta;
       if(next<0)throw new IllegalStateException("Baki stok tidak cukup untuk "+operation);
       if(next>1000000)throw new IllegalStateException("Baki maksimum 1,000,000 unit");
@@ -742,8 +752,7 @@ final class LiveBranchStore {
     DocumentReference ref=inventory();
     DocumentReference audit=branch().collection("stockAdjustments").document();
     db.runTransaction(tx->{
-      DocumentSnapshot doc=tx.get(ref);ArrayList<Long> values=readStock(doc);
-      if(item>=values.size())throw new IllegalStateException("Menu branch belum diselaraskan");
+      DocumentSnapshot doc=tx.get(ref);ArrayList<Long> values=padStockSlots(readStock(doc),item+1);
       long oldBalance=values.get(item);
       values.set(item,(long)newBalance);
       Map<String,Object> record=new HashMap<>();

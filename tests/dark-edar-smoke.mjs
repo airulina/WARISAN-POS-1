@@ -52,7 +52,9 @@ assert.match(main,/setStoreLogo\(logo\)/);
 assert.match(main,/sharedPaymentQr.attach/);
 assert.match(main,/live.attachDay/);
 assert.match(main,/void closingHistory\(/);
-assert.match(main,/TOTAL SALE · CAWANGAN INI/);
+// v3.46.7: TOTAL SALE removed from MENU page; SALE page keeps it.
+assert.doesNotMatch(main,/TOTAL SALE · CAWANGAN INI/);
+assert.match(main,/salesSummary\(body,"TOTAL SALE",money\(sessionSales\(day\)\)/);
 assert.match(owner,/salesSummary\(overallCard,"TOTAL SALE"/);
 assert.match(theme,/dark_orange_v3466/);
 assert.match(theme,/previous_theme/);
