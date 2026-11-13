@@ -83,6 +83,15 @@ jobs:
       - name: Verify dark design and paid EDAR cash totals
         run: node tests/dark-edar-smoke.mjs
 
+      - name: Verify Menu page and add-menu / Live stock slot fixes
+        run: |
+          node tests/menu-page-smoke.mjs
+          mkdir -p /tmp/warisan-menu
+          javac -encoding UTF-8 -d /tmp/warisan-menu \
+            app/src/main/java/my/warisan/pos/MenuRules.java \
+            tests/MenuRulesSmoke.java
+          java -cp /tmp/warisan-menu my.warisan.pos.MenuRulesSmoke
+
       - name: Build APK
         run: gradle assembleDebug --no-daemon
 

@@ -36,7 +36,7 @@ assert.match(owner, /canProfit\?rm\(branchProfit\):"—"/);
 // Android may have a v3.47 preview installed. The build must update it
 // without changing the v3.46 functional baseline or the package identity.
 assert.match(gradle, /applicationId 'my\.warisan\.pos'/);
-assert.match(gradle, /versionCode 57/);
-assert.match(gradle, /versionName '3\.46\.6'/);
+assert.match(gradle, /versionCode 58/);
+assert.match(gradle, /versionName '3\.46\.7'/);
 
 console.log('PASS: v3.46 Owner/Staff tabs, all critical access routes and UI-only branch display');
